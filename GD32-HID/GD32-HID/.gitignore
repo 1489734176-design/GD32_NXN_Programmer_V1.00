@@ -1,0 +1,46 @@
+# ===== Keil MDK 编译产物 (保留 .hex .axf .bin) =====
+*.o
+*.obj
+*.lst
+*.crf
+*.d
+*.dep
+*.depend
+*.iex
+*.lnp
+*.htm
+*.plg
+*.map
+*.elf
+*.lib
+*.scr
+
+# Keil 工程临时文件
+#*.uvguix.*
+#*.uvoptx
+#*.scvd
+#*.uvprojx.bak
+#JLinkLog.txt
+#JLinkSettings.ini
+
+# 编译输出目录
+Listings/
+Objects/
+Output/
+RTE/
+DebugConfig/
+Debug/
+Release/
+*.tra
+
+# ===== 编辑器 / IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== 操作系统 =====
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

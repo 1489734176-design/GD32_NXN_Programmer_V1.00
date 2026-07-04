@@ -1,0 +1,693 @@
+#include "run.h"
+#include "main.h"
+#include "stdio.h"
+#include "string.h"
+#include "ff.h"
+#include "DAP_config.h"
+
+
+usb_dev usb_hid;
+FATFS fs;
+FIL fd;
+FILINFO FileInfo;
+DIR DirInfo;
+app_TypeDef app_data;
+
+#define USB_TASK_PRIO		5	
+#define USB_STK_SIZE 		256  
+TaskHandle_t UsbTask_Handler;
+void usb_task(void *pvParameters);
+	
+#define LED_TASK_PRIO		3	
+#define LED_STK_SIZE 		64  
+TaskHandle_t LedTask_Handler;
+void led_task(void *pvParameters);
+
+#define KEY_TASK_PRIO		4	
+#define KEY_STK_SIZE 		64  
+TaskHandle_t KeyTask_Handler;
+void key_task(void *pvParameters);
+
+EventGroupHandle_t  EventGroupHandle;
+
+extern void DAP_Thread (void *argument);
+extern void DAP_Setup(void);
+void page(void);
+void USB_UNPLUG(void);
+void mode1(void);
+void mode2(void);
+void show_top(uint8_t status);
+uint8_t D[64] = {0};
+
+//关闭所有中断
+void INTX_DISABLE(void)
+{		  
+	__ASM volatile("cpsid i");
+}
+//开启所有中断
+void INTX_ENABLE(void)
+{
+	__ASM volatile("cpsie i");		  
+}
+
+void start_page(void)
+{
+	uint8_t ret;
+	uint32_t ulReadNum;
+
+	ret = f_mount(&fs, "0:", 1);
+	if(ret != FR_OK)
+	{
+		OLED_ShowString(56, 0, (uint8_t *)"FATFS FAIL", 8, 1);
+	}
+	else
+	{
+		ret = f_open(&fd, "0:/system/logo.bin", FA_READ);
+		if(ret == FR_OK)
+		{
+			ret = f_read(&fd, OLED_GRAM, 128*8, &ulReadNum);
+			if(ret == FR_OK && ulReadNum == 128*8)
+				OLED_ShowString(56, 0, (uint8_t *)"LOGO OK", 8, 1);
+				
+			f_close(&fd);
+		}
+		else
+			OLED_ShowString(56, 0, (uint8_t *)"LOGO FAIL", 8, 1);
+	}
+	OLED_Refresh();
+	vTaskDelay(1000);
+	OLED_Clear();
+	
+}
+void data_move(uint8_t *d, uint8_t m, uint8_t max)
+{
+	uint8_t i;
+	for(i = 0; i < max - m; i++)
+	{
+		d[max-(i+1)] = d[max-(m+i+1)];
+	}
+}
+void page(void)
+{
+	uint8_t i,j;
+	if(key_val.mesg == 1)
+	{
+		switch(key_val.key)
+		{
+			case key_left: 
+				if(app_data.head >= 1) app_data.head--;
+				break;
+			case key_right: 
+				if(app_data.head <= 0) app_data.head++;
+				break;
+			case key_mid: 
+				if(app_data.mode == 0)
+				{
+					if(app_data.head == 0) 
+					{
+						app_data.mode = 1;
+						OLED_Clear();
+						show_top(1);
+						oled.Refresh_flag = 1;
+						key_val.mesg = 0;
+						return;
+					}
+					if(app_data.head == 1)
+					{
+						app_data.mode = 2;
+						app_data.head = 0;
+						OLED_Clear();
+						oled.Refresh_flag = 1;
+						key_val.mesg = 0;
+						usbd_disconnect(&usb_hid);
+						rcu_periph_clock_disable(RCU_USBD);
+						return;
+					}
+				}
+				break;
+			case key_l_right:
+				INTX_DISABLE();
+				NVIC_SystemReset();    //软复位卡死
+				break;
+			case key_l_mid:						//长按中键关机
+				OLED_DisPlay_Off();
+				GD25QXX_PowerDown();
+				usbd_disconnect(&usb_hid);
+				vTaskDelete(LedTask_Handler);
+				POWER_OFF;
+				while(1)
+				{
+					vTaskDelay(1000);
+					i = bat_status_get();
+					if(i == 1)
+					{
+						switch(j)
+						{
+							case 0: HID_LED_ON, MSC_LED_OFF, CDC_LED_OFF;break;
+							case 1: HID_LED_OFF, MSC_LED_ON, CDC_LED_OFF;break;
+							case 2: HID_LED_OFF, MSC_LED_OFF, CDC_LED_ON;break;
+						}
+					}
+					else
+							HID_LED_ON, MSC_LED_ON, CDC_LED_ON;
+					j++;
+					if(j >= 3) j = 0;
+				}
+//				pmu_wakeup_pin_enable();
+//				pmu_to_standbymode(WFI_CMD);
+		}
+		show_top(1);
+		oled.Refresh_flag = 1;
+		key_val.mesg = 0;
+	}
+
+	show_top(0);
+	
+	if(oled.Refresh_flag == 1)
+	{
+		OLED_ShowChinese(16, 32, 1, 4, 1);
+		OLED_ShowChinese(32, 32, 2, 4, 1);
+		if(app_data.head == 0) 			OLED_ShowString(16, 96, "<-", 16, 1),OLED_ShowString(32, 96, "  ", 16, 1);
+		else if(app_data.head == 1) OLED_ShowString(16, 96, "  ", 16, 1),OLED_ShowString(32, 96, "<-", 16, 1);
+		
+		OLED_Refresh();
+		OLED_Clear();
+		oled.Refresh_flag = 0;
+	}
+}
+
+
+void mode1(void)
+{
+	uint8_t i;
+	static uint32_t cnt = 0;
+	
+	if(key_val.mesg == 1)
+	{
+		switch(key_val.key)
+		{
+			case key_l_mid: 
+				app_data.mode = 0;
+				app_data.head = 0;
+				OLED_Clear();
+				show_top(1);
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				return;					
+		}
+		key_val.mesg = 0;
+	}
+	
+	if(oled.Refresh_flag == 1)
+	{
+		
+		sprintf((char *)D, "HID:%3d%% \0",app_data.hid_d[0]);
+		OLED_ShowString(16, 0, D, 8, 1);
+		for(i = 0; i < 9; i++)
+		{
+			OLED_DrawLine(28 - app_data.hid_d[i]*0.15, 50+i*8, 28 - app_data.hid_d[i+1]*0.15, 50+(i+1)*8, 1);
+		}
+		OLED_DrawLine(29,50, 29, 122, 1);
+		sprintf((char *)D, "MSC:%3d%% \0",app_data.msc_d[0]);
+		OLED_ShowString(32, 0, D, 8, 1);
+		for(i = 0; i < 9; i++)
+		{
+			OLED_DrawLine(44 - app_data.msc_d[i]*0.15, 50+i*8, 44 - app_data.msc_d[i+1]*0.15, 50+(i+1)*8, 1);
+		}
+		OLED_DrawLine(45,50, 45, 122, 1);
+		sprintf((char *)D, "CDC:%3d%% \0",app_data.cdc_d[0]);
+		OLED_ShowString(48, 0, D, 8, 1);
+		for(i = 0; i < 9; i++)
+		{
+			OLED_DrawLine(60 - app_data.cdc_d[i]*0.15, 50+i*8, 60 - app_data.cdc_d[i+1]*0.15, 50+(i+1)*8, 1);
+		}
+		OLED_DrawLine(61,50, 61, 122, 1);
+		OLED_Refresh();
+		OLED_Clear();
+		oled.Refresh_flag = 0;
+	}
+	
+	if(cnt < 500000)
+		cnt++;
+	else
+	{
+		cnt = 0;
+		
+		if(app_data.hid_max < app_data.hid_cnt)
+			app_data.hid_max = app_data.hid_cnt;
+		if(app_data.msc_max < app_data.msc_cnt)
+			app_data.msc_max = app_data.msc_cnt;
+		if(app_data.cdc_max < app_data.cdc_cnt)
+			app_data.cdc_max = app_data.cdc_cnt;
+			
+		data_move(app_data.hid_d, 1, 10);
+		data_move(app_data.msc_d, 1, 10);
+		data_move(app_data.cdc_d, 1, 10);
+			
+		app_data.hid_d[0] = (uint8_t)(app_data.hid_cnt * 100.0 / app_data.hid_max);
+		app_data.msc_d[0] = (uint8_t)(app_data.msc_cnt * 100.0 / app_data.msc_max);
+		app_data.cdc_d[0] = (uint8_t)(app_data.cdc_cnt * 100.0 / app_data.cdc_max);
+			
+		app_data.hid_cnt = 0;
+		app_data.msc_cnt = 0;
+		app_data.cdc_cnt = 0;
+		
+		show_top(1);
+		oled.Refresh_flag = 1;
+	}
+			
+}
+void mode2(void)
+{
+	uint8_t download_flag = 0, err_flag = 0;
+	uint32_t ret, i, j;
+	uint32_t ulReadNum, bin_size;
+	static uint8_t download_suc_flag = 0;
+	if(key_val.mesg == 1)
+	{
+		switch(key_val.key)
+		{
+			case key_l_mid: 
+				app_data.mode = 0;
+				app_data.head = 0;
+				OLED_Clear();
+				show_top(1);
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				rcu_periph_clock_enable(RCU_USBD);
+				usbd_connect(&usb_hid);
+				return;
+			case key_left: 
+				if(app_data.head >= 1) app_data.head--;
+				break;
+			case key_right: 
+				app_data.head++;
+				if(app_data.head == 3) app_data.head = 0;
+				break;
+			case key_mid:
+				if(app_data.head != 2)
+				{
+					app_data.mode = 3;
+					oled.Refresh_flag = 1;
+					key_val.mesg = 0;
+					return;
+				}	
+				else
+					download_suc_flag = 0;   //按键触发第二次下载
+		}
+		
+		oled.Refresh_flag = 1;
+		key_val.mesg = 0;
+	}
+	
+	if(app_data.head == 2)
+		swd_init_debug();     //检测两次才能检测到目标芯片
+	
+	if(swd_init_debug() && app_data.head == 2)
+	{
+		OLED_ShowString(53, 100, "CON", 8, 1);
+		download_flag = 1;
+		OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1);
+		OLED_Refresh();
+	}
+	else
+	{
+		OLED_ShowString(53, 100, "DIS", 8, 1);
+		if(download_suc_flag)					//烧录成功后第一次连接不到芯片刷新一次
+			OLED_Refresh();
+		download_suc_flag = 0;
+		download_flag = 0;
+	}
+	
+	if(download_flag && app_data.head == 2 && app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0' && download_suc_flag == 0)
+	{
+		err_flag = 0;
+		sprintf((char *)D, "0:/download/firmware/%s\0", app_data.firmware_name);
+		ret = f_open(&fd, (TCHAR *)D, FA_READ);
+		if(ret == FR_OK)								//读取烧录算法成功
+		{
+			ret = f_read(&fd, DATA_BUFFER, 2048, &ulReadNum);
+			if(ret == FR_OK && ulReadNum != 0)
+				err_flag = 1;
+			f_close(&fd);
+		}
+		else 
+		{
+			OLED_ShowString(53, 100, "ER0", 8, 1); 
+			goto download_return;
+		}
+		if(err_flag == 1)
+		{
+			OLED_ShowString(53, 100, "-1-", 8, 1); //test
+			OLED_Refresh();
+			if(target_flash_init((program_target_t *)DATA_BUFFER, ((program_target_t *)DATA_BUFFER)->flash_addr) == ERROR_SUCCESS)
+				err_flag = 2;								//下载烧录算法到目标芯片
+			else
+				target_flash_uninit();
+		}
+		else
+		{			
+			OLED_ShowString(53, 100, "ER1", 8, 1);
+			goto download_return;
+		}
+		if(err_flag == 2)
+		{
+			OLED_ShowString(53, 100, "-2-", 8, 1); //test
+			OLED_Refresh();
+			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
+				err_flag = 3;								//擦除目标芯片
+		}
+		else 
+		{
+			OLED_ShowString(53, 100, "ER2", 8, 1);
+			goto download_return;
+		}
+		if(err_flag == 3)
+		{
+			sprintf((char *)D, "0:/download/bin/%s\0", app_data.bin_name);
+			ret = f_open(&fd, (TCHAR *)D, FA_READ);
+			if(ret == FR_OK)
+				err_flag = 4;
+		}
+		else 
+		{
+			OLED_ShowString(53, 100, "ER3", 8, 1);
+			goto download_return;
+		}
+		if(err_flag == 4)
+		{
+			OLED_ShowString(53, 100, "-3-", 8, 1); //test
+			OLED_Refresh();
+			
+			bin_size = f_size(&fd);
+			taskENTER_CRITICAL();
+			for(i = 0; i < bin_size;)
+			{
+				ret = f_read(&fd, (DATA_BUFFER + 2048), 2048, &ulReadNum);
+				if(ret == FR_OK && ulReadNum != 0)
+				{
+					if(target_flash_program_page((program_target_t *)DATA_BUFFER, 							
+																			((program_target_t *)DATA_BUFFER)->flash_addr + i,
+																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)  //烧录程序到目标芯片
+					{
+						OLED_ShowString(53, 100, "ER6", 8, 1);
+						break;
+					}
+					i += ulReadNum;
+					j = i;
+					j = (uint32_t)(j * 100.0/ bin_size);
+								
+					sprintf((char *)D, "[          ]%3d\0", j);
+					OLED_ShowString(53, 0, D, 8, 1);
+					D[(uint8_t)(j/10 + 1)] = '\0';
+					OLED_ShowString(53, 6, D+1, 8, 0);
+					OLED_Refresh();
+				}
+				else 
+				{
+					OLED_ShowString(53, 100, "ER5", 8, 1);
+					break;
+				}
+			}
+			if(i == bin_size)
+			{
+				OLED_ShowString(53, 100, "SUC", 8, 1);
+				swd_set_target_reset(0);
+				download_suc_flag = 1;
+			}
+			taskEXIT_CRITICAL();
+			f_close(&fd);
+		}
+		else OLED_ShowString(53, 100, "ER4", 8, 1);
+		
+download_return:		
+		oled.Refresh_flag = 1;
+	}
+
+
+
+	if(oled.Refresh_flag == 1)
+	{
+//		OLED_Clear();
+		
+		OLED_ShowChinese(0, 0, 3, 4, 1);
+		OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
+		OLED_ShowChinese(26, 0, 4, 4, 1);
+		OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
+		OLED_ShowString(53, 0, "[          ]  0%\0", 8, 1);
+		if(app_data.head == 0) 			OLED_ShowString(0, 100, "<-", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1),OLED_ShowString(53, 100, "   ", 8, 1);
+		else if(app_data.head == 1) OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "<-", 16, 1),OLED_ShowString(53, 100, "   ", 8, 1);
+		else if(app_data.head == 2) OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1);
+		OLED_Refresh();
+		oled.Refresh_flag = 0;
+	}
+
+}
+void mode3(void)
+{
+	static int8_t index = 0;
+	static uint8_t sum = 0;
+	uint8_t i,j;
+	uint8_t ret;
+	
+	if(key_val.mesg == 1)
+	{
+		switch(key_val.key)
+		{
+			case key_left: 
+				index--;
+				if(index == -1)
+					index = sum - 1;
+				break;
+			case key_right: 
+				index++;
+				if(index == sum)
+					index = 0;
+				break;
+			case key_mid:
+				index = 0;
+				app_data.mode = 2;
+				OLED_Clear();
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				return;				
+		}
+		
+		oled.Refresh_flag = 1;
+		key_val.mesg = 0;
+	}
+		
+	if(oled.Refresh_flag == 1)
+	{
+		OLED_Clear();
+		if(app_data.head == 0)
+			ret = f_opendir(&DirInfo, "0:/download/firmware");
+		else if(app_data.head == 1)
+			ret = f_opendir(&DirInfo, "0:/download/bin");
+		
+		if(ret == FR_OK)
+		{
+			sum = 0;
+			i = 0;
+			while(f_readdir(&DirInfo, &FileInfo) == FR_OK)
+			{
+				if(!FileInfo.fname[0])
+					break;
+				j = index / 8;
+				if(sum >= j*8 && sum < (j + 1)*8)
+				{	
+					if(i == index % 8)
+					{
+//						OLED_ShowString(i*8, 110, "<-", 8, 1);
+						if(app_data.head == 0)
+						{
+							memset(app_data.firmware_name, '\0', 32);
+							memcpy(app_data.firmware_name, FileInfo.fname, strlen(FileInfo.fname));
+						}	
+						else if(app_data.head == 1)
+						{
+							memset(app_data.bin_name, '\0', 32);
+							memcpy(app_data.bin_name, FileInfo.fname, strlen(FileInfo.fname));
+						}
+						FileInfo.fname[21] = '\0';   					//限制显示长度			
+						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //反显代替箭头增加文件名显示长度
+					}
+					else
+					{
+						FileInfo.fname[21] = '\0';   					//限制显示长度	
+						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 1);
+					}		
+					i++;
+				}
+				sum ++;
+			}
+			f_closedir(&DirInfo);
+		}
+		OLED_Refresh();
+		oled.Refresh_flag = 0;
+	}
+}
+
+void run_task(void *pvParameters)
+{
+		pwr_init();
+		led_init();
+		key_init();
+		OLED_Init();
+		GD25QXX_Init();
+		adc_init();
+		uart_init();
+		time_init();
+	
+		usbd_init(&usb_hid, &Composite_desc, &Composite_class);
+		usbd_connect(&usb_hid);
+	
+		CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+		DWT -> CYCCNT = 0;
+		DWT -> CTRL |= DWT_CTRL_CYCCNTENA_Msk;	
+		DAP_Setup();
+	
+		taskENTER_CRITICAL();
+		xTaskCreate((TaskFunction_t )usb_task,     	
+                (const char*    )"usb_task",   	
+                (uint16_t       )USB_STK_SIZE, 
+                (void*          )NULL,				
+                (UBaseType_t    )USB_TASK_PRIO,	
+                (TaskHandle_t*  )&UsbTask_Handler);
+		xTaskCreate((TaskFunction_t )led_task,     	
+                (const char*    )"led_task",   	
+                (uint16_t       )LED_STK_SIZE, 
+                (void*          )NULL,				
+                (UBaseType_t    )LED_TASK_PRIO,	
+                (TaskHandle_t*  )&LedTask_Handler);
+		xTaskCreate((TaskFunction_t )key_task,     	
+                (const char*    )"key_task",   	
+                (uint16_t       )KEY_STK_SIZE, 
+                (void*          )NULL,				
+                (UBaseType_t    )KEY_TASK_PRIO,	
+                (TaskHandle_t*  )&KeyTask_Handler);								
+		EventGroupHandle = xEventGroupCreate();
+		taskEXIT_CRITICAL();
+		
+		start_page();
+		oled.Refresh_flag = 1;
+#ifdef V1
+		app_data.mode = 1;
+#else
+		if(bat_status_get() == 0)
+			app_data.mode = 2;
+		else
+			app_data.mode = 1;
+#endif
+
+		while(1)
+		{
+//			vTaskDelay(1000);
+			switch(app_data.mode)
+			{
+				case 0:page();break;
+				case 1:mode1();break;
+				case 2:mode2();break;
+				case 3:mode3();;break;
+			}
+			
+		}
+}
+
+void usb_task(void *pvParameters)
+{
+	while(1)
+	{
+		DAP_Thread(NULL);
+	}
+}
+
+void led_task(void *pvParameters)
+{
+	while(1)
+	{
+		if(app_data.hid_led_blink)
+			app_data.hid_led_blink = 0, HID_LED_ON;
+		if(app_data.msc_led_blink)
+			app_data.msc_led_blink = 0, MSC_LED_ON;
+		if(app_data.cdc_led_blink)
+			app_data.cdc_led_blink = 0, CDC_LED_ON;
+		vTaskDelay(100);
+		HID_LED_OFF;
+		MSC_LED_OFF;
+		CDC_LED_OFF;
+		vTaskDelay(100);
+	}
+}
+
+void key_task(void *pvParameters)
+{
+	while(1)
+	{
+		if(!key_val.mesg)
+		{
+			key_val.key = key_scan();
+			if(key_val.key != key_null)
+			{
+				key_val.mesg = 1;
+			}	
+		}
+		vTaskDelay(100);
+	}
+}
+
+
+
+void show_top(uint8_t status)
+{
+	static uint32_t cnt;
+	uint8_t i, bat;
+	
+	if(cnt > 500000 || status)
+	{
+		cnt = 0;
+		adc_get_val();
+		i = bat_status_get();
+		if(i == 0)
+		{
+			OLED_ShowLogo(0, 0, 7, 1);    				//USB
+			OLED_ShowString(0, 20, "DIS", 8, 1);
+			
+			bat = (uint8_t)((val.bat_vol - 3.5)*100/0.5);
+			sprintf((char *)D, "%3d%%\0", bat);
+			OLED_ShowString(0, 93, D, 8, 1);
+			
+			if(bat < 20) OLED_ShowLogo(0, 74, 0, 1);
+			else if(bat < 40) OLED_ShowLogo(0, 74, 1, 1);
+			else if(bat < 60) OLED_ShowLogo(0, 74, 2, 1);
+			else if(bat < 80) OLED_ShowLogo(0, 74, 3, 1);
+			else OLED_ShowLogo(0, 74, 4, 1);
+		}
+		else
+		{
+			OLED_ShowLogo(0, 0, 6, 1);    								//USB
+			OLED_ShowString(0, 20, "CON", 8, 1);
+			if(i == 1) 
+			{
+				OLED_ShowLogo(0, 74, 5, 1);
+			}
+			else
+			{
+				OLED_ShowLogo(0, 74, 4, 1);
+				sprintf((char *)D, "%3d%%\0", 100);
+				OLED_ShowString(0, 93, D, 8, 1);
+			}
+		}
+		
+		sprintf((char *)D, "%4.1fC\0", val.chip_temp);
+//		sprintf((char *)D, "%4.1fC\0", val.bat_vol);
+		OLED_ShowString(0, 40, D, 8, 1);
+		adc_trigger();
+		if(!status)
+			oled.Refresh_flag = 1;
+	}
+	else
+		cnt++;
+}
+
+
