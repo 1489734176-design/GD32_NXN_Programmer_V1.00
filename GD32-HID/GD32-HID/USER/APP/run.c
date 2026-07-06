@@ -208,11 +208,11 @@ void mode1(void)
 			OLED_DrawLine(28 - app_data.hid_d[i]*0.15, 50+i*8, 28 - app_data.hid_d[i+1]*0.15, 50+(i+1)*8, 1);
 		}
 		OLED_DrawLine(29,50, 29, 122, 1);
-		sprintf((char *)D, "MSC:%3d%% \0",app_data.msc_d[0]);
+		sprintf((char *)D, "File:%2d%% \0",app_data.cb_d[0]);
 		OLED_ShowString(32, 0, D, 8, 1);
 		for(i = 0; i < 9; i++)
 		{
-			OLED_DrawLine(44 - app_data.msc_d[i]*0.15, 50+i*8, 44 - app_data.msc_d[i+1]*0.15, 50+(i+1)*8, 1);
+			OLED_DrawLine(44 - app_data.cb_d[i]*0.15, 50+i*8, 44 - app_data.cb_d[i+1]*0.15, 50+(i+1)*8, 1);
 		}
 		OLED_DrawLine(45,50, 45, 122, 1);
 		sprintf((char *)D, "CDC:%3d%% \0",app_data.cdc_d[0]);
@@ -235,21 +235,21 @@ void mode1(void)
 		
 		if(app_data.hid_max < app_data.hid_cnt)
 			app_data.hid_max = app_data.hid_cnt;
-		if(app_data.msc_max < app_data.msc_cnt)
-			app_data.msc_max = app_data.msc_cnt;
+		if(app_data.cb_max < app_data.cb_cnt)
+			app_data.cb_max = app_data.cb_cnt;
 		if(app_data.cdc_max < app_data.cdc_cnt)
 			app_data.cdc_max = app_data.cdc_cnt;
 			
 		data_move(app_data.hid_d, 1, 10);
-		data_move(app_data.msc_d, 1, 10);
+		data_move(app_data.cb_d, 1, 10);
 		data_move(app_data.cdc_d, 1, 10);
 			
 		app_data.hid_d[0] = (uint8_t)(app_data.hid_cnt * 100.0 / app_data.hid_max);
-		app_data.msc_d[0] = (uint8_t)(app_data.msc_cnt * 100.0 / app_data.msc_max);
+		app_data.cb_d[0] = (uint8_t)(app_data.cb_cnt * 100.0 / app_data.cb_max);
 		app_data.cdc_d[0] = (uint8_t)(app_data.cdc_cnt * 100.0 / app_data.cdc_max);
 			
 		app_data.hid_cnt = 0;
-		app_data.msc_cnt = 0;
+		app_data.cb_cnt = 0;
 		app_data.cdc_cnt = 0;
 		
 		show_top(1);
@@ -608,8 +608,8 @@ void led_task(void *pvParameters)
 	{
 		if(app_data.hid_led_blink)
 			app_data.hid_led_blink = 0, HID_LED_ON;
-		if(app_data.msc_led_blink)
-			app_data.msc_led_blink = 0, MSC_LED_ON;
+		if(app_data.cb_led_blink)
+			app_data.cb_led_blink = 0, MSC_LED_ON;
 		if(app_data.cdc_led_blink)
 			app_data.cdc_led_blink = 0, CDC_LED_ON;
 		vTaskDelay(100);

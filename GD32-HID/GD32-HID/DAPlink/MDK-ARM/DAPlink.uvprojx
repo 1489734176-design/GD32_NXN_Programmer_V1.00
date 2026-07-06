@@ -340,7 +340,7 @@
               <MiscControls>--c99</MiscControls>
               <Define>USE_STDPERIPH_DRIVER,GD32F10X_MD</Define>
               <Undefine></Undefine>
-              <IncludePath>..\inc;..\..\GD32F10x_Firmware_Library\CMSIS\GD\GD32F10x\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_standard_peripheral\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hid\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\msc\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\cdc\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hidmsccdc;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\device\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\usbd\Include;..\..\GD32F10x_Firmware_Library\CMSIS;..\..\USER\FREERTOS\portable\RVDS\ARM_CM3;..\..\USER\FREERTOS\include;..\..\USER\BSP;..\..\USER\APP;..\..\USER\FATFS;..\..\USER\DAPlink;..\..\USER\ALGO</IncludePath>
+              <IncludePath>..\inc;..\..\GD32F10x_Firmware_Library\CMSIS\GD\GD32F10x\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_standard_peripheral\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hid\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\custombulk\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\cdc\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hidmsccdc;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\device\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\usbd\Include;..\..\GD32F10x_Firmware_Library\CMSIS;..\..\USER\FREERTOS\portable\RVDS\ARM_CM3;..\..\USER\FREERTOS\include;..\..\USER\BSP;..\..\USER\APP;..\..\USER\FATFS;..\..\USER\DAPlink;..\..\USER\ALGO</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -585,29 +585,14 @@
               <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hid\Source\custom_hid_core.c</FilePath>
             </File>
             <File>
-              <FileName>usbd_msc_bbb.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\msc\Source\usbd_msc_bbb.c</FilePath>
-            </File>
-            <File>
-              <FileName>usbd_msc_core.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\msc\Source\usbd_msc_core.c</FilePath>
-            </File>
-            <File>
-              <FileName>usbd_msc_scsi.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\msc\Source\usbd_msc_scsi.c</FilePath>
-            </File>
-            <File>
-              <FileName>usbd_msc_mem.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\msc\Source\usbd_msc_mem.c</FilePath>
-            </File>
-            <File>
               <FileName>cdc_acm_core.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\cdc\Source\cdc_acm_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>usbd_custombulk.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\custombulk\Source\usbd_custombulk.c</FilePath>
             </File>
             <File>
               <FileName>usbd_composite.c</FileName>

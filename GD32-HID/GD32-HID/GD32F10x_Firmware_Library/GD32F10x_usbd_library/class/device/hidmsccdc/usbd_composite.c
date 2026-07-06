@@ -11,34 +11,34 @@
 /*
     Copyright (c) 2022, GigaDevice Semiconductor Inc.
 
-    Redistribution and use in source and binary forms, with or without modification, 
+    Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
 
-    1. Redistributions of source code must retain the above copyright notice, this 
+    1. Redistributions of source code must retain the above copyright notice, this
        list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice, 
-       this list of conditions and the following disclaimer in the documentation 
+    2. Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
        and/or other materials provided with the distribution.
-    3. Neither the name of the copyright holder nor the names of its contributors 
-       may be used to endorse or promote products derived from this software without 
+    3. Neither the name of the copyright holder nor the names of its contributors
+       may be used to endorse or promote products derived from this software without
        specific prior written permission.
 
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
-NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
-PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 OF SUCH DAMAGE.
 */
 
 #include "usbd_transc.h"
 #include "usbd_composite.h"
 #include "custom_hid_core.h"
-#include "usbd_msc_core.h"
+#include "usbd_custombulk.h"
 #include "cdc_acm_core.h"
 #include "usbd_composite.h"
 #include <string.h>
@@ -82,9 +82,9 @@ OF SUCH DAMAGE.
 /* USB standard device descriptor */
 const usb_desc_dev Composite_dev_desc =
 {
-    .header = 
+    .header =
      {
-         .bLength          = USB_DEV_DESC_LEN, 
+         .bLength          = USB_DEV_DESC_LEN,
          .bDescriptorType  = USB_DESCTYPE_DEV,
      },
 #ifdef USBD_BOS_ENABLE
@@ -106,14 +106,14 @@ const usb_desc_dev Composite_dev_desc =
 };
 
 /* USB device configure descriptor */
-const Composite_desc_config Composite_config_desc = 
+const Composite_desc_config Composite_config_desc =
 {
-    .config = 
+    .config =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_config), 
-             .bDescriptorType = USB_DESCTYPE_CONFIG 
+             .bLength         = sizeof(usb_desc_config),
+             .bDescriptorType = USB_DESCTYPE_CONFIG
          },
         .wTotalLength         = sizeof(Composite_desc_config),
         .bNumInterfaces       = 0x04U,
@@ -124,24 +124,24 @@ const Composite_desc_config Composite_config_desc =
     },
 		.hid_iad =
 		{
-				 .header = 
+				 .header =
          {
-             .bLength         = sizeof(usb_desc_iad), 
-             .bDescriptorType = USB_DESCTYPE_IAD 
+             .bLength         = sizeof(usb_desc_iad),
+             .bDescriptorType = USB_DESCTYPE_IAD
          },
-				 .bFirstInterface 		=0x00U,     
-				 .bInterfaceCount 		=0x01U,     
-				 .bFunctionClass 			=0x03U,      
-				 .bFunctionSubClass 	=0x00U,   
-				 .bFunctionProtocol 	=0x00U,   
-				 .iFunction 					=0x04U            
-		},                           
-    .hid_itf = 
+				 .bFirstInterface 		=0x00U,
+				 .bInterfaceCount 		=0x01U,
+				 .bFunctionClass 			=0x03U,
+				 .bFunctionSubClass 	=0x00U,
+				 .bFunctionProtocol 	=0x00U,
+				 .iFunction 					=0x04U
+		},
+    .hid_itf =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_itf), 
-             .bDescriptorType = USB_DESCTYPE_ITF 
+             .bLength         = sizeof(usb_desc_itf),
+             .bDescriptorType = USB_DESCTYPE_ITF
          },
         .bInterfaceNumber     = 0x00U,
         .bAlternateSetting    = 0x00U,
@@ -151,12 +151,12 @@ const Composite_desc_config Composite_config_desc =
         .bInterfaceProtocol   = 0x00U,
         .iInterface           = 0x04U
     },
-    .hid_vendor = 
+    .hid_vendor =
     {
-        .header = 
+        .header =
          {
              .bLength         = sizeof(usb_desc_hid),
-             .bDescriptorType = USB_DESCTYPE_HID 
+             .bDescriptorType = USB_DESCTYPE_HID
          },
         .bcdHID               = 0x0111U,
         .bCountryCode         = 0x00U,
@@ -164,11 +164,11 @@ const Composite_desc_config Composite_config_desc =
         .bDescriptorType      = USB_DESCTYPE_REPORT,
         .wDescriptorLength    = DESC_LEN_REPORT,
     },
-    .hid_epout = 
+    .hid_epout =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_ep), 
+             .bLength         = sizeof(usb_desc_ep),
              .bDescriptorType = USB_DESCTYPE_EP
          },
         .bEndpointAddress     = CUSTOMHID_OUT_EP,
@@ -176,89 +176,89 @@ const Composite_desc_config Composite_config_desc =
         .wMaxPacketSize       = CUSTOMHID_OUT_PACKET,
         .bInterval            = 0x01U
     },
-    .hid_epin = 
+    .hid_epin =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_ep), 
-             .bDescriptorType = USB_DESCTYPE_EP 
+             .bLength         = sizeof(usb_desc_ep),
+             .bDescriptorType = USB_DESCTYPE_EP
          },
         .bEndpointAddress     = CUSTOMHID_IN_EP,
 				.bmAttributes         = USB_EP_ATTR_INT,
         .wMaxPacketSize       = CUSTOMHID_IN_PACKET,
         .bInterval            = 0x01U
     },
-		.msc_iad =
+		.cb_iad =
 		{
-				 .header = 
+				 .header =
          {
-             .bLength         = sizeof(usb_desc_iad), 
-             .bDescriptorType = USB_DESCTYPE_IAD 
+             .bLength         = sizeof(usb_desc_iad),
+             .bDescriptorType = USB_DESCTYPE_IAD
          },
-				 .bFirstInterface 		=0x01U,     
-				 .bInterfaceCount 		=0x01U,     
-				 .bFunctionClass 			=0x08U,      
-				 .bFunctionSubClass 	=0x06U,   
-				 .bFunctionProtocol 	=0x50U,   
-				 .iFunction 					=0x05U 
+				 .bFirstInterface 		=0x01U,
+				 .bInterfaceCount 		=0x01U,
+				 .bFunctionClass 			=0xFFU,
+				 .bFunctionSubClass 	=0x00U,
+				 .bFunctionProtocol 	=0x00U,
+				 .iFunction 					=0x05U
 		},
-		.msc_itf = 
+		.cb_itf =
     {
         .header = {
-            .bLength         = sizeof(usb_desc_itf), 
+            .bLength         = sizeof(usb_desc_itf),
             .bDescriptorType = USB_DESCTYPE_ITF
         },
         .bInterfaceNumber    = 0x01U,
         .bAlternateSetting   = 0x00U,
         .bNumEndpoints       = 0x02U,
-        .bInterfaceClass     = USB_CLASS_MSC,
-        .bInterfaceSubClass  = USB_MSC_SUBCLASS_SCSI,
-        .bInterfaceProtocol  = USB_MSC_PROTOCOL_BBB,
+        .bInterfaceClass     = 0xFFU,
+        .bInterfaceSubClass  = 0x00U,
+        .bInterfaceProtocol  = 0x00U,
         .iInterface          = 0x05U
     },
-    .msc_epin = 
+    .cb_epin =
     {
         .header = {
-            .bLength         = sizeof(usb_desc_ep), 
+            .bLength         = sizeof(usb_desc_ep),
             .bDescriptorType = USB_DESCTYPE_EP
         },
-        .bEndpointAddress    = MSC_IN_EP,
+        .bEndpointAddress    = CUSTOMBULK_IN_EP,
         .bmAttributes        = USB_EP_ATTR_BULK,
-        .wMaxPacketSize      = MSC_EPIN_SIZE,
+        .wMaxPacketSize      = CUSTOMBULK_IN_PACKET,
         .bInterval           = 0x00U
     },
 
-    .msc_epout = 
+    .cb_epout =
     {
         .header = {
-            .bLength         = sizeof(usb_desc_ep), 
+            .bLength         = sizeof(usb_desc_ep),
             .bDescriptorType = USB_DESCTYPE_EP
         },
-        .bEndpointAddress    = MSC_OUT_EP,
+        .bEndpointAddress    = CUSTOMBULK_OUT_EP,
         .bmAttributes        = USB_EP_ATTR_BULK,
-        .wMaxPacketSize      = MSC_EPOUT_SIZE,
+        .wMaxPacketSize      = CUSTOMBULK_OUT_PACKET,
         .bInterval           = 0x00U
     },
 		.cdc_iad =
 		{
-				 .header = 
+				 .header =
          {
-             .bLength         = sizeof(usb_desc_iad), 
-             .bDescriptorType = USB_DESCTYPE_IAD 
+             .bLength         = sizeof(usb_desc_iad),
+             .bDescriptorType = USB_DESCTYPE_IAD
          },
-				 .bFirstInterface 		=0x02,     
-				 .bInterfaceCount 		=0x02,     
-				 .bFunctionClass 			=0x02,      
-				 .bFunctionSubClass 	=0x02,   
-				 .bFunctionProtocol 	=0x01,   
-				 .iFunction 					=0x00 
+				 .bFirstInterface 		=0x02,
+				 .bInterfaceCount 		=0x02,
+				 .bFunctionClass 			=0x02,
+				 .bFunctionSubClass 	=0x02,
+				 .bFunctionProtocol 	=0x01,
+				 .iFunction 					=0x00
 		},
-		.cmd_itf = 
+		.cmd_itf =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_itf), 
-             .bDescriptorType = USB_DESCTYPE_ITF 
+             .bLength         = sizeof(usb_desc_itf),
+             .bDescriptorType = USB_DESCTYPE_ITF
          },
         .bInterfaceNumber     = 0x02U,
         .bAlternateSetting    = 0x00U,
@@ -268,42 +268,42 @@ const Composite_desc_config Composite_config_desc =
         .bInterfaceProtocol   = USB_CDC_PROTOCOL_AT,
         .iInterface           = 0x00U
     },
-    .cdc_header = 
+    .cdc_header =
     {
         .header =
          {
-            .bLength         = sizeof(usb_desc_header_func), 
+            .bLength         = sizeof(usb_desc_header_func),
             .bDescriptorType = USB_DESCTYPE_CS_INTERFACE
          },
         .bDescriptorSubtype  = 0x00U,
         .bcdCDC              = 0x0110U
     },
-    .cdc_call_managment = 
+    .cdc_call_managment =
     {
-        .header = 
+        .header =
          {
-            .bLength         = sizeof(usb_desc_call_managment_func), 
+            .bLength         = sizeof(usb_desc_call_managment_func),
             .bDescriptorType = USB_DESCTYPE_CS_INTERFACE
          },
         .bDescriptorSubtype  = 0x01U,
         .bmCapabilities      = 0x00U,
         .bDataInterface      = 0x01U
     },
-    .cdc_acm = 
+    .cdc_acm =
     {
-        .header = 
+        .header =
          {
-            .bLength         = sizeof(usb_desc_acm_func), 
+            .bLength         = sizeof(usb_desc_acm_func),
             .bDescriptorType = USB_DESCTYPE_CS_INTERFACE
          },
         .bDescriptorSubtype  = 0x02U,
         .bmCapabilities      = 0x02U,
     },
-    .cdc_union = 
+    .cdc_union =
     {
-        .header = 
+        .header =
          {
-            .bLength         = sizeof(usb_desc_union_func), 
+            .bLength         = sizeof(usb_desc_union_func),
             .bDescriptorType = USB_DESCTYPE_CS_INTERFACE
          },
         .bDescriptorSubtype  = 0x06U,
@@ -311,11 +311,11 @@ const Composite_desc_config Composite_config_desc =
         .bSlaveInterface0    = 0x01U,
     },
 
-    .cdc_cmd_endpoint = 
+    .cdc_cmd_endpoint =
     {
-        .header = 
+        .header =
          {
-            .bLength         = sizeof(usb_desc_ep), 
+            .bLength         = sizeof(usb_desc_ep),
             .bDescriptorType = USB_DESCTYPE_EP,
          },
         .bEndpointAddress    = CDC_CMD_EP,
@@ -323,11 +323,11 @@ const Composite_desc_config Composite_config_desc =
         .wMaxPacketSize      = CDC_ACM_CMD_PACKET_SIZE,
         .bInterval           = 0x0AU
     },
-    .cdc_data_interface = 
+    .cdc_data_interface =
     {
-        .header = 
+        .header =
          {
-            .bLength         = sizeof(usb_desc_itf), 
+            .bLength         = sizeof(usb_desc_itf),
             .bDescriptorType = USB_DESCTYPE_ITF,
          },
         .bInterfaceNumber    = 0x03U,
@@ -338,24 +338,24 @@ const Composite_desc_config Composite_config_desc =
         .bInterfaceProtocol  = USB_CDC_PROTOCOL_NONE,
         .iInterface          = 0x00U
     },
-    .cdc_out_endpoint = 
+    .cdc_out_endpoint =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_ep), 
-             .bDescriptorType = USB_DESCTYPE_EP, 
+             .bLength         = sizeof(usb_desc_ep),
+             .bDescriptorType = USB_DESCTYPE_EP,
          },
         .bEndpointAddress     = CDC_OUT_EP,
         .bmAttributes         = USB_EP_ATTR_BULK,
         .wMaxPacketSize       = CDC_ACM_OUT_PACKET_SIZE,
         .bInterval            = 0x00U
     },
-    .cdc_in_endpoint = 
+    .cdc_in_endpoint =
     {
-        .header = 
+        .header =
          {
-             .bLength         = sizeof(usb_desc_ep), 
-             .bDescriptorType = USB_DESCTYPE_EP 
+             .bLength         = sizeof(usb_desc_ep),
+             .bDescriptorType = USB_DESCTYPE_EP
          },
         .bEndpointAddress     = CDC_IN_EP,
         .bmAttributes         = USB_EP_ATTR_BULK,
@@ -365,47 +365,47 @@ const Composite_desc_config Composite_config_desc =
 };
 
 /* USB language ID descriptor */
-const static usb_desc_LANGID usbd_language_id_desc = 
+const static usb_desc_LANGID usbd_language_id_desc =
 {
-    .header = 
+    .header =
      {
-         .bLength = sizeof(usb_desc_LANGID), 
+         .bLength = sizeof(usb_desc_LANGID),
          .bDescriptorType = USB_DESCTYPE_STR
      },
     .wLANGID = ENG_LANGID
 };
 
 /* USB manufacture string */
-const static usb_desc_str manufacturer_string = 
+const static usb_desc_str manufacturer_string =
 {
-    .header = 
+    .header =
      {
-         .bLength         = USB_STRING_LEN(20U), 
+         .bLength         = USB_STRING_LEN(20U),
          .bDescriptorType = USB_DESCTYPE_STR,
      },
     .unicode_string = {'C', 'M', 'S', 'I', 'S', '-', 'D', 'A', 'P','L','I','N','K', ' ','b','y',' ', 'A','R','M'}
 };
 
 /* USB product string */
-const static usb_desc_str product_string = 
+const static usb_desc_str product_string =
 {
-    .header = 
+    .header =
      {
-         .bLength         = USB_STRING_LEN(14U), 
+         .bLength         = USB_STRING_LEN(14U),
          .bDescriptorType = USB_DESCTYPE_STR,
      },
     .unicode_string = {'C', 'M', 'S', 'I', 'S', '-', 'D', 'A', 'P', ' ','v','2','.','1'}
 };
 
 /* USB serial string */
-static usb_desc_str serial_string = 
+static usb_desc_str serial_string =
 {
-    .header = 
+    .header =
      {
-         .bLength         = USB_STRING_LEN(12U), 
+         .bLength         = USB_STRING_LEN(12U),
          .bDescriptorType = USB_DESCTYPE_STR,
      },
-		 .unicode_string = {'9','7','8','9','A','0','0','0','0','0','0','1'}
+	 .unicode_string = {'9','7','8','9','A','0','0','0','0','0','0','1'}
 };
 
 const static usb_desc_str itf_string = {
@@ -429,7 +429,7 @@ const uint8_t os_string[] = {
 };
 
 /* USB string descriptor set */
-static uint8_t* usbd_hid_strings[] = 
+static uint8_t* usbd_hid_strings[] =
 {
     [STR_IDX_LANGID]  = (uint8_t *)&usbd_language_id_desc,
     [STR_IDX_MFC]     = (uint8_t *)&manufacturer_string,
@@ -439,6 +439,10 @@ static uint8_t* usbd_hid_strings[] =
 		[STR_IDX_CONFIG]  = (uint8_t *)&config_string,
 		[9]								= (uint8_t *)&os_string
 };
+
+#ifdef USBD_BOS_ENABLE
+extern const uint8_t binaryobjectstore_desc[];
+#endif
 
 usb_desc Composite_desc =
 {
@@ -472,7 +476,7 @@ usb_class Composite_class = {
 static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 {
 		custom_hid_class.init(udev, config_index);
-		msc_class.init(udev, config_index);
+		custombulk_class.init(udev, config_index);
 	  cdc_class.init(udev, config_index);
     return USBD_OK;
 }
@@ -487,7 +491,7 @@ static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 static uint8_t Composite_deinit (usb_dev *udev, uint8_t config_index)
 {
 		custom_hid_class.deinit(udev, config_index);
-		msc_class.deinit(udev, config_index);
+		custombulk_class.deinit(udev, config_index);
 	  cdc_class.deinit(udev, config_index);
     return USBD_OK;
 }
@@ -501,12 +505,12 @@ static uint8_t Composite_deinit (usb_dev *udev, uint8_t config_index)
 */
 static uint8_t Composite_req_handler (usb_dev *udev, usb_req *req)
 {
-		uint8_t status;
+		uint8_t status = USBD_OK;
 		switch(req->wIndex & 0xFF)
 		{
-			case CUSTOM_HID_INTERFACE : status = custom_hid_class.req_process(udev, req);
-			case USBD_MSC_INTERFACE : status = msc_class.req_process(udev, req);
-			case CDC_COM_INTERFACE : status = cdc_class.req_process(udev, req);
+			case CUSTOM_HID_INTERFACE : status = custom_hid_class.req_process(udev, req); break;
+			case CUSTOMBULK_INTERFACE : status = custombulk_class.req_process(udev, req); break;
+			case CDC_COM_INTERFACE : status = cdc_class.req_process(udev, req); break;
 		}
 		return status;
 }
@@ -517,9 +521,9 @@ static void Composite_data_in (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
-			case (CUSTOMHID_IN_EP & 0x7FU): custom_hid_class.data_in(udev, ep_num);
-			case (MSC_IN_EP & 0x7FU): msc_class.data_in(udev, ep_num);
-			case (CDC_IN_EP & 0x7FU): cdc_class.data_in(udev, ep_num);
+			case (CUSTOMHID_IN_EP & 0x7FU): custom_hid_class.data_in(udev, ep_num); break;
+			case (CUSTOMBULK_IN_EP & 0x7FU): custombulk_class.data_in(udev, ep_num); break;
+			case (CDC_IN_EP & 0x7FU): cdc_class.data_in(udev, ep_num); break;
 		}
 }
 
@@ -534,12 +538,10 @@ static void Composite_data_out (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
-			case (CUSTOMHID_OUT_EP & 0x7FU): custom_hid_class.data_out(udev, ep_num);
-			case (MSC_OUT_EP & 0x7FU): msc_class.data_out(udev, ep_num);
-			case (CDC_OUT_EP & 0x7FU): cdc_class.data_out(udev, ep_num);
+			case (CUSTOMHID_OUT_EP & 0x7FU): custom_hid_class.data_out(udev, ep_num); break;
+			case (CUSTOMBULK_OUT_EP & 0x7FU): custombulk_class.data_out(udev, ep_num); break;
+			case (CDC_OUT_EP & 0x7FU): cdc_class.data_out(udev, ep_num); break;
 		}
 }
-
-
 
 

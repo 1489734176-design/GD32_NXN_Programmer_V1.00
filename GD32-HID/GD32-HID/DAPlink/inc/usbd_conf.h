@@ -8,27 +8,27 @@
 /*
     Copyright (c) 2021, GigaDevice Semiconductor Inc.
 
-    Redistribution and use in source and binary forms, with or without modification, 
+    Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
 
-    1. Redistributions of source code must retain the above copyright notice, this 
+    1. Redistributions of source code must retain the above copyright notice, this
        list of conditions and the following disclaimer.
-    2. Redistributions in binary form must reproduce the above copyright notice, 
-       this list of conditions and the following disclaimer in the documentation 
+    2. Redistributions in binary form must reproduce the above copyright notice,
+       this list of conditions and the following disclaimer in the documentation
        and/or other materials provided with the distribution.
-    3. Neither the name of the copyright holder nor the names of its contributors 
-       may be used to endorse or promote products derived from this software without 
+    3. Neither the name of the copyright holder nor the names of its contributors
+       may be used to endorse or promote products derived from this software without
        specific prior written permission.
 
-    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
-INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT 
-NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
-PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
 OF SUCH DAMAGE.
 */
 
@@ -42,7 +42,6 @@ OF SUCH DAMAGE.
 #define USBD_ITF_MAX_NUM                   3U
 
 #define CUSTOM_HID_INTERFACE               0U
-#define USBD_MSC_INTERFACE               	 1U
 #define CDC_COM_INTERFACE               	 2U
 
 /* define if low power mode is enabled; it allows entering the device into DEEP_SLEEP mode
@@ -58,13 +57,8 @@ OF SUCH DAMAGE.
 
 #define CUSTOMHID_IN_PACKET                64U
 #define CUSTOMHID_OUT_PACKET               64U
-/* endpoint count used by the MSC device */
-#define MSC_IN_EP                    			 EP_IN(2U)
-#define MSC_OUT_EP                   			 EP_OUT(2U)
 
-#define MSC_IN_PACKET                			 64U
-#define MSC_OUT_PACKET               			 64U
-/* endpoint count used by the CDC device */
+/* CDC endpoint definitions */
 #define CDC_IN_EP                    			 EP_IN(3U)
 #define CDC_CMD_EP                    		 EP_IN(4U)
 #define CDC_OUT_EP                   			 EP_OUT(3U)
@@ -74,7 +68,7 @@ OF SUCH DAMAGE.
 #define CDC_ACM_OUT_PACKET_SIZE            16U
 
 /* endpoint0, Rx/Tx buffers address offset */
-											 
+
 #define EP0_RX_ADDR                        (0X48)
 #define EP0_TX_ADDR                        (0X88)
 
@@ -82,9 +76,9 @@ OF SUCH DAMAGE.
 #define HID_TX_ADDR                        (0XC8)
 #define HID_RX_ADDR                        (0X0108)
 
-/* msc, Rx/Tx buffers address offset */
-#define MSC_TX_ADDR                        (0X0148)
-#define MSC_RX_ADDR                        (0X0188)
+/* custom bulk, Rx/Tx buffers address offset (replaces MSC) */
+#define CUSTOMBULK_TX_ADDR                 (0X0148)
+#define CUSTOMBULK_RX_ADDR                 (0X0188)
 
 /* CDC, Rx/Tx buffers address offset */
 #define CDC_TX_ADDR                        (0X01C8)
@@ -93,12 +87,6 @@ OF SUCH DAMAGE.
 
 /* endpoint count used by the device */
 #define EP_COUNT                           (9U)
-
-#define MEM_LUN_NUM                        1U
-#define MSC_DATA_PACKET_SIZE               64U
-#define MSC_MEDIA_PACKET_SIZE              512U
-#define BLOCK_SIZE                         512U
-#define BLOCK_NUM                          (8*1024*1024 / BLOCK_SIZE)
 
 /* base address offset of the allocation buffer, used for buffer descriptor table and packet memory */
 #define BTABLE_OFFSET                      (0x0000U)

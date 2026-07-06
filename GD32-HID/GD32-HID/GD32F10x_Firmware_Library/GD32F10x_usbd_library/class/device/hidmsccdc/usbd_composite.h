@@ -3,7 +3,7 @@
 
 #include "usb_ch9_std.h"
 #include "custom_hid_core.h"
-#include "usbd_msc_core.h"
+#include "usbd_custombulk.h"
 #include "cdc_acm_core.h"
 
 
@@ -15,10 +15,10 @@ typedef struct
     usb_desc_hid            				 hid_vendor;
     usb_desc_ep             				 hid_epout;
     usb_desc_ep             				 hid_epin;
-		usb_desc_iad										 msc_iad;
-		usb_desc_itf            				 msc_itf;
-    usb_desc_ep             				 msc_epin;
-    usb_desc_ep             				 msc_epout;
+		usb_desc_iad										 cb_iad;
+		usb_desc_itf            				 cb_itf;
+    usb_desc_ep             				 cb_epin;
+    usb_desc_ep             				 cb_epout;
 		usb_desc_iad										 cdc_iad;
 		usb_desc_itf                     cmd_itf;
     usb_desc_header_func             cdc_header;
@@ -36,5 +36,6 @@ extern usb_class Composite_class;
 
 
 #endif
+
 
 

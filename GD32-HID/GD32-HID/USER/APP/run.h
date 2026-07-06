@@ -13,18 +13,18 @@ typedef struct
 	uint8_t firmware_name[32];		//ÀëÏßÉÕÂ¼Ëã·¨
 	
 	uint8_t hid_led_blink;
-	uint8_t msc_led_blink;
+	uint8_t cb_led_blink;
 	uint8_t cdc_led_blink;
 	
 	uint16_t hid_cnt;
-	uint16_t msc_cnt;
+	uint16_t cb_cnt;
 	uint16_t cdc_cnt;
 	uint16_t hid_max;
-	uint16_t msc_max;
+	uint16_t cb_max;
 	uint16_t cdc_max;
 	
 	uint8_t hid_d[10];
-	uint8_t msc_d[10];
+	uint8_t cb_d[10];
 	uint8_t cdc_d[10];
 	
 }app_TypeDef;

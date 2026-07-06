@@ -71,6 +71,7 @@ OF SUCH DAMAGE.
 
 #define USBD_WINUSB_DESC_SET_LEN    							  (WINUSB_DESCRIPTOR_SET_HEADER_SIZE + FUNCTION_SUBSET_LEN)
 #define USB_DEVICE_CAPABILITY_PLATFORM              5
+#define USB_DESCTYPE_CDT                            0x10U
 #define USBD_WINUSB_VENDOR_CODE     								0x20
 
 
@@ -212,7 +213,7 @@ const uint8_t winusbdescriptorsetdescriptor[] = {
     /*** Microsoft OS 2.0 function subset header ***/
     WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE),/* wLength */
     WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE),/* wDescriptorType */
-    0,                                        /* bFirstInterface USBD_BULK_IF_NUM*/
+    1,                                        /* bFirstInterface - CustomBulk IF1 */
     0,                                        /* bReserved */
     WBVAL(FUNCTION_SUBSET_LEN),               /* wSubsetLength */
 
