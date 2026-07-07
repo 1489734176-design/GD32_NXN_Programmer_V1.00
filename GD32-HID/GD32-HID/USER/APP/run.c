@@ -343,7 +343,7 @@ void mode2(void)
 			if(target_flash_init((program_target_t *)DATA_BUFFER, ((program_target_t *)DATA_BUFFER)->flash_addr) == ERROR_SUCCESS)
 				err_flag = 2;								//下载烧录算法到目标芯片
 			else
-				target_flash_uninit();
+				target_flash_uninit((program_target_t *)DATA_BUFFER);
 		}
 		else
 		{			
@@ -359,6 +359,7 @@ void mode2(void)
 		}
 		else 
 		{
+			target_flash_uninit((program_target_t *)DATA_BUFFER);
 			OLED_ShowString(53, 100, "ER2", 8, 1);
 			goto download_return;
 		}
@@ -371,6 +372,7 @@ void mode2(void)
 		}
 		else 
 		{
+			target_flash_uninit((program_target_t *)DATA_BUFFER);
 			OLED_ShowString(53, 100, "ER3", 8, 1);
 			goto download_return;
 		}
@@ -409,6 +411,7 @@ void mode2(void)
 					break;
 				}
 			}
+			target_flash_uninit((program_target_t *)DATA_BUFFER);
 			if(i == bin_size)
 			{
 				OLED_ShowString(53, 100, "SUC", 8, 1);

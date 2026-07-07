@@ -36,8 +36,9 @@ error_t target_flash_init(program_target_t *algo, uint32_t flash_start)
     return ERROR_SUCCESS;
 }
 
-error_t target_flash_uninit(void)
+error_t target_flash_uninit(program_target_t *algo)
 {
+    swd_flash_syscall_exec(&algo->sys_call_s, algo->uninit, 0, 0, 0, 0);
     swd_set_target_state_hw(RESET_RUN);
 
     swd_off();
