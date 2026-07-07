@@ -122,10 +122,13 @@ usb_reqsta usbd_class_request (usb_dev *udev, usb_req *req)
 */
 usb_reqsta usbd_vendor_request (usb_dev *udev, usb_req *req)
 {
-    (void)udev;
-    (void)req;
-
-    /* added by user */
+    /* Delegate to class handler (e.g. for WinUSB vendor requests) */
+    if (NULL != udev->class_core && NULL != udev->class_core->req_process) {
+        uint8_t ret = udev->class_core->req_process(udev, req);
+        if (ret == USBD_OK) {
+            return REQ_SUPP;
+        }
+    }
 
     return REQ_NOTSUPP;
 }

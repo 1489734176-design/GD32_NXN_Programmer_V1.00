@@ -46,7 +46,8 @@ OF SUCH DAMAGE.
 #define WBVAL(x)                          (x & 0xFF),((x >> 8) & 0xFF)
 #define USBD_NUM_DEV_CAPABILITIES         1
 #define USBD_WINUSB_DESC_LEN              28
-#define USBD_BOS_WTOTALLENGTH             (USB_BOS_DESC_LEN + USBD_WINUSB_DESC_LEN)
+#define USBD_WINUSB_PLATFORM_CAP_LEN      (USBD_WINUSB_DESC_LEN + USBD_WINUSB_DESC_SET_LEN)
+#define USBD_BOS_WTOTALLENGTH             (USB_BOS_DESC_LEN + USBD_WINUSB_PLATFORM_CAP_LEN)
 /* WinUSB Microsoft OS 2.0 Descriptor Types */
 #define WINUSB_SET_HEADER_DESCRIPTOR_TYPE           0x00
 #define WINUSB_SUBSET_HEADER_CONFIGURATION_TYPE     0x01
@@ -179,26 +180,26 @@ usb_hid_desc_config_set custom_hid_config_desc =
 };
 
 #ifdef USBD_BOS_ENABLE
+/* BOS Descriptor: only headers (5 + 28 = 33 bytes) */
 const uint8_t binaryobjectstore_desc[] = {
-		USB_BOS_DESC_LEN, 													// bLength
-    USB_DESCTYPE_BOS, 		// bDescriptorType
-    WBVAL(USBD_BOS_WTOTALLENGTH), 							// wTotalLength
-    USBD_NUM_DEV_CAPABILITIES,                  // bNumDeviceCaps
+		5,                                        // bLength
+    USB_DESCTYPE_BOS,                         // bDescriptorType (0x0F)
+    WBVAL(33),                                // wTotalLength (5 BOS + 28 Platform Cap)
+    USBD_NUM_DEV_CAPABILITIES,                // bNumDeviceCaps
 
-    /*** MS OS 2.0 descriptor platform capability descriptor ***/
-    USBD_WINUSB_DESC_LEN, 											// bLength
-    USB_DESCTYPE_CDT, 													// bDescriptorType
-    USB_DEVICE_CAPABILITY_PLATFORM, 						// bDevCapabilityType: PLATFORM (05H)
-    0x00, // bReserved
-    0xDF, 0x60, 0xDD, 0xD8,     								// PlatformCapabilityUUID
+    /*** MS OS 2.0 Platform Capability Descriptor (header only) ***/
+    28,                                       // bLength (0x1C)
+    USB_DESCTYPE_CDT,                         // bDescriptorType (0x10)
+    USB_DEVICE_CAPABILITY_PLATFORM,           // bDevCapabilityType (0x05)
+    0x00,                                     // bReserved
+    0xDF, 0x60, 0xDD, 0xD8,                   // PlatformCapabilityUUID
     0x89, 0x45, 0xC7, 0x4C,
     0x9C, 0xD2, 0x65, 0x9D,
     0x9E, 0x64, 0x8A, 0x9F,
-
-    0x00, 0x00, 0x03, 0x06,        							// dwWindowsVersion: 0x06030000 for Windows 8.1
-    WBVAL(USBD_WINUSB_DESC_SET_LEN), 						// wDescriptorSetTotalLength: size of MS OS 2.0 descriptor set
-    USBD_WINUSB_VENDOR_CODE,         						// bMS_VendorCode
-    0x00,                       								// bAltEnumCmd
+    0x00, 0x00, 0x03, 0x06,                   // dwWindowsVersion: 0x06030000
+    WBVAL(USBD_WINUSB_DESC_SET_LEN),          // wMSOSDescriptorSetTotalLength (170)
+    USBD_WINUSB_VENDOR_CODE,                  // bMS_VendorCode (0x20)
+    0x00,                                     // bAltEnumCode
 };
 
 const uint8_t winusbdescriptorsetdescriptor[] = {

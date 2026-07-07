@@ -50,7 +50,8 @@ OF SUCH DAMAGE.
 #define WBVAL(x)                          (x & 0xFF),((x >> 8) & 0xFF)
 #define USBD_NUM_DEV_CAPABILITIES         1
 #define USBD_WINUSB_DESC_LEN              28
-#define USBD_BOS_WTOTALLENGTH             (USB_BOS_DESC_LEN + USBD_WINUSB_DESC_LEN)
+#define USBD_WINUSB_PLATFORM_CAP_LEN      (USBD_WINUSB_DESC_LEN + USBD_WINUSB_DESC_SET_LEN)
+#define USBD_BOS_WTOTALLENGTH             (USB_BOS_DESC_LEN + USBD_WINUSB_PLATFORM_CAP_LEN)
 /* WinUSB Microsoft OS 2.0 Descriptor Types */
 #define WINUSB_SET_HEADER_DESCRIPTOR_TYPE           0x00
 #define WINUSB_SUBSET_HEADER_CONFIGURATION_TYPE     0x01
@@ -442,6 +443,7 @@ static uint8_t* usbd_hid_strings[] =
 
 #ifdef USBD_BOS_ENABLE
 extern const uint8_t binaryobjectstore_desc[];
+extern const uint8_t winusbdescriptorsetdescriptor[];
 #endif
 
 usb_desc Composite_desc =
@@ -506,6 +508,20 @@ static uint8_t Composite_deinit (usb_dev *udev, uint8_t config_index)
 static uint8_t Composite_req_handler (usb_dev *udev, usb_req *req)
 {
 		uint8_t status = USBD_OK;
+
+#ifdef USBD_BOS_ENABLE
+		/* Handle WinUSB vendor request: return MS OS 2.0 Descriptor Set */
+		if (req->bRequest == USBD_WINUSB_VENDOR_CODE) {
+			if (req->wIndex == 0x07) { /* MS_OS_2.0_GET_DESCRIPTOR_SET */
+				uint16_t len = USBD_WINUSB_DESC_SET_LEN;
+				if (len > req->wLength) len = req->wLength;
+				udev->transc_in[0].xfer_buf = (uint8_t *)winusbdescriptorsetdescriptor;
+				udev->transc_in[0].xfer_len = len;
+				return USBD_OK;
+			}
+		}
+#endif
+
 		switch(req->wIndex & 0xFF)
 		{
 			case CUSTOM_HID_INTERFACE : status = custom_hid_class.req_process(udev, req); break;
