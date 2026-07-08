@@ -39,12 +39,12 @@ void mode2(void);
 void show_top(uint8_t status);
 uint8_t D[64] = {0};
 
-//¹Ø±ÕËùÓÐÖÐ¶Ï
+//ï¿½Ø±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½
 void INTX_DISABLE(void)
 {		  
 	__ASM volatile("cpsid i");
 }
-//¿ªÆôËùÓÐÖÐ¶Ï
+//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½
 void INTX_ENABLE(void)
 {
 	__ASM volatile("cpsie i");		  
@@ -127,9 +127,9 @@ void page(void)
 				break;
 			case key_l_right:
 				INTX_DISABLE();
-				NVIC_SystemReset();    //Èí¸´Î»¿¨ËÀ
+				NVIC_SystemReset();    //ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½
 				break;
-			case key_l_mid:						//³¤°´ÖÐ¼ü¹Ø»ú
+			case key_l_mid:						//ï¿½ï¿½ï¿½ï¿½ï¿½Ð¼ï¿½ï¿½Ø»ï¿½
 				OLED_DisPlay_Off();
 				GD25QXX_PowerDown();
 				usbd_disconnect(&usb_hid);
@@ -259,9 +259,10 @@ void mode1(void)
 }
 void mode2(void)
 {
-	uint8_t download_flag = 0, err_flag = 0;
+	uint8_t download_flag = 0, err_flag = 0, is_ext_algo = 0;
 	uint32_t ret, i, j;
 	uint32_t ulReadNum, bin_size;
+	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
 	static uint8_t download_suc_flag = 0;
 	if(key_val.mesg == 1)
 	{
@@ -293,7 +294,7 @@ void mode2(void)
 					return;
 				}	
 				else
-					download_suc_flag = 0;   //°´¼ü´¥·¢µÚ¶þ´ÎÏÂÔØ
+					download_suc_flag = 0;   //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		}
 		
 		oled.Refresh_flag = 1;
@@ -301,7 +302,7 @@ void mode2(void)
 	}
 	
 	if(app_data.head == 2)
-		swd_init_debug();     //¼ì²âÁ½´Î²ÅÄÜ¼ì²âµ½Ä¿±êÐ¾Æ¬
+		swd_init_debug();     //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î²ï¿½ï¿½Ü¼ï¿½âµ½Ä¿ï¿½ï¿½Ð¾Æ¬
 	
 	if(swd_init_debug() && app_data.head == 2)
 	{
@@ -313,7 +314,7 @@ void mode2(void)
 	else
 	{
 		OLED_ShowString(53, 100, "DIS", 8, 1);
-		if(download_suc_flag)					//ÉÕÂ¼³É¹¦ºóµÚÒ»´ÎÁ¬½Ó²»µ½Ð¾Æ¬Ë¢ÐÂÒ»´Î
+		if(download_suc_flag)					//ï¿½ï¿½Â¼ï¿½É¹ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Ó²ï¿½ï¿½ï¿½Ð¾Æ¬Ë¢ï¿½ï¿½Ò»ï¿½ï¿½
 			OLED_Refresh();
 		download_suc_flag = 0;
 		download_flag = 0;
@@ -324,11 +325,25 @@ void mode2(void)
 		err_flag = 0;
 		sprintf((char *)D, "0:/download/firmware/%s\0", app_data.firmware_name);
 		ret = f_open(&fd, (TCHAR *)D, FA_READ);
-		if(ret == FR_OK)								//¶ÁÈ¡ÉÕÂ¼Ëã·¨³É¹¦
+		if(ret == FR_OK)								// read firmware algo OK
 		{
+			uint32_t fw_size = f_size(&fd);
 			ret = f_read(&fd, DATA_BUFFER, 2048, &ulReadNum);
 			if(ret == FR_OK && ulReadNum != 0)
+			{
 				err_flag = 1;
+				/* Detect extended format with OPT support */
+				if(fw_size == ((program_target_t *)DATA_BUFFER)->algo_size + PROG_TARGET_EXT_HDR_SIZE)
+				{
+					is_ext_algo = 1;
+					/* Save OPT fields before shifting algo_blob to align with program_target_t */
+					opt_prog_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_program;
+					opt_base_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_addr;
+					opt_byte_size = ((program_target_ext_t *)DATA_BUFFER)->opt_size;
+					/* Shift algo_blob from offset 68 to 56 so program_target_t cast works */
+					memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, ((program_target_t *)DATA_BUFFER)->algo_size);
+				}
+			}
 			f_close(&fd);
 		}
 		else 
@@ -341,7 +356,7 @@ void mode2(void)
 			OLED_ShowString(53, 100, "-1-", 8, 1); //test
 			OLED_Refresh();
 			if(target_flash_init((program_target_t *)DATA_BUFFER, ((program_target_t *)DATA_BUFFER)->flash_addr) == ERROR_SUCCESS)
-				err_flag = 2;								//ÏÂÔØÉÕÂ¼Ëã·¨µ½Ä¿±êÐ¾Æ¬
+				err_flag = 2;								//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ã·¨ï¿½ï¿½Ä¿ï¿½ï¿½Ð¾Æ¬
 			else
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
 		}
@@ -355,7 +370,7 @@ void mode2(void)
 			OLED_ShowString(53, 100, "-2-", 8, 1); //test
 			OLED_Refresh();
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
-				err_flag = 3;								//²Á³ýÄ¿±êÐ¾Æ¬
+				err_flag = 3;								//ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½Ð¾Æ¬
 		}
 		else 
 		{
@@ -390,7 +405,7 @@ void mode2(void)
 				{
 					if(target_flash_program_page((program_target_t *)DATA_BUFFER, 							
 																			((program_target_t *)DATA_BUFFER)->flash_addr + i,
-																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)  //ÉÕÂ¼³ÌÐòµ½Ä¿±êÐ¾Æ¬
+																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)  //ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½Ð¾Æ¬
 					{
 						OLED_ShowString(53, 100, "ER6", 8, 1);
 						break;
@@ -411,6 +426,69 @@ void mode2(void)
 					break;
 				}
 			}
+
+			/* OPT programming for extended algorithm */
+			if(is_ext_algo && i == bin_size)
+			{
+				FIL fd_opt;
+				char opt_name[40];
+				uint8_t *dot;
+				uint32_t opt_read;
+
+				OLED_ShowString(53, 100, "-OPT-", 8, 1);
+				OLED_Refresh();
+
+				dot = (uint8_t *)strrchr((const char *)app_data.bin_name, '.');
+				if(dot && (dot - app_data.bin_name) < 30)
+				{
+					uint32_t prefix_len = dot - app_data.bin_name;
+					memcpy(opt_name, app_data.bin_name, prefix_len);
+					opt_name[prefix_len] = '\0';
+					strcat(opt_name, "_opt.bin");
+				}
+				else
+				{
+					strcpy(opt_name, "default_opt.bin");
+				}
+
+				sprintf((char *)D, "0:/download/bin/%s", opt_name);
+				if(f_open(&fd_opt, (TCHAR *)D, FA_READ) == FR_OK)
+				{
+					ret = f_read(&fd_opt, (DATA_BUFFER + 2048), 128, &opt_read);
+					f_close(&fd_opt);
+					if(ret == FR_OK && opt_read > 0)
+					{
+						/* Use saved OPT fields (algo_blob was shifted by memmove) */
+						{
+							program_target_ext_t algo_ext;
+							algo_ext.sys_call_s = ((program_target_t *)DATA_BUFFER)->sys_call_s;
+							algo_ext.program_buffer = ((program_target_t *)DATA_BUFFER)->program_buffer;
+							algo_ext.opt_program = opt_prog_addr;
+							algo_ext.opt_addr = opt_base_addr;
+							algo_ext.opt_size = opt_byte_size;
+							if(target_opt_program_ext(&algo_ext,
+							                           (const uint8_t *)(DATA_BUFFER + 2048)) == ERROR_SUCCESS)
+						{
+							OLED_ShowString(53, 100, "OPT OK", 8, 1);
+							}
+							else
+							{
+								OLED_ShowString(53, 100, "ER_OPT", 8, 1);
+							}
+						} /* end of algo_ext scope */
+					}
+					else
+					{
+						OLED_ShowString(53, 100, "OPT_RD", 8, 1);
+					}
+				}
+				else
+				{
+					OLED_ShowString(53, 100, "OPT_NO", 8, 1);
+				}
+				OLED_Refresh();
+			}
+
 			target_flash_uninit((program_target_t *)DATA_BUFFER);
 			if(i == bin_size)
 			{
@@ -512,12 +590,12 @@ void mode3(void)
 							memset(app_data.bin_name, '\0', 32);
 							memcpy(app_data.bin_name, FileInfo.fname, strlen(FileInfo.fname));
 						}
-						FileInfo.fname[21] = '\0';   					//ÏÞÖÆÏÔÊ¾³¤¶È			
-						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //·´ÏÔ´úÌæ¼ýÍ·Ôö¼ÓÎÄ¼þÃûÏÔÊ¾³¤¶È
+						FileInfo.fname[21] = '\0';   					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½			
+						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½
 					}
 					else
 					{
-						FileInfo.fname[21] = '\0';   					//ÏÞÖÆÏÔÊ¾³¤¶È	
+						FileInfo.fname[21] = '\0';   					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½	
 						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 1);
 					}		
 					i++;

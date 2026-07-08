@@ -34,10 +34,13 @@ from PyQt5.QtWidgets import (
     QSplitter, QTreeWidget, QTreeWidgetItem, QToolBar, QAction,
     QPushButton, QLabel, QProgressBar, QStatusBar, QFileDialog,
     QMessageBox, QInputDialog, QHeaderView, QFrame, QStyle,
-    QLineEdit
+    QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
+    QButtonGroup, QCheckBox, QGridLayout
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QColor
+
+from opt_config import OptConfig
 
 # ─── USB Protocol Constants ────────────────────────────────────────────────────
 
@@ -272,6 +275,45 @@ class ActionWorker(QThread):
             self.finished.emit(False, str(e))
 
 
+class ImportWorker(QThread):
+    """Multi-step import: ensure dir -> push program -> push opt."""
+    progress = pyqtSignal(str, int, int)  # step_name, current, total
+    log = pyqtSignal(str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, device, program_path, opt_path=None):
+        super().__init__()
+        self.device = device
+        self.program_path = program_path
+        self.opt_path = opt_path
+
+    def run(self):
+        try:
+            # Step 1: ensure remote directory
+            try:
+                self.device.mkdir("0:/download/bin/")
+            except Exception:
+                pass  # may already exist
+
+            # Step 2: push program
+            prog_name = os.path.basename(self.program_path)
+            self.log.emit("Uploading program: " + prog_name)
+            self.device.push(self.program_path, "0:/download/bin/" + prog_name, self._cb)
+
+            # Step 3: push opt if present
+            if self.opt_path and os.path.exists(self.opt_path):
+                opt_name = os.path.basename(self.opt_path)
+                self.log.emit("Uploading OPT: " + opt_name)
+                self.device.push(self.opt_path, "0:/download/bin/" + opt_name, self._cb)
+
+            self.finished.emit(True, "Import complete")
+        except Exception as e:
+            self.finished.emit(False, str(e))
+
+    def _cb(self, cur, total):
+        self.progress.emit("", cur, total)
+
+
 # ─── Main Window ───────────────────────────────────────────────────────────────
 
 class DAPLinkManager(QMainWindow):
@@ -280,6 +322,11 @@ class DAPLinkManager(QMainWindow):
         self.device = DAPLinkDevice()
         self.current_remote_path = "/"
         self.worker = None
+
+        # OPT configuration
+        self.opt_config = OptConfig()
+        self.current_chip = None
+        self._opt_widgets = {}
 
         self.setWindowTitle("CMSIS-DAPLINK File Manager")
         self.setMinimumSize(900, 600)
@@ -330,6 +377,12 @@ class DAPLinkManager(QMainWindow):
         self.btn_refresh.triggered.connect(self._on_refresh)
         self.toolbar.addAction(self.btn_refresh)
 
+        self.toolbar.addSeparator()
+
+        self.btn_import = QAction("导入程序", self)
+        self.btn_import.triggered.connect(self._on_import_program)
+        self.toolbar.addAction(self.btn_import)
+
         # ── Central Widget ──
         central = QWidget()
         self.setCentralWidget(central)
@@ -360,6 +413,42 @@ class DAPLinkManager(QMainWindow):
         self.lbl_path.setWordWrap(True)
         status_layout.addWidget(self.lbl_path)
         layout.addWidget(self.status_frame)
+
+        # ── Chip & OPT Selection Bar ──
+        self.chip_opt_frame = QFrame()
+        self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
+        chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
+        chip_opt_layout.setContentsMargins(8, 4, 8, 4)
+        chip_opt_layout.setSpacing(4)
+
+        # Row: chip model combo + OPT toggle
+        chip_bar = QHBoxLayout()
+        chip_bar.addWidget(QLabel("芯片型号："))
+        self.cmb_chip = QComboBox()
+        self.cmb_chip.setMinimumWidth(180)
+        self.cmb_chip.addItem("")  # empty default
+        for m in self.opt_config.get_chip_models():
+            self.cmb_chip.addItem(m)
+        self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
+        chip_bar.addWidget(self.cmb_chip)
+        chip_bar.addSpacing(8)
+        self.btn_opt_toggle = QPushButton("OPT 配置 ▼")
+        self.btn_opt_toggle.setCheckable(True)
+        self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
+        chip_bar.addWidget(self.btn_opt_toggle)
+        chip_bar.addStretch()
+        chip_opt_layout.addLayout(chip_bar)
+
+        # OPT config panel (scrollable, initially hidden)
+        self.opt_scroll = QScrollArea()
+        self.opt_scroll.setWidgetResizable(True)
+        self.opt_scroll.setMaximumHeight(350)
+        self.opt_scroll.setVisible(False)
+        self.opt_content = QWidget()
+        self.opt_scroll.setWidget(self.opt_content)
+        chip_opt_layout.addWidget(self.opt_scroll)
+
+        layout.addWidget(self.chip_opt_frame)
 
         # ── Splitter: Local + Remote ──
         splitter = QSplitter(Qt.Horizontal)
@@ -475,6 +564,7 @@ class DAPLinkManager(QMainWindow):
         self.btn_mkdir.setEnabled(connected)
         self.btn_delete.setEnabled(connected)
         self.btn_refresh.setEnabled(connected)
+        self.btn_import.setEnabled(connected)
 
     # ── Connection ──
 
@@ -722,6 +812,250 @@ class DAPLinkManager(QMainWindow):
         else:
             self.statusBar().showMessage(f"Error: {msg}")
         self._navigate_remote(self.current_remote_path)
+
+    # ── OPT Configuration ──
+
+    def _toggle_opt_panel(self):
+        visible = self.btn_opt_toggle.isChecked()
+        self.opt_scroll.setVisible(visible)
+        self.btn_opt_toggle.setText("OPT 配置 ▲" if visible else "OPT 配置 ▼")
+
+    def _on_chip_changed(self, model_name):
+        if not model_name:
+            self.current_chip = None
+            self._clear_opt_ui()
+            return
+        self.current_chip = self.opt_config.get_chip(model_name)
+        self._build_opt_ui()
+        # auto-expand panel when chip selected
+        if not self.opt_scroll.isVisible():
+            self.btn_opt_toggle.setChecked(True)
+            self._toggle_opt_panel()
+
+    def _clear_opt_ui(self):
+        self._opt_widgets.clear()
+        if self.opt_content:
+            self.opt_content.deleteLater()
+        self.opt_content = QWidget()
+        self.opt_scroll.setWidget(self.opt_content)
+
+    def _build_opt_ui(self):
+        self._clear_opt_ui()
+        if not self.current_chip:
+            return
+
+        layout = QVBoxLayout(self.opt_content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # OPT binary preview (at top, always visible)
+        preview_grp = QGroupBox("OPT Bin 预览")
+        preview_layout = QHBoxLayout(preview_grp)
+        self.lbl_opt_preview = QLineEdit()
+        self.lbl_opt_preview.setReadOnly(True)
+        self.lbl_opt_preview.setFont(QFont("Consolas", 10))
+        self.lbl_opt_preview.setStyleSheet("background: #f0f0f0; color: #333;")
+        preview_layout.addWidget(self.lbl_opt_preview)
+        layout.addWidget(preview_grp)
+
+        for w in self.current_chip.get('opt_words', []):
+            grp = QGroupBox(f"{w['name']}  ({w['address']})")
+            grp_layout = QVBoxLayout(grp)
+            grp_layout.setSpacing(2)
+
+            for field in w.get('fields', []):
+                widget = self._build_field_widget(field)
+                label = QLabel(field['name'])
+                label.setMinimumWidth(120)
+                row = QHBoxLayout()
+                row.addWidget(label)
+                row.addWidget(widget)
+                row.addStretch()
+                grp_layout.addLayout(row)
+                self._opt_widgets[field['name']] = widget
+                # Connect change signals for live preview
+                self._connect_opt_signal(widget)
+
+            layout.addWidget(grp)
+
+        layout.addStretch()
+        self._update_opt_preview()
+
+    def _connect_opt_signal(self, widget):
+        """Connect widget change signals to update OPT preview."""
+        if isinstance(widget, QComboBox):
+            widget.currentIndexChanged.connect(self._update_opt_preview)
+        elif isinstance(widget, QCheckBox):
+            widget.stateChanged.connect(self._update_opt_preview)
+        elif isinstance(widget, QWidget) and hasattr(widget, '_btn_group'):
+            widget._btn_group.buttonClicked.connect(self._update_opt_preview)
+
+    def _update_opt_preview(self, *args):
+        """Compute current OPT bin and show hex in preview."""
+        if not self.current_chip:
+            return
+        try:
+            words = self.current_chip['opt_words']
+            addresses = [int(w['address'], 16) for w in words]
+            base_addr = min(addresses)
+            end_addr = max(addresses) + 2
+            buf = bytearray([0xFF] * (end_addr - base_addr))
+
+            for w in words:
+                offset = int(w['address'], 16) - base_addr
+                byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
+                bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
+
+                if byte_fields:
+                    user_val = self._get_field_value(byte_fields[0]['name'])
+                    low_byte = user_val if user_val is not None else byte_fields[0].get('default', 0xFF)
+                else:
+                    low_byte = 0xFF
+                    for f in bit_fields:
+                        user_val = self._get_field_value(f['name'])
+                        if user_val is None:
+                            user_val = f.get('default', 1)
+                        if user_val:
+                            low_byte |= (1 << f['bit'])
+                        else:
+                            low_byte &= ~(1 << f['bit'])
+
+                high_byte = (~low_byte) & 0xFF
+                value = (high_byte << 8) | low_byte
+                buf[offset:offset + 2] = struct.pack('<H', value)
+
+            hex_str = ' '.join(f'{b:02X}' for b in buf)
+            self.lbl_opt_preview.setText(hex_str)
+        except Exception:
+            pass
+
+    def _build_field_widget(self, field):
+        options = field.get('options', [])
+        default = field.get('default')
+
+        if field.get('byte'):
+            combo = QComboBox()
+            default_idx = 0
+            for i, opt in enumerate(options):
+                combo.addItem(opt['label'], opt['value'])
+                if default is not None and opt['value'] == default:
+                    default_idx = i
+            combo.setCurrentIndex(default_idx)
+            return combo
+
+        if 'bit' in field:
+            has_labels = any(o['label'] not in ('0', '1') for o in options)
+            if has_labels:
+                # Wrap radio buttons in a container widget for proper parent chain
+                container = QWidget()
+                hbox = QHBoxLayout(container)
+                hbox.setContentsMargins(0, 0, 0, 0)
+                hbox.setSpacing(8)
+                group = QButtonGroup(container)
+                for opt in options:
+                    radio = QRadioButton(opt['label'], container)
+                    group.addButton(radio, opt['value'])
+                    hbox.addWidget(radio)
+                    if default is not None and opt['value'] == default:
+                        radio.setChecked(True)
+                container._btn_group = group
+                return container
+            else:
+                cb = QCheckBox()
+                if default is not None:
+                    cb.setChecked(default != 0)
+                return cb
+
+        return QLabel("")
+
+    def _get_field_value(self, field_name):
+        widget = self._opt_widgets.get(field_name)
+        if widget is None:
+            return None
+        if isinstance(widget, QComboBox):
+            return widget.currentData()
+        if hasattr(widget, '_btn_group'):
+            btn = widget._btn_group.checkedButton()
+            if btn:
+                return widget._btn_group.id(btn)
+            return None
+        if isinstance(widget, QCheckBox):
+            return 1 if widget.isChecked() else 0
+        return None
+
+    # ── Import Program ──
+
+    def _on_import_program(self):
+        if not self.device.is_connected():
+            QMessageBox.warning(self, "Warning", "请先连接设备。")
+            return
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择程序文件", "", "Binary Files (*.bin);;All Files (*)")
+        if not file_path:
+            return
+
+        opt_path = None
+        if self.current_chip:
+            opt_path = self._generate_opt_bin(file_path)
+
+        self.progress.setVisible(True)
+        self.progress.setValue(0)
+        self.statusBar().showMessage("Importing...")
+
+        self.worker = ImportWorker(self.device, file_path, opt_path)
+        self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
+        self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
+        self.worker.finished.connect(self._import_done)
+        self.worker.start()
+
+    def _generate_opt_bin(self, program_path):
+        chip = self.current_chip
+        words = chip['opt_words']
+
+        addresses = [int(w['address'], 16) for w in words]
+        base_addr = min(addresses)
+        end_addr = max(addresses) + 2
+        buf = bytearray([0xFF] * (end_addr - base_addr))
+
+        for w in words:
+            offset = int(w['address'], 16) - base_addr
+
+            byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
+            bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
+
+            if byte_fields:
+                user_val = self._get_field_value(byte_fields[0]['name'])
+                low_byte = user_val if user_val is not None else byte_fields[0].get('default', 0xFF)
+            else:
+                low_byte = 0xFF
+                for f in bit_fields:
+                    user_val = self._get_field_value(f['name'])
+                    if user_val is None:
+                        user_val = f.get('default', 1)
+                    if user_val:
+                        low_byte |= (1 << f['bit'])
+                    else:
+                        low_byte &= ~(1 << f['bit'])
+
+            high_byte = (~low_byte) & 0xFF
+            value = (high_byte << 8) | low_byte
+            buf[offset:offset + 2] = struct.pack('<H', value)
+
+        base_name = os.path.splitext(program_path)[0]
+        opt_path = base_name + '_opt.bin'
+        with open(opt_path, 'wb') as f:
+            f.write(buf)
+
+        return opt_path
+
+    def _import_done(self, ok, msg):
+        self.progress.setVisible(False)
+        if ok:
+            self.statusBar().showMessage("Import complete: " + msg)
+            self._navigate_remote(self.current_remote_path)
+        else:
+            self.statusBar().showMessage(f"Import failed: {msg}")
+            QMessageBox.warning(self, "Import Error", f"Import failed:\n{msg}")
 
     # ── Close ──
 

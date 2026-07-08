@@ -40,6 +40,27 @@ typedef struct {
     const uint32_t size;
 } sector_info_t;
 
+/* Extended programming target with OPT byte support (17 header fields) */
+typedef struct {
+    uint32_t  init;
+    uint32_t  uninit;
+    uint32_t  erase_chip;
+    uint32_t  erase_sector;
+    uint32_t  program_page;
+    program_syscall_t sys_call_s;
+    uint32_t  program_buffer;
+    uint32_t  algo_start;
+    uint32_t  program_buffer_size;
+    uint32_t  flash_addr;
+    uint32_t  flash_size;
+    uint32_t  algo_size;
+    uint32_t  opt_program;    /* ProgramOpt function address */
+    uint32_t  opt_addr;       /* OPT base address */
+    uint32_t  opt_size;       /* OPT size in bytes */
+} program_target_ext_t;
+
+#define PROG_TARGET_EXT_HDR_SIZE  68   /* 17 fields * 4 bytes */
+
 typedef struct {
 
 	char * name;

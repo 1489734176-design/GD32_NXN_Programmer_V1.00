@@ -77,3 +77,31 @@ error_t target_opt_erase_chip(program_target_t *algo)
 
 	return status;
 }
+
+/**
+ * @brief  Program OPT bytes using extended algorithm
+ * @param  algo     Extended algorithm struct with opt_program function pointer
+ * @param  opt_data OPT data buffer to program
+ * @return ERROR_SUCCESS or error code
+ */
+error_t target_opt_program_ext(program_target_ext_t *algo, const uint8_t *opt_data)
+{
+	/* Write OPT data to target RAM buffer */
+	if (!swd_write_memory(algo->program_buffer, (uint8_t *)opt_data, algo->opt_size))
+	{
+		return ERROR_ALGO_DATA_SEQ;
+	}
+
+	/* Execute ProgramOpt(opt_addr, opt_size, program_buffer) on target */
+	if (!swd_flash_syscall_exec(&algo->sys_call_s,
+	                             algo->opt_program,
+	                             algo->opt_addr,
+	                             algo->opt_size,
+	                             algo->program_buffer,
+	                             0))
+	{
+		return ERROR_WRITE;
+	}
+
+	return ERROR_SUCCESS;
+}

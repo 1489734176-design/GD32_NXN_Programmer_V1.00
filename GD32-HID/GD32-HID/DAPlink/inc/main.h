@@ -24,6 +24,7 @@ extern "C" {
 #include "bsp_tim.h"
 #include "swd_host.h"
 #include "SWD_flash.h"
+#include "SWD_opt.h"
 #include "error.h"
 #include "bsp_pwr.h"
 
