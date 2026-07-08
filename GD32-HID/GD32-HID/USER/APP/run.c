@@ -427,7 +427,40 @@ void mode2(void)
 				}
 			}
 
-			/* OPT programming for extended algorithm */
+						/* Verify firmware after programming */
+			if(i == bin_size)
+			{
+				OLED_ShowString(53, 100, "-VFY-", 8, 1);
+				OLED_Refresh();
+				f_close(&fd);
+				sprintf((char *)D, "0:/download/bin/%s", app_data.bin_name);
+				if(f_open(&fd, (TCHAR *)D, FA_READ) == FR_OK)
+				{
+					for(j = 0; j < bin_size; )
+					{
+						ret = f_read(&fd, (DATA_BUFFER + 2048), 2048, &ulReadNum);
+						if(ret != FR_OK || ulReadNum == 0) { i = 0; break; }
+						if(target_flash_verify((program_target_t *)DATA_BUFFER,
+						                        ((program_target_t *)DATA_BUFFER)->flash_addr + j,
+						                        (const uint8_t *)(DATA_BUFFER + 2048),
+						                        ulReadNum) != ERROR_SUCCESS) { i = 0; break; }
+						j += ulReadNum;
+					}
+				}
+				else { i = 0; }
+				if(i == bin_size)
+				{
+					OLED_ShowString(53, 100, "VFY_OK", 8, 1);
+				}
+				else
+				{
+					OLED_ShowString(53, 100, "V_ERR", 8, 1);
+				}
+				OLED_Refresh();
+				f_close(&fd);
+			}
+
+/* OPT programming for extended algorithm */
 			if(is_ext_algo && i == bin_size)
 			{
 				FIL fd_opt;
@@ -489,10 +522,14 @@ void mode2(void)
 				OLED_Refresh();
 			}
 
-			target_flash_uninit((program_target_t *)DATA_BUFFER);
+
+			swd_set_target_state_hw(RESET_RUN);
+			swd_off();
 			if(i == bin_size)
 			{
 				OLED_ShowString(53, 100, "SUC", 8, 1);
+				OLED_Refresh();
+				for(volatile uint32_t _d = 0; _d < 500000; _d++);
 				swd_set_target_reset(0);
 				download_suc_flag = 1;
 			}

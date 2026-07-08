@@ -20,6 +20,7 @@ typedef enum
     ERROR_ERASE_SECTOR,
     ERROR_ERASE_ALL,
     ERROR_WRITE,
+    ERROR_VERIFY,
 
     // Add new values here
 

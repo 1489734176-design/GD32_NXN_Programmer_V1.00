@@ -13,6 +13,10 @@
  */
 #include "swd_host.h"
 #include "SWD_flash.h"
+#include <string.h>
+#include "debug_cm.h"
+
+#define VFY_CSW_VAL  (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC)
 
 uint32_t Flash_Page_Size = 1024;
 error_t target_flash_init(program_target_t *algo, uint32_t flash_start)
@@ -96,4 +100,54 @@ error_t target_flash_erase_chip(program_target_t *algo)
     }
 	
     return status;
+}
+
+error_t target_flash_verify(program_target_t *algo, uint32_t addr, const uint8_t *expected, uint32_t size)
+{
+    uint8_t readback[256];
+    uint32_t offset = 0;
+
+    /* Clear sticky error flags and force CSW rewrite */
+    swd_write_dp(DP_ABORT, DAPABORT | STKCMPCLR | STKERRCLR | WDERRCLR | ORUNERRCLR);
+    swd_write_ap(AP_CSW, VFY_CSW_VAL | CSW_SIZE32);
+
+    while (offset < size)
+    {
+        uint32_t chunk = (size - offset) > sizeof(readback) ? sizeof(readback) : (size - offset);
+
+        if (!swd_read_memory(addr + offset, readback, chunk))
+            return ERROR_VERIFY;
+
+        if (memcmp(readback, expected + offset, chunk) != 0)
+            return ERROR_VERIFY;
+
+        offset += chunk;
+    }
+
+    return ERROR_SUCCESS;
+}
+
+error_t target_flash_verify_ext(program_target_ext_t *algo, uint32_t addr, const uint8_t *expected, uint32_t size)
+{
+    uint8_t readback[256];
+    uint32_t offset = 0;
+
+    /* Clear sticky error flags and force CSW rewrite */
+    swd_write_dp(DP_ABORT, DAPABORT | STKCMPCLR | STKERRCLR | WDERRCLR | ORUNERRCLR);
+    swd_write_ap(AP_CSW, VFY_CSW_VAL | CSW_SIZE32);
+
+    while (offset < size)
+    {
+        uint32_t chunk = (size - offset) > sizeof(readback) ? sizeof(readback) : (size - offset);
+
+        if (!swd_read_memory(addr + offset, readback, chunk))
+            return ERROR_VERIFY;
+
+        if (memcmp(readback, expected + offset, chunk) != 0)
+            return ERROR_VERIFY;
+
+        offset += chunk;
+    }
+
+    return ERROR_SUCCESS;
 }
