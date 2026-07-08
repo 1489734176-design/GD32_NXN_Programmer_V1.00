@@ -9,6 +9,7 @@
 usb_dev usb_hid;
 FATFS fs;
 FIL fd;
+FIL fd_opt2;
 FILINFO FileInfo;
 DIR DirInfo;
 app_TypeDef app_data;
@@ -430,7 +431,7 @@ void mode2(void)
 						/* Verify firmware after programming */
 			if(i == bin_size)
 			{
-				OLED_ShowString(53, 100, "-VFY-", 8, 1);
+				OLED_ShowString(53,  70, "-VFY-", 8, 1);
 				OLED_Refresh();
 				f_close(&fd);
 				sprintf((char *)D, "0:/download/bin/%s", app_data.bin_name);
@@ -450,11 +451,11 @@ void mode2(void)
 				else { i = 0; }
 				if(i == bin_size)
 				{
-					OLED_ShowString(53, 100, "VFY_OK", 8, 1);
+					OLED_ShowString(53,  70, "VFY_OK", 8, 1);
 				}
 				else
 				{
-					OLED_ShowString(53, 100, "V_ERR", 8, 1);
+					OLED_ShowString(53,  70, "V_ERR", 8, 1);
 				}
 				OLED_Refresh();
 				f_close(&fd);
@@ -518,6 +519,67 @@ void mode2(void)
 				else
 				{
 					OLED_ShowString(53, 100, "OPT_NO", 8, 1);
+				}
+				OLED_Refresh();
+			}
+
+			/* Verify OPT bytes - stage by stage */
+			if(is_ext_algo && i == bin_size && opt_prog_addr)
+			{
+				OLED_ShowString(53,  70, "V.1", 8, 1);
+				OLED_Refresh();
+				{
+					char opt_name2[40];
+					uint8_t *dot2 = (uint8_t *)strrchr((const char *)app_data.bin_name, '.');
+					if(dot2 && (dot2 - app_data.bin_name) < 30)
+					{
+						uint32_t prefix_len = dot2 - app_data.bin_name;
+						memcpy(opt_name2, app_data.bin_name, prefix_len);
+						opt_name2[prefix_len] = 0;
+						strcat(opt_name2, "_opt.bin");
+					}
+					else strcpy(opt_name2, "default_opt.bin");
+					sprintf((char *)D, "0:/download/bin/%s", opt_name2);
+				}
+				OLED_ShowString(53,  70, "V.2", 8, 1);
+				OLED_Refresh();
+				if(f_open(&fd_opt2, (TCHAR *)D, FA_READ) == FR_OK)
+				{
+					ret = f_read(&fd_opt2, (DATA_BUFFER + 2048), 128, &ulReadNum);
+					if(ret == FR_OK && ulReadNum > 0)
+					{
+						OLED_ShowString(53,  70, "V.3", 8, 1);
+						OLED_Refresh();
+						{
+							program_target_ext_t algo_ext;
+							algo_ext.sys_call_s = ((program_target_t *)DATA_BUFFER)->sys_call_s;
+							algo_ext.program_buffer = ((program_target_t *)DATA_BUFFER)->program_buffer;
+							algo_ext.opt_program = opt_prog_addr;
+							algo_ext.opt_addr = opt_base_addr;
+							algo_ext.opt_size = opt_byte_size;
+							if(target_flash_verify_ext(&algo_ext,
+							                              opt_base_addr,
+							                              (const uint8_t *)(DATA_BUFFER + 2048),
+							                              ulReadNum) != ERROR_SUCCESS)
+							{
+								OLED_ShowString(53,  70, "V_ERR", 8, 1);
+								i = 0;
+							}
+							else
+							{
+								OLED_ShowString(53,  70, "VOK", 8, 1);
+							}
+						}
+					}
+					else
+					{
+						OLED_ShowString(53,  70, "V.RD", 8, 1);
+					}
+					f_close(&fd_opt2);
+				}
+				else
+				{
+					OLED_ShowString(53,  70, "V.NO", 8, 1);
 				}
 				OLED_Refresh();
 			}
