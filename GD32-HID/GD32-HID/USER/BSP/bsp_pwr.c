@@ -16,7 +16,11 @@ void pwr_init(void)
 		gpio_bit_set(PWR_EN_GPIO_Port, PWR_EN_Pin);
 		gpio_init(PWR_EN_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, PWR_EN_Pin);
 	}
-	
+
+	/* Target power PMOS control (PA15), default OFF (HIGH) */
+	gpio_bit_set(TARGET_PWR_GPIO_Port, TARGET_PWR_Pin);
+	gpio_init(TARGET_PWR_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, TARGET_PWR_Pin);
+
 }
 
 uint8_t bat_status_get(void)

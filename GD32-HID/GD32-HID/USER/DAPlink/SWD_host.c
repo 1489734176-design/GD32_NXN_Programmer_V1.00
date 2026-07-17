@@ -712,19 +712,25 @@ static uint8_t swd_wait_until_halted(void)
 
 	for (i = 0; i < timeout; i++)
 	{
+		#if 1
 		if (!swd_read_word(DBG_HCSR, &val))
 		{
+			#if 0
 			return 0;
+			#endif
 		}
 
-		if (val & S_HALT)
+		 else if (val & S_HALT)
 		{
 			return 1;
 		}
+			#endif
 	}
 
 	return 0;
 }
+
+uint32_t g_last_syscall_r0;
 
 uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
@@ -742,22 +748,26 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
 
 	if (!swd_write_debug_state(&state))
 	{
+		g_last_syscall_r0 = 0xDEE1;
 		return 0;
 	}
-
+#if 1
 	if (!swd_wait_until_halted())
 	{
-		return 0;
+		g_last_syscall_r0 = 0xDEE2;
+	//	return 0;
 	}
-
+#endif
 	if (!swd_read_core_register(0, &state.r[0]))
 	{
-		return 0;
+		g_last_syscall_r0 = 0xDEE3;
+	//	return 0;
 	}
 
 	// Flash functions return 0 if successful.
 	if (state.r[0] != 0)
 	{
+		g_last_syscall_r0 = state.r[0];
 		return 0;
 	}
 
@@ -948,7 +958,7 @@ __attribute__((weak)) void swd_set_target_reset(uint8_t asserted)
 */
 void swd_set_target_reset(uint8_t asserted)
 {
-	/* ±¾ÎÄ¼þÖÐ¶Ô´Ëº¯ÊýµÄÊ¹ÓÃ¶¼ÊÇÏÈ asserted=1 µ÷ÓÃ£¬ÑÓÊ±ºó asserted=0 µ÷ÓÃ£¬ÎªÁËÖ»µ÷ÓÃÒ»´ÎËùÒÔÖ»ÔÚµÚ¶þ´Îµ÷ÓÃ´Ëº¯ÊýÊ±Ö´ÐÐÈí¼þ¸´Î» */
+	/* ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½Ð¶Ô´Ëºï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã¶ï¿½ï¿½ï¿½ï¿½ï¿½ asserted=1 ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ asserted=0 ï¿½ï¿½ï¿½Ã£ï¿½Îªï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ÚµÚ¶ï¿½ï¿½Îµï¿½ï¿½Ã´Ëºï¿½ï¿½ï¿½Ê±Ö´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î» */
 	(asserted) ? PIN_nRESET_OUT(0) : PIN_nRESET_OUT(1);
 	if (asserted == 0)
 	{
@@ -1112,7 +1122,7 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
 	/* Calling swd_init prior to enterring RUN state causes operations to fail. */
 	if (state != RUN)
 	{
-		swd_init(); //ÕâÐÐ²»ÆÁ±ÎµÄ»°£¬ÎÞ·¨Èí¼þ¸´Î»³ÌÐò
+		swd_init(); //ï¿½ï¿½ï¿½Ð²ï¿½ï¿½ï¿½ï¿½ÎµÄ»ï¿½ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½
 	}
 
 	switch (state)

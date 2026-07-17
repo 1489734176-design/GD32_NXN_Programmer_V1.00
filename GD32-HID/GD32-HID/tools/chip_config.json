@@ -31,19 +31,19 @@
           {
             "name": "nRST_STOP",
             "bit": 1,
-            "default": 0,
+            "default": 1,
             "options": [
-              {"label": "进入停止模式时不复位", "value": 0},
-              {"label": "进入停止模式时复位",   "value": 1}
+              {"label": "进入停止模式时不复位", "value": 1},
+              {"label": "进入停止模式时复位",   "value": 0}
             ]
           },
           {
             "name": "WDG_SW",
             "bit": 0,
-            "default": 0,
+            "default": 1,
             "options": [
-              {"label": "软件看门狗", "value": 0},
-              {"label": "硬件看门狗", "value": 1}
+              {"label": "软件看门狗", "value": 1},
+              {"label": "硬件看门狗", "value": 0}
             ]
           }
         ]
@@ -127,7 +127,7 @@
           {
             "name": "BOOT0SEL",
             "bit": 7,
-            "default": 0,
+            "default": 1,
             "options": [
               {"label": "BOOT0SEL=1", "value": 1},
               {"label": "BOOT0SEL=0", "value": 0}
@@ -136,7 +136,7 @@
           {
             "name": "nBOOT0",
             "bit": 6,
-            "default": 0,
+            "default": 1,
             "options": [
               {"label": "nBOOT0=1", "value": 1},
               {"label": "nBOOT0=0", "value": 0}
@@ -145,7 +145,7 @@
           {
             "name": "OBR_nRST",
             "bit": 5,
-            "default": 0,
+            "default": 1,
             "options": [
               {"label": "NRST复用",        "value": 1},
               {"label": "NRST作PA10 GPIO", "value": 0}
@@ -154,7 +154,7 @@
           {
             "name": "nBOOT1",
             "bit": 4,
-            "default": 0,
+            "default": 1,
             "options": [
               {"label": "nBOOT1=1", "value": 1},
               {"label": "nBOOT1=0", "value": 0}
@@ -163,28 +163,28 @@
           {
             "name": "nRST_STDBY",
             "bit": 2,
-            "default": 0,
+            "default": 1,
             "options": [
-              {"label": "进入待机模式时不复位", "value": 0},
-              {"label": "进入待机模式时复位",   "value": 1}
+              {"label": "进入待机模式时不复位", "value": 1},
+              {"label": "进入待机模式时复位",   "value": 0}
             ]
           },
           {
             "name": "nRST_STOP",
             "bit": 1,
-            "default": 0,
+            "default": 1,
             "options": [
-              {"label": "进入停止模式时不复位", "value": 0},
-              {"label": "进入停止模式时复位",   "value": 1}
+              {"label": "进入停止模式时不复位", "value": 1},
+              {"label": "进入停止模式时复位",   "value": 0}
             ]
           },
           {
             "name": "WDG_SW",
             "bit": 0,
-            "default": 0,
+            "default": 1,
             "options": [
-              {"label": "软件看门狗", "value": 0},
-              {"label": "硬件看门狗", "value": 1}
+              {"label": "软件看门狗", "value": 1},
+              {"label": "硬件看门狗", "value": 0}
             ]
           }
         ]

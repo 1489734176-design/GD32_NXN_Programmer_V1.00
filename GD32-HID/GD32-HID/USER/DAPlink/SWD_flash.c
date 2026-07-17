@@ -90,12 +90,16 @@ error_t target_flash_erase_sector(program_target_t *algo, uint32_t addr)
     return ERROR_SUCCESS;
 }
 
+uint32_t g_erase_diag;
+
 error_t target_flash_erase_chip(program_target_t *algo)
 {
     error_t status = ERROR_SUCCESS;
+    g_last_syscall_r0 = 0;
 
     if (0 == swd_flash_syscall_exec(&algo->sys_call_s, algo->erase_chip, 0, 0, 0, 0))
     {
+        g_erase_diag = g_last_syscall_r0;
         return ERROR_ERASE_ALL;
     }
 	

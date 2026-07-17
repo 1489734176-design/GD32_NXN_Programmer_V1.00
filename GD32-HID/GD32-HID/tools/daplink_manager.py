@@ -14,6 +14,9 @@ import sys
 import os
 import struct
 import threading
+import re
+
+from intelhex import IntelHex
 
 import usb.core
 import usb.util
@@ -983,6 +986,25 @@ class DAPLinkManager(QMainWindow):
             return 1 if widget.isChecked() else 0
         return None
 
+    @staticmethod
+    def _safe_filename(path):
+        """Return path with ASCII-only basename; copy file if renamed.
+        Returns (safe_path, original_was_unsafe).
+        """
+        dir_name = os.path.dirname(path)
+        base = os.path.basename(path)
+        name, ext = os.path.splitext(base)
+        safe = re.sub(r'[^\x00-\x7F]', '', name).strip(' _-')
+        if not safe:
+            safe = 'firmware'
+        if safe + ext == base:
+            return path, False
+        safe_path = os.path.join(dir_name, safe + ext)
+        if os.path.exists(safe_path):
+            os.remove(safe_path)
+        os.rename(path, safe_path)
+        return safe_path, True
+
     # ── Import Program ──
 
     def _on_import_program(self):
@@ -990,9 +1012,32 @@ class DAPLinkManager(QMainWindow):
             QMessageBox.warning(self, "Warning", "请先连接设备。")
             return
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择程序文件", "", "Binary Files (*.bin);;All Files (*)")
+            self, "选择程序文件", "",
+            "Binary/Hex Files (*.bin *.hex);;Binary Files (*.bin);;Hex Files (*.hex);;All Files (*)")
         if not file_path:
             return
+
+        # Convert .hex to .bin if needed
+        if file_path.lower().endswith('.hex'):
+            try:
+                ih = IntelHex(file_path)
+                dir_name = os.path.dirname(file_path)
+                base_name = os.path.splitext(os.path.basename(file_path))[0]
+                safe_name = re.sub(r'[^\x00-\x7F]', '', base_name).strip(' _-')
+                if not safe_name:
+                    safe_name = 'firmware'
+                bin_path = os.path.join(dir_name, safe_name + '.bin')
+                ih.tobinfile(bin_path)
+                self.statusBar().showMessage(f"HEX -> BIN: {os.path.basename(bin_path)}")
+                file_path = bin_path
+            except Exception as e:
+                QMessageBox.warning(self, "HEX Error", f"HEX 转换失败:\n{e}")
+                return
+
+        # Sanitize filename for FATFS compatibility
+        file_path, renamed = self._safe_filename(file_path)
+        if renamed:
+            self.statusBar().showMessage(f"文件名已过滤: {os.path.basename(file_path)}")
 
         opt_path = None
         if self.current_chip:

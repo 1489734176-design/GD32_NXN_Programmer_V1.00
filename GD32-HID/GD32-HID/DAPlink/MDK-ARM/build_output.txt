@@ -1,0 +1,11 @@
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Keil_v5\ARM\ARMCC\Bin'
+Build target 'DAPlink'
+linking...
+.\GD32F10X_OBJ\DAPlink.axf: Error: L6218E: Undefined symbol delay_ms (referred from run.o).
+.\GD32F10X_OBJ\DAPlink.axf: Error: L6218E: Undefined symbol delay_us (referred from run.o).
+Not enough information to list image symbols.
+Not enough information to list load addresses in the image map.
+Finished: 2 information, 0 warning and 2 error messages.
+".\GD32F10X_OBJ\DAPlink.axf" - 2 Error(s), 0 Warning(s).
+Target not created.
+Build Time Elapsed:  00:00:00

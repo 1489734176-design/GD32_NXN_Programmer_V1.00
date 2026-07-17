@@ -265,6 +265,7 @@ void mode2(void)
 	uint32_t ulReadNum, bin_size;
 	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
 	static uint8_t download_suc_flag = 0;
+	static uint8_t try_program = 1;
 	if(key_val.mesg == 1)
 	{
 		switch(key_val.key)
@@ -294,18 +295,25 @@ void mode2(void)
 					key_val.mesg = 0;
 					return;
 				}	
-				else
-					download_suc_flag = 0;   //���������ڶ�������
+				else {
+					download_suc_flag = 0;
+					try_program = 1;
+				}   //���������ڶ�������
 		}
 		
 		oled.Refresh_flag = 1;
 		key_val.mesg = 0;
 	}
 	
-	if(app_data.head == 2)
-		swd_init_debug();     //������β��ܼ�⵽Ŀ��оƬ
-	
-	if(swd_init_debug() && app_data.head == 2)
+	if(app_data.head == 2) {
+		if(try_program) {
+			TARGET_PWR_ON;
+			{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
+			try_program = 0;
+		}
+}
+
+if(swd_init_debug() && app_data.head == 2)
 	{
 		OLED_ShowString(53, 100, "CON", 8, 1);
 		download_flag = 1;
@@ -315,14 +323,24 @@ void mode2(void)
 	else
 	{
 		OLED_ShowString(53, 100, "DIS", 8, 1);
-		if(download_suc_flag)					//��¼�ɹ����һ�����Ӳ���оƬˢ��һ��
+		if(download_suc_flag)					//��¼�ɹ����һ�����Ӳ���оƬˢ��һ��?
 			OLED_Refresh();
-		download_suc_flag = 0;
 		download_flag = 0;
 	}
 	
 	if(download_flag && app_data.head == 2 && app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0' && download_suc_flag == 0)
 	{
+		/* Power-cycle target and grab SWD before programming */
+		TARGET_PWR_OFF;
+		delaymS(200);
+		TARGET_PWR_ON;
+		{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
+		if(!swd_init_debug()) {
+			OLED_ShowString(53, 100, "DIS", 8, 1);
+			TARGET_PWR_OFF;
+			goto download_return;
+		}
+
 		err_flag = 0;
 		sprintf((char *)D, "0:/download/firmware/%s\0", app_data.firmware_name);
 		ret = f_open(&fd, (TCHAR *)D, FA_READ);
@@ -371,7 +389,18 @@ void mode2(void)
 			OLED_ShowString(53, 100, "-2-", 8, 1); //test
 			OLED_Refresh();
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
-				err_flag = 3;								//����Ŀ��оƬ
+				err_flag = 3;
+			else
+			{
+				target_flash_uninit((program_target_t *)DATA_BUFFER);
+				sprintf((char *)D, "%04X", (unsigned int)(g_erase_diag & 0xFFFF));
+				OLED_ShowString(53, 100, D, 8, 1);
+				OLED_Refresh();
+				TARGET_PWR_OFF;
+				download_suc_flag = 1;
+				{ volatile uint32_t _d; for(_d=0; _d<3000000; _d++); }
+				goto download_return;
+			}								//����Ŀ��оƬ
 		}
 		else 
 		{
@@ -587,6 +616,7 @@ void mode2(void)
 
 			swd_set_target_state_hw(RESET_RUN);
 			swd_off();
+			TARGET_PWR_OFF;
 			if(i == bin_size)
 			{
 				OLED_ShowString(53, 100, "SUC", 8, 1);
@@ -601,6 +631,7 @@ void mode2(void)
 		else OLED_ShowString(53, 100, "ER4", 8, 1);
 		
 download_return:		
+		TARGET_PWR_OFF;
 		oled.Refresh_flag = 1;
 	}
 
@@ -690,7 +721,7 @@ void mode3(void)
 							memcpy(app_data.bin_name, FileInfo.fname, strlen(FileInfo.fname));
 						}
 						FileInfo.fname[21] = '\0';   					//������ʾ����			
-						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����
+						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?
 					}
 					else
 					{
