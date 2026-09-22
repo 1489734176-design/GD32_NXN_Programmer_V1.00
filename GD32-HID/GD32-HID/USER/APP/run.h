@@ -6,11 +6,11 @@
 
 typedef struct
 {	
-	uint8_t mode; //mode 0¶¥²ãÒ³Ãæ£¬1ÔÚÏß·ÂÕæÒ³Ãæ£¬2ÀëÏßÏÂÔØÒ³Ãæ, 3¹Ì¼şÑ¡Ôñ½çÃæ
+	uint8_t mode; //mode 0:æ¨¡å¼é€‰æ‹©é¡µ 1:åœ¨çº¿ä»¿çœŸé¡µ 2:ç¦»çº¿ä¸‹è½½é€‰æ‹©é¡µ 3:æ–‡ä»¶é€‰æ‹©é¡µ 4:çƒ§å½•è¿›åº¦é¡µ
 	uint8_t head;
 	
-	uint8_t bin_name[32];					//ÀëÏßÉÕÂ¼binÎÄ¼ş
-	uint8_t firmware_name[32];		//ÀëÏßÉÕÂ¼Ëã·¨
+	uint8_t bin_name[32];					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼binï¿½Ä¼ï¿½
+	uint8_t firmware_name[32];		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â¼ï¿½ã·¨
 	
 	uint8_t hid_led_blink;
 	uint8_t cb_led_blink;

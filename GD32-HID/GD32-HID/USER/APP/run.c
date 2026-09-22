@@ -37,6 +37,8 @@ void page(void);
 void USB_UNPLUG(void);
 void mode1(void);
 void mode2(void);
+void mode3(void);
+void mode4(void);
 void show_top(uint8_t status);
 uint8_t D[64] = {0};
 
@@ -95,13 +97,13 @@ void page(void)
 	{
 		switch(key_val.key)
 		{
-			case key_left: 
-				if(app_data.head >= 1) app_data.head--;
+			case key_left:
+				app_data.head = (app_data.head + 1) % 2;   /* 上一个(循环, 共2项) */
 				break;
-			case key_right: 
-				if(app_data.head <= 0) app_data.head++;
+			case key_right:
+				app_data.head = (app_data.head + 1) % 2;   /* 下一个(循环, 共2项) */
 				break;
-			case key_mid: 
+			case key_mid:
 				if(app_data.mode == 0)
 				{
 					if(app_data.head == 0) 
@@ -187,21 +189,22 @@ void mode1(void)
 	{
 		switch(key_val.key)
 		{
-			case key_l_mid: 
+			case key_l_mid:                 /* 长按 -> 模式选择页 */
+			case key_d_mid:                 /* 双击 -> 返回上一界面(=模式选择) */
 				app_data.mode = 0;
 				app_data.head = 0;
 				OLED_Clear();
 				show_top(1);
 				oled.Refresh_flag = 1;
 				key_val.mesg = 0;
-				return;					
+				return;
 		}
 		key_val.mesg = 0;
 	}
-	
+
 	if(oled.Refresh_flag == 1)
 	{
-		
+
 		sprintf((char *)D, "HID:%3d%% \0",app_data.hid_d[0]);
 		OLED_ShowString(16, 0, D, 8, 1);
 		for(i = 0; i < 9; i++)
@@ -258,19 +261,15 @@ void mode1(void)
 	}
 			
 }
+/* mode2: 离线下载选择页 (算法 / 文件 / 开始烧录), 只负责选择, 烧录在 mode4 */
 void mode2(void)
 {
-	uint8_t download_flag = 0, err_flag = 0, is_ext_algo = 0;
-	uint32_t ret, i, j;
-	uint32_t ulReadNum, bin_size;
-	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
-	static uint8_t download_suc_flag = 0;
-	static uint8_t try_program = 1;
 	if(key_val.mesg == 1)
 	{
 		switch(key_val.key)
 		{
-			case key_l_mid: 
+			case key_l_mid:                     /* 长按 -> 模式选择页 */
+			case key_d_mid:                     /* 双击 -> 返回上一界面(=模式选择) */
 				app_data.mode = 0;
 				app_data.head = 0;
 				OLED_Clear();
@@ -280,65 +279,127 @@ void mode2(void)
 				rcu_periph_clock_enable(RCU_USBD);
 				usbd_connect(&usb_hid);
 				return;
-			case key_left: 
-				if(app_data.head >= 1) app_data.head--;
+			case key_left:                      /* 上一个(循环) */
+				app_data.head = (app_data.head + 2) % 3;
 				break;
-			case key_right: 
-				app_data.head++;
-				if(app_data.head == 3) app_data.head = 0;
+			case key_right:                     /* 下一个(循环) */
+				app_data.head = (app_data.head + 1) % 3;
 				break;
 			case key_mid:
-				if(app_data.head != 2)
+				if(app_data.head != 2)          /* 选算法/文件 */
 				{
 					app_data.mode = 3;
 					oled.Refresh_flag = 1;
 					key_val.mesg = 0;
 					return;
-				}	
-				else {
-					download_suc_flag = 0;
-					try_program = 1;
-				}   //���������ڶ�������
+				}
+				else                            /* 开始烧录 -> 进度界面 */
+				{
+					app_data.mode = 4;
+					OLED_Clear();
+					oled.Refresh_flag = 1;
+					key_val.mesg = 0;
+					return;
+				}
+			default:
+				break;
 		}
-		
+
 		oled.Refresh_flag = 1;
 		key_val.mesg = 0;
 	}
-	
-	if(app_data.head == 2) {
-		if(try_program) {
-			TARGET_PWR_ON;
-			{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
-			try_program = 0;
-		}
+
+	if(oled.Refresh_flag == 1)
+	{
+		OLED_ShowChinese(0, 0, 3, 4, 1);
+		OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
+		OLED_ShowChinese(26, 0, 4, 4, 1);
+		OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
+		OLED_ShowChinese(53, 0, 5, 4, 1);       /* 开始烧录 */
+		if(app_data.head == 0)      OLED_ShowString(0, 100, "<-", 16, 1), OLED_ShowString(26, 100, "  ", 16, 1), OLED_ShowString(53, 100, "  ", 16, 1);
+		else if(app_data.head == 1) OLED_ShowString(0, 100, "  ", 16, 1), OLED_ShowString(26, 100, "<-", 16, 1), OLED_ShowString(53, 100, "  ", 16, 1);
+		else if(app_data.head == 2) OLED_ShowString(0, 100, "  ", 16, 1), OLED_ShowString(26, 100, "  ", 16, 1), OLED_ShowString(53, 100, "<-", 16, 1);
+		OLED_Refresh();
+		oled.Refresh_flag = 0;
+	}
 }
 
-if(swd_init_debug() && app_data.head == 2)
+/* mode4: 烧录进度界面. 进入后执行一次完整烧录并显示进度/状态码.
+   双击中键 -> 返回选择页(mode2); 长按中键 -> 模式选择页(mode0). */
+void mode4(void)
+{
+	uint8_t err_flag = 0, is_ext_algo = 0;
+	uint32_t ret, i, j;
+	uint32_t ulReadNum, bin_size;
+	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
+	uint8_t download_suc_flag = 0;
+	static uint8_t done = 0;
+
+	if(key_val.mesg == 1)
 	{
-		OLED_ShowString(53, 100, "CON", 8, 1);
-		download_flag = 1;
-		OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1);
-		OLED_Refresh();
+		switch(key_val.key)
+		{
+			case key_d_mid:                     /* 双击 -> 返回选择页 */
+				app_data.mode = 2;
+				done = 0;
+				OLED_Clear();
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				return;
+			case key_l_mid:                     /* 长按 -> 模式选择页 */
+				app_data.mode = 0;
+				app_data.head = 0;
+				done = 0;
+				OLED_Clear();
+				show_top(1);
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				rcu_periph_clock_enable(RCU_USBD);
+				usbd_connect(&usb_hid);
+				return;
+			default:
+				break;
+		}
+		key_val.mesg = 0;
 	}
-	else
-	{
-		OLED_ShowString(53, 100, "DIS", 8, 1);
-		if(download_suc_flag)					//��¼�ɹ����һ�����Ӳ���оƬˢ��һ��?
-			OLED_Refresh();
-		download_flag = 0;
-	}
-	
-	if(download_flag && app_data.head == 2 && app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0' && download_suc_flag == 0)
+
+	if(done)                                    /* 已烧录完, 停留在结果页等待按键 */
+		return;
+	done = 1;
+
+	/* 进度界面: 标签 + 进度条 */
+	OLED_Clear();
+	OLED_ShowChinese(0, 0, 3, 4, 1);
+	OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
+	OLED_ShowChinese(26, 0, 4, 4, 1);
+	OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
+	OLED_ShowString(53, 0, "[          ]  0%\0", 8, 1);
+	OLED_Refresh();
+
+	/* 上电目标 */
+	TARGET_PWR_ON;
+	{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
+
+	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
 		/* Power-cycle target and grab SWD before programming */
+		swd_off();
 		TARGET_PWR_OFF;
 		delaymS(200);
 		TARGET_PWR_ON;
-		{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
-		if(!swd_init_debug()) {
-			OLED_ShowString(53, 100, "DIS", 8, 1);
-			TARGET_PWR_OFF;
-			goto download_return;
+		/* Retry SWD: grab CPU before firmware disables SWD */
+		{
+			uint8_t swd_ok = 0;
+			for (int _i = 0; _i < 50; _i++) {
+				if (swd_init_debug()) { swd_ok = 1; break; }
+				delaymS(1);
+			}
+			if (!swd_ok) {
+				OLED_ShowString(53, 100, "DIS", 8, 1);
+				swd_off();
+				TARGET_PWR_OFF;
+				goto download_return;
+			}
 		}
 
 		err_flag = 0;
@@ -396,6 +457,7 @@ if(swd_init_debug() && app_data.head == 2)
 				sprintf((char *)D, "%04X", (unsigned int)(g_erase_diag & 0xFFFF));
 				OLED_ShowString(53, 100, D, 8, 1);
 				OLED_Refresh();
+				swd_off();
 				TARGET_PWR_OFF;
 				download_suc_flag = 1;
 				{ volatile uint32_t _d; for(_d=0; _d<3000000; _d++); }
@@ -631,28 +693,15 @@ if(swd_init_debug() && app_data.head == 2)
 		else OLED_ShowString(53, 100, "ER4", 8, 1);
 		
 download_return:		
+		swd_off();
 		TARGET_PWR_OFF;
 		oled.Refresh_flag = 1;
 	}
-
-
-
-	if(oled.Refresh_flag == 1)
+	else
 	{
-//		OLED_Clear();
-		
-		OLED_ShowChinese(0, 0, 3, 4, 1);
-		OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
-		OLED_ShowChinese(26, 0, 4, 4, 1);
-		OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
-		OLED_ShowString(53, 0, "[          ]  0%\0", 8, 1);
-		if(app_data.head == 0) 			OLED_ShowString(0, 100, "<-", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1),OLED_ShowString(53, 100, "   ", 8, 1);
-		else if(app_data.head == 1) OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "<-", 16, 1),OLED_ShowString(53, 100, "   ", 8, 1);
-		else if(app_data.head == 2) OLED_ShowString(0, 100, "  ", 16, 1),OLED_ShowString(26, 100, "  ", 16, 1);
+		OLED_ShowString(53, 100, "NoFile", 8, 1);
 		OLED_Refresh();
-		oled.Refresh_flag = 0;
 	}
-
 }
 void mode3(void)
 {
@@ -675,19 +724,31 @@ void mode3(void)
 				if(index == sum)
 					index = 0;
 				break;
-			case key_mid:
+			case key_mid:                   /* 选中文件 -> 返回选择页 */
+			case key_d_mid:                 /* 双击 -> 返回上一界面(选择页) */
 				index = 0;
 				app_data.mode = 2;
 				OLED_Clear();
 				oled.Refresh_flag = 1;
 				key_val.mesg = 0;
-				return;				
+				return;
+			case key_l_mid:                 /* 长按 -> 模式选择页 */
+				index = 0;
+				app_data.mode = 0;
+				app_data.head = 0;
+				OLED_Clear();
+				show_top(1);
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				rcu_periph_clock_enable(RCU_USBD);
+				usbd_connect(&usb_hid);
+				return;
 		}
-		
+
 		oled.Refresh_flag = 1;
 		key_val.mesg = 0;
 	}
-		
+
 	if(oled.Refresh_flag == 1)
 	{
 		OLED_Clear();
@@ -721,7 +782,7 @@ void mode3(void)
 							memcpy(app_data.bin_name, FileInfo.fname, strlen(FileInfo.fname));
 						}
 						FileInfo.fname[21] = '\0';   					//������ʾ����			
-						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?
+						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?
 					}
 					else
 					{
@@ -799,7 +860,8 @@ void run_task(void *pvParameters)
 				case 0:page();break;
 				case 1:mode1();break;
 				case 2:mode2();break;
-				case 3:mode3();;break;
+				case 3:mode3();break;
+				case 4:mode4();break;
 			}
 			
 		}

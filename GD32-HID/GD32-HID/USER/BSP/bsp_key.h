@@ -9,7 +9,10 @@
 #define read_key_mid    gpio_input_bit_get(KEY_M_GPIO_Port, KEY_M_Pin)
 #define read_key_right  gpio_input_bit_get(KEY_R_GPIO_Port, KEY_R_Pin)
 
-typedef enum {key_null, key_left, key_mid, key_right, key_l_left, key_l_mid, key_l_right} key_num;
+typedef enum {key_null, key_left, key_mid, key_right, key_l_left, key_l_mid, key_l_right, key_d_mid} key_num;
+
+/* 双击检测窗口 (以 key_scan 轮询次数计, 每次约100ms) */
+#define key_dbl_th      3
 
 typedef struct
 {

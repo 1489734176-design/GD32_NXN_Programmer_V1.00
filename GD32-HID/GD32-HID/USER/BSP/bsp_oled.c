@@ -361,6 +361,7 @@ void OLED_ShowChinese(uint8_t x, uint8_t y, uint8_t index, uint8_t len, uint8_t 
 				case 2: temp = string_2[i][j];break;
 				case 3: temp = string_3[i][j];break;
 				case 4: temp = string_4[i][j];break;
+				case 5: temp = string_5[i][j];break;
 			}
 			
 			for(z = 0; z < 8; z++)
