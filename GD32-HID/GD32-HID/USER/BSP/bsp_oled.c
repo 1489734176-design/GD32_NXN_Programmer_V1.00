@@ -378,6 +378,7 @@ void OLED_ShowChinese(uint8_t x, uint8_t y, uint8_t index, uint8_t len, uint8_t 
 			
 		}
 		x2 = x;
+		x1 = x;
 		y2 = y + 16*(i + 1);
 	}
 	

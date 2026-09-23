@@ -128,10 +128,6 @@ void page(void)
 					}
 				}
 				break;
-			case key_l_right:
-				INTX_DISABLE();
-				NVIC_SystemReset();    //����λ����
-				break;
 			case key_l_mid:						//�����м��ػ�
 				OLED_DisPlay_Off();
 				GD25QXX_PowerDown();
@@ -311,28 +307,45 @@ void mode2(void)
 
 	if(oled.Refresh_flag == 1)
 	{
+		OLED_Clear();
 		OLED_ShowChinese(0, 0, 3, 4, 1);
-		OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
-		OLED_ShowChinese(26, 0, 4, 4, 1);
-		OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
-		OLED_ShowChinese(53, 0, 5, 4, 1);       /* 开始烧录 */
-		if(app_data.head == 0)      OLED_ShowString(0, 100, "<-", 16, 1), OLED_ShowString(26, 100, "  ", 16, 1), OLED_ShowString(53, 100, "  ", 16, 1);
-		else if(app_data.head == 1) OLED_ShowString(0, 100, "  ", 16, 1), OLED_ShowString(26, 100, "<-", 16, 1), OLED_ShowString(53, 100, "  ", 16, 1);
-		else if(app_data.head == 2) OLED_ShowString(0, 100, "  ", 16, 1), OLED_ShowString(26, 100, "  ", 16, 1), OLED_ShowString(53, 100, "<-", 16, 1);
+		sprintf((char *)D, "%.21s", app_data.firmware_name);
+		OLED_ShowString(16, 0, D, 8, 1);
+		OLED_ShowChinese(24, 0, 4, 4, 1);
+		sprintf((char *)D, "%.21s", app_data.bin_name);
+		OLED_ShowString(40, 0, D, 8, 1);
+		OLED_ShowChinese(48, 0, 5, 4, 1);
+		OLED_ShowString(app_data.head * 24, 100, "<-", 16, 1);
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
 	}
 }
 
-/* mode4: 烧录进度界面. 进入后执行一次完整烧录并显示进度/状态码.
-   双击中键 -> 返回选择页(mode2); 长按中键 -> 模式选择页(mode0). */
+static void show_download_progress(uint8_t percent)
+{
+	uint8_t text[17];
+	memset(OLED_GRAM[3], 0, sizeof(OLED_GRAM[3]));
+	sprintf((char *)text, "[          ]%3u%%", (unsigned int)percent);
+	OLED_ShowString(24, 16, text, 8, 1);
+	text[percent / 10 + 1] = '\0';
+	OLED_ShowString(24, 22, text + 1, 8, 0);
+	OLED_Refresh();
+}
+
+static void show_download_status(const char *status)
+{
+	memset(OLED_GRAM[5], 0, sizeof(OLED_GRAM[5]));
+	OLED_ShowString(40, 0, (uint8_t *)status, 8, 1);
+	OLED_Refresh();
+}
+
 void mode4(void)
 {
 	uint8_t err_flag = 0, is_ext_algo = 0;
 	uint32_t ret, i, j;
 	uint32_t ulReadNum, bin_size;
 	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
-	uint8_t download_suc_flag = 0;
+	uint8_t opt_failed = 0;
 	static uint8_t done = 0;
 
 	if(key_val.mesg == 1)
@@ -367,21 +380,12 @@ void mode4(void)
 		return;
 	done = 1;
 
-	/* 进度界面: 标签 + 进度条 */
 	OLED_Clear();
-	OLED_ShowChinese(0, 0, 3, 4, 1);
-	OLED_ShowString(17, 0, app_data.firmware_name, 8, 1);
-	OLED_ShowChinese(26, 0, 4, 4, 1);
-	OLED_ShowString(43, 0, app_data.bin_name, 8, 1);
-	OLED_ShowString(53, 0, "[          ]  0%\0", 8, 1);
-	OLED_Refresh();
-
-	/* 上电目标 */
-	TARGET_PWR_ON;
-	{ volatile uint32_t _d; for(_d=0; _d<3600; _d++); }
+	show_download_progress(0);
 
 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
+		show_download_status("Connecting...");
 		/* Power-cycle target and grab SWD before programming */
 		swd_off();
 		TARGET_PWR_OFF;
@@ -395,7 +399,7 @@ void mode4(void)
 				delaymS(1);
 			}
 			if (!swd_ok) {
-				OLED_ShowString(53, 100, "DIS", 8, 1);
+				show_download_status("DIS: SWD failed");
 				swd_off();
 				TARGET_PWR_OFF;
 				goto download_return;
@@ -428,12 +432,12 @@ void mode4(void)
 		}
 		else 
 		{
-			OLED_ShowString(53, 100, "ER0", 8, 1); 
+			show_download_status("ER0: Algo open");
 			goto download_return;
 		}
 		if(err_flag == 1)
 		{
-			OLED_ShowString(53, 100, "-1-", 8, 1); //test
+			show_download_status("Loading algorithm...");
 			OLED_Refresh();
 			if(target_flash_init((program_target_t *)DATA_BUFFER, ((program_target_t *)DATA_BUFFER)->flash_addr) == ERROR_SUCCESS)
 				err_flag = 2;								//������¼�㷨��Ŀ��оƬ
@@ -442,24 +446,23 @@ void mode4(void)
 		}
 		else
 		{			
-			OLED_ShowString(53, 100, "ER1", 8, 1);
+			show_download_status("ER1: Algo read");
 			goto download_return;
 		}
 		if(err_flag == 2)
 		{
-			OLED_ShowString(53, 100, "-2-", 8, 1); //test
+			show_download_status("Erasing...");
 			OLED_Refresh();
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
 				err_flag = 3;
 			else
 			{
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
-				sprintf((char *)D, "%04X", (unsigned int)(g_erase_diag & 0xFFFF));
-				OLED_ShowString(53, 100, D, 8, 1);
+				sprintf((char *)D, "Erase error: %04X", (unsigned int)(g_erase_diag & 0xFFFF));
+				show_download_status((char *)D);
 				OLED_Refresh();
 				swd_off();
 				TARGET_PWR_OFF;
-				download_suc_flag = 1;
 				{ volatile uint32_t _d; for(_d=0; _d<3000000; _d++); }
 				goto download_return;
 			}								//����Ŀ��оƬ
@@ -467,7 +470,7 @@ void mode4(void)
 		else 
 		{
 			target_flash_uninit((program_target_t *)DATA_BUFFER);
-			OLED_ShowString(53, 100, "ER2", 8, 1);
+			show_download_status("ER2: Algo init");
 			goto download_return;
 		}
 		if(err_flag == 3)
@@ -480,12 +483,12 @@ void mode4(void)
 		else 
 		{
 			target_flash_uninit((program_target_t *)DATA_BUFFER);
-			OLED_ShowString(53, 100, "ER3", 8, 1);
+			show_download_status("ER3: Erase failed");
 			goto download_return;
 		}
 		if(err_flag == 4)
 		{
-			OLED_ShowString(53, 100, "-3-", 8, 1); //test
+			show_download_status("Programming...");
 			OLED_Refresh();
 			
 			bin_size = f_size(&fd);
@@ -499,22 +502,18 @@ void mode4(void)
 																			((program_target_t *)DATA_BUFFER)->flash_addr + i,
 																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)  //��¼����Ŀ��оƬ
 					{
-						OLED_ShowString(53, 100, "ER6", 8, 1);
+						show_download_status("ER6: Program failed");
 						break;
 					}
 					i += ulReadNum;
 					j = i;
 					j = (uint32_t)(j * 100.0/ bin_size);
 								
-					sprintf((char *)D, "[          ]%3d\0", j);
-					OLED_ShowString(53, 0, D, 8, 1);
-					D[(uint8_t)(j/10 + 1)] = '\0';
-					OLED_ShowString(53, 6, D+1, 8, 0);
-					OLED_Refresh();
+					show_download_progress((uint8_t)j);
 				}
 				else 
 				{
-					OLED_ShowString(53, 100, "ER5", 8, 1);
+					show_download_status("ER5: Firmware read");
 					break;
 				}
 			}
@@ -522,7 +521,7 @@ void mode4(void)
 						/* Verify firmware after programming */
 			if(i == bin_size)
 			{
-				OLED_ShowString(53,  70, "-VFY-", 8, 1);
+				show_download_status("Verifying...");
 				OLED_Refresh();
 				f_close(&fd);
 				sprintf((char *)D, "0:/download/bin/%s", app_data.bin_name);
@@ -542,11 +541,11 @@ void mode4(void)
 				else { i = 0; }
 				if(i == bin_size)
 				{
-					OLED_ShowString(53,  70, "VFY_OK", 8, 1);
+					show_download_status("Verify OK");
 				}
 				else
 				{
-					OLED_ShowString(53,  70, "V_ERR", 8, 1);
+					show_download_status("Verify failed");
 				}
 				OLED_Refresh();
 				f_close(&fd);
@@ -560,7 +559,7 @@ void mode4(void)
 				uint8_t *dot;
 				uint32_t opt_read;
 
-				OLED_ShowString(53, 100, "-OPT-", 8, 1);
+				show_download_status("Programming OPT...");
 				OLED_Refresh();
 
 				dot = (uint8_t *)strrchr((const char *)app_data.bin_name, '.');
@@ -594,22 +593,25 @@ void mode4(void)
 							if(target_opt_program_ext(&algo_ext,
 							                           (const uint8_t *)(DATA_BUFFER + 2048)) == ERROR_SUCCESS)
 						{
-							OLED_ShowString(53, 100, "OPT OK", 8, 1);
+							show_download_status("OPT OK");
 							}
 							else
 							{
-								OLED_ShowString(53, 100, "ER_OPT", 8, 1);
+								show_download_status("OPT program failed");
+								opt_failed = 1;
 							}
 						} /* end of algo_ext scope */
 					}
 					else
 					{
-						OLED_ShowString(53, 100, "OPT_RD", 8, 1);
+						show_download_status("OPT read failed");
+						opt_failed = 1;
 					}
 				}
 				else
 				{
-					OLED_ShowString(53, 100, "OPT_NO", 8, 1);
+					show_download_status("OPT file missing");
+					opt_failed = 1;
 				}
 				OLED_Refresh();
 			}
@@ -617,7 +619,7 @@ void mode4(void)
 			/* Verify OPT bytes - stage by stage */
 			if(is_ext_algo && i == bin_size && opt_prog_addr)
 			{
-				OLED_ShowString(53,  70, "V.1", 8, 1);
+				show_download_status("Verifying OPT...");
 				OLED_Refresh();
 				{
 					char opt_name2[40];
@@ -632,14 +634,14 @@ void mode4(void)
 					else strcpy(opt_name2, "default_opt.bin");
 					sprintf((char *)D, "0:/download/bin/%s", opt_name2);
 				}
-				OLED_ShowString(53,  70, "V.2", 8, 1);
+				show_download_status("Reading OPT file...");
 				OLED_Refresh();
 				if(f_open(&fd_opt2, (TCHAR *)D, FA_READ) == FR_OK)
 				{
 					ret = f_read(&fd_opt2, (DATA_BUFFER + 2048), 128, &ulReadNum);
 					if(ret == FR_OK && ulReadNum > 0)
 					{
-						OLED_ShowString(53,  70, "V.3", 8, 1);
+						show_download_status("Checking OPT...");
 						OLED_Refresh();
 						{
 							program_target_ext_t algo_ext;
@@ -653,24 +655,26 @@ void mode4(void)
 							                              (const uint8_t *)(DATA_BUFFER + 2048),
 							                              ulReadNum) != ERROR_SUCCESS)
 							{
-								OLED_ShowString(53,  70, "V_ERR", 8, 1);
+								show_download_status("Verify failed");
 								i = 0;
 							}
 							else
 							{
-								OLED_ShowString(53,  70, "VOK", 8, 1);
+								show_download_status("OPT verify OK");
 							}
 						}
 					}
 					else
 					{
-						OLED_ShowString(53,  70, "V.RD", 8, 1);
+						show_download_status("OPT verify read error");
+						opt_failed = 1;
 					}
 					f_close(&fd_opt2);
 				}
 				else
 				{
-					OLED_ShowString(53,  70, "V.NO", 8, 1);
+					show_download_status("OPT verify file error");
+					opt_failed = 1;
 				}
 				OLED_Refresh();
 			}
@@ -681,16 +685,15 @@ void mode4(void)
 			TARGET_PWR_OFF;
 			if(i == bin_size)
 			{
-				OLED_ShowString(53, 100, "SUC", 8, 1);
+				show_download_status(opt_failed ? "FW OK, OPT failed" : "SUC: Program OK");
 				OLED_Refresh();
 				for(volatile uint32_t _d = 0; _d < 500000; _d++);
 				swd_set_target_reset(0);
-				download_suc_flag = 1;
 			}
 			taskEXIT_CRITICAL();
 			f_close(&fd);
 		}
-		else OLED_ShowString(53, 100, "ER4", 8, 1);
+		else show_download_status("ER4: Firmware open");
 		
 download_return:		
 		swd_off();
@@ -699,30 +702,28 @@ download_return:
 	}
 	else
 	{
-		OLED_ShowString(53, 100, "NoFile", 8, 1);
+		show_download_status("No file selected");
 		OLED_Refresh();
 	}
 }
 void mode3(void)
 {
-	static int8_t index = 0;
-	static uint8_t sum = 0;
-	uint8_t i,j;
-	uint8_t ret;
+	static uint32_t index = 0;
+	static uint32_t sum = 0;
+	uint32_t j;
+	uint8_t i, ret;
 	
 	if(key_val.mesg == 1)
 	{
 		switch(key_val.key)
 		{
-			case key_left: 
-				index--;
-				if(index == -1)
-					index = sum - 1;
+			case key_left:
+				if(sum)
+					index = index == 0 ? sum - 1 : index - 1;
 				break;
-			case key_right: 
-				index++;
-				if(index == sum)
-					index = 0;
+			case key_right:
+				if(sum)
+					index = (index + 1) % sum;
 				break;
 			case key_mid:                   /* 选中文件 -> 返回选择页 */
 			case key_d_mid:                 /* 双击 -> 返回上一界面(选择页) */
@@ -752,6 +753,7 @@ void mode3(void)
 	if(oled.Refresh_flag == 1)
 	{
 		OLED_Clear();
+		sum = 0;
 		if(app_data.head == 0)
 			ret = f_opendir(&DirInfo, "0:/download/firmware");
 		else if(app_data.head == 1)
@@ -774,12 +776,12 @@ void mode3(void)
 						if(app_data.head == 0)
 						{
 							memset(app_data.firmware_name, '\0', 32);
-							memcpy(app_data.firmware_name, FileInfo.fname, strlen(FileInfo.fname));
+							strncpy((char *)app_data.firmware_name, FileInfo.fname, sizeof(app_data.firmware_name) - 1);
 						}	
 						else if(app_data.head == 1)
 						{
 							memset(app_data.bin_name, '\0', 32);
-							memcpy(app_data.bin_name, FileInfo.fname, strlen(FileInfo.fname));
+							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
 						}
 						FileInfo.fname[21] = '\0';   					//������ʾ����			
 						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?
@@ -794,6 +796,11 @@ void mode3(void)
 				sum ++;
 			}
 			f_closedir(&DirInfo);
+		}
+		if(!sum)
+		{
+			index = 0;
+			OLED_ShowString(0, 0, "No files", 8, 1);
 		}
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
@@ -897,15 +904,13 @@ void key_task(void *pvParameters)
 {
 	while(1)
 	{
-		if(!key_val.mesg)
+		key_num event = key_scan();
+		if(!key_val.mesg && event != key_null)
 		{
-			key_val.key = key_scan();
-			if(key_val.key != key_null)
-			{
-				key_val.mesg = 1;
-			}	
+			key_val.key = event;
+			key_val.mesg = 1;
 		}
-		vTaskDelay(100);
+		vTaskDelay(pdMS_TO_TICKS(KEY_SCAN_MS));
 	}
 }
 

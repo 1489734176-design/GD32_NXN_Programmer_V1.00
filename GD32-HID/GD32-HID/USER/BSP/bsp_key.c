@@ -17,77 +17,85 @@ void key_init(void)
 
 key_num key_scan(void)
 {
-    static key_num flag;        /* 当前按住的键 */
-    static uint8_t count;       /* 按住时长(轮询次数) */
-    static uint8_t mid_wait;    /* >0: 中键单击后等待第二次的倒计时窗口 */
-
-    key_num pressed, ev = key_null;
+    static key_num active;
+    static key_num candidate;
+    static uint8_t stable_count;
+    static uint8_t hold_count;
+    static uint8_t repeat_count;
+    static uint8_t repeated;
+    static uint8_t mid_wait;
+    key_num pressed, previous;
 
     if(read_key_left) pressed = key_left;
     else if(read_key_mid) pressed = key_mid;
     else if(read_key_right) pressed = key_right;
     else pressed = key_null;
 
-    /* ---- 在松开时产生一次完整按键事件(短按/长按),沿用原逻辑 ---- */
-    if(pressed != key_null)
+    if(pressed != candidate)
     {
-        if(flag == key_null)
-            flag = pressed;                 /* 按下沿 */
-        else if(pressed == flag && count < 255)
-            count++;
+        candidate = pressed;
+        stable_count = 1;
     }
-    else
-    {
-        if(flag != key_null)
-        {
-            if(count > key_long_th)
-            {
-                switch(flag)
-                {
-                case key_left:  ev = key_l_left;  break;
-                case key_mid:   ev = key_l_mid;   break;
-                case key_right: ev = key_l_right; break;
-                default: break;
-                }
-            }
-            else
-            {
-                ev = flag;                  /* 短按 */
-            }
-            flag = key_null, count = 0;
-        }
-    }
+    else if(stable_count < 2)
+        stable_count++;
 
-    /* ---- 中键长按: 立即返回, 取消双击等待 ---- */
-    if(ev == key_l_mid)
-    {
-        mid_wait = 0;
-        return key_l_mid;
-    }
+    if(stable_count < 2)
+        return key_null;
 
-    /* ---- 中键短按: 叠加双击检测 ---- */
-    if(ev == key_mid)
+    if(active != pressed)
     {
-        if(mid_wait > 0)                    /* 窗口内的第二次短按 => 双击 */
+        previous = active;
+        active = pressed;
+        if(pressed != key_null)
         {
-            mid_wait = 0;
-            return key_d_mid;
+            hold_count = 0;
+            repeat_count = 0;
+            repeated = 0;
+            if(pressed != key_mid)
+                mid_wait = 0;
+            return key_null;
         }
-        mid_wait = key_dbl_th;              /* 开启窗口, 暂缓这次单击 */
+
+        if(previous == key_mid)
+        {
+            if(hold_count >= key_long_th)
+            {
+                mid_wait = 0;
+                return key_l_mid;
+            }
+            if(mid_wait)
+            {
+                mid_wait = 0;
+                return key_d_mid;
+            }
+            mid_wait = key_dbl_th;
+        }
+        else if((previous == key_left || previous == key_right) && !repeated)
+            return previous;
         return key_null;
     }
 
-    /* ---- 非中键事件立即返回 ---- */
-    if(ev != key_null)
-        return ev;
-
-    /* ---- 窗口在空闲中超时: 补发被暂缓的中键单击 ---- */
-    if(mid_wait > 0 && pressed == key_null && flag == key_null)
+    if(active != key_null)
     {
-        mid_wait--;
-        if(mid_wait == 0)
-            return key_mid;
+        if(hold_count < key_long_th)
+            hold_count++;
+        if((active == key_left || active == key_right) && hold_count >= key_long_th)
+        {
+            if(!repeated)
+            {
+                repeated = 1;
+                repeat_count = 0;
+                return active;
+            }
+            if(++repeat_count >= key_repeat_th)
+            {
+                repeat_count = 0;
+                return active;
+            }
+        }
     }
+    else if(mid_wait && --mid_wait == 0)
+        return key_mid;
 
     return key_null;
 }

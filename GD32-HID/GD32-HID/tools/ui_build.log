@@ -1,0 +1,9 @@
+*** Using Compiler 'V5.06 update 7 (build 960)', folder: 'D:\Users\mym02\AppData\Local\Keil_v5\ARM\ARMCC\Bin'
+Build target 'DAPlink'
+compiling run.c...
+linking...
+Program Size: Code=51188 RO-data=6344 RW-data=800 ZI-data=19128  
+FromELF: creating hex file...
+After Build - User command #1: fromelf.exe --bin -o DAPlink.bin D:\mym\NXN\DAPlink\GD32-HID\GD32-HID\DAPlink\MDK-ARM\GD32F10X_OBJ\DAPlink.axf
+".\GD32F10X_OBJ\DAPlink.axf" - 0 Error(s), 0 Warning(s).
+Build Time Elapsed:  00:00:02
