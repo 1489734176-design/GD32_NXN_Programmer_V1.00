@@ -6,6 +6,7 @@
 
 #define KEY_SCAN_MS     20
 #define key_long_th     (500 / KEY_SCAN_MS)
+#define key_mid_long_th (1500 / KEY_SCAN_MS)
 #define key_repeat_th   (100 / KEY_SCAN_MS)
 #define read_key_left   gpio_input_bit_get(KEY_L_GPIO_Port, KEY_L_Pin)
 #define read_key_mid    gpio_input_bit_get(KEY_M_GPIO_Port, KEY_M_Pin)

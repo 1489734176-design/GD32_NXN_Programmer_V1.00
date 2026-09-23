@@ -58,17 +58,15 @@ key_num key_scan(void)
 
         if(previous == key_mid)
         {
-            if(hold_count >= key_long_th)
+            if(!repeated)
             {
-                mid_wait = 0;
-                return key_l_mid;
+                if(mid_wait)
+                {
+                    mid_wait = 0;
+                    return key_d_mid;
+                }
+                mid_wait = key_dbl_th;
             }
-            if(mid_wait)
-            {
-                mid_wait = 0;
-                return key_d_mid;
-            }
-            mid_wait = key_dbl_th;
         }
         else if((previous == key_left || previous == key_right) && !repeated)
             return previous;
@@ -77,9 +75,18 @@ key_num key_scan(void)
 
     if(active != key_null)
     {
-        if(hold_count < key_long_th)
+        if(hold_count < key_mid_long_th)
             hold_count++;
-        if((active == key_left || active == key_right) && hold_count >= key_long_th)
+        if(active == key_mid)
+        {
+            if(hold_count >= key_mid_long_th && !repeated)
+            {
+                repeated = 1;
+                mid_wait = 0;
+                return key_l_mid;
+            }
+        }
+        else if((active == key_left || active == key_right) && hold_count >= key_long_th)
         {
             if(!repeated)
             {

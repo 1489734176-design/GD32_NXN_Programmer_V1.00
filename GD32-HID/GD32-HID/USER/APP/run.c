@@ -4,6 +4,7 @@
 #include "string.h"
 #include "ff.h"
 #include "DAP_config.h"
+#include "usbd_custombulk.h"
 
 
 usb_dev usb_hid;
@@ -41,6 +42,26 @@ void mode3(void);
 void mode4(void);
 void show_top(uint8_t status);
 uint8_t D[64] = {0};
+
+static void apply_prepare_download(const uint8_t *algorithm_name,
+                                   const uint8_t *program_name,
+                                   uint8_t opt_required)
+{
+    (void)opt_required;
+    strncpy((char *)app_data.firmware_name, (const char *)algorithm_name,
+            sizeof(app_data.firmware_name) - 1);
+    app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = '\0';
+    strncpy((char *)app_data.bin_name, (const char *)program_name,
+            sizeof(app_data.bin_name) - 1);
+    app_data.bin_name[sizeof(app_data.bin_name) - 1] = '\0';
+    app_data.mode = 2;
+    app_data.head = 2;
+    key_val.mesg = 0;
+    OLED_Clear();
+    oled.Refresh_flag = 1;
+    usbd_disconnect(&usb_hid);
+    rcu_periph_clock_disable(RCU_USBD);
+}
 
 //�ر������ж�
 void INTX_DISABLE(void)
@@ -308,10 +329,10 @@ void mode2(void)
 	if(oled.Refresh_flag == 1)
 	{
 		OLED_Clear();
-		OLED_ShowChinese(0, 0, 3, 4, 1);
+		OLED_ShowChinese(0, 0, 4, 4, 1);
 		sprintf((char *)D, "%.21s", app_data.firmware_name);
 		OLED_ShowString(16, 0, D, 8, 1);
-		OLED_ShowChinese(24, 0, 4, 4, 1);
+		OLED_ShowChinese(24, 0, 3, 4, 1);
 		sprintf((char *)D, "%.21s", app_data.bin_name);
 		OLED_ShowString(40, 0, D, 8, 1);
 		OLED_ShowChinese(48, 0, 5, 4, 1);
@@ -352,6 +373,19 @@ void mode4(void)
 	{
 		switch(key_val.key)
 		{
+			case key_left:
+			case key_right:
+			case key_mid:
+				if(done)                    /* 结果页: 单击任一键返回选择页 */
+				{
+					app_data.mode = 2;
+					done = 0;
+					OLED_Clear();
+					oled.Refresh_flag = 1;
+					key_val.mesg = 0;
+					return;
+				}
+				break;
 			case key_d_mid:                     /* 双击 -> 返回选择页 */
 				app_data.mode = 2;
 				done = 0;
@@ -809,6 +843,10 @@ void mode3(void)
 
 void run_task(void *pvParameters)
 {
+		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
+		uint8_t prepare_program[CB_MAX_NAME + 1];
+		uint8_t prepare_opt;
+
 		pwr_init();
 		led_init();
 		key_init();
@@ -861,6 +899,15 @@ void run_task(void *pvParameters)
 
 		while(1)
 		{
+			custombulk_prepare_service(&usb_hid);
+			if(custombulk_take_prepare_complete(prepare_algorithm,
+			                                    prepare_program,
+			                                    &prepare_opt))
+			{
+				apply_prepare_download(prepare_algorithm,
+				                       prepare_program,
+				                       prepare_opt);
+			}
 //			vTaskDelay(1000);
 			switch(app_data.mode)
 			{

@@ -66,6 +66,8 @@ CMD_DELETE_FILE = 0x07
 CMD_MKDIR       = 0x08
 CMD_GET_STATUS  = 0x09
 CMD_RENAME      = 0x0A
+CMD_STAGE_ALGORITHM = 0x0B
+CMD_PREPARE_DOWNLOAD = 0x0C
 
 STATUS_OK   = 0x00
 STATUS_ERR  = 0x01
@@ -173,8 +175,40 @@ class DAPLinkDevice:
                 sent += len(chunk)
                 if callback:
                     callback(sent, file_size)
-        self._send_cmd(bytes([CMD_CLOSE_FILE]))
+        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
+        if not close_resp or close_resp[0] != STATUS_OK:
+            raise RuntimeError(f"Close write failed: {remote_path}")
+        if sent != file_size:
+            raise RuntimeError(f"Incomplete write: {sent}/{file_size} bytes")
         return sent
+
+    def file_exists(self, remote_path):
+        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
+        if not resp or resp[0] != STATUS_OK:
+            return False
+        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
+        if not close_resp or close_resp[0] != STATUS_OK:
+            raise RuntimeError(f"Close failed after checking: {remote_path}")
+        return True
+
+    def stage_algorithm(self, algorithm_name):
+        if not algorithm_name or len(algorithm_name.encode('ascii')) > 31:
+            raise ValueError("Algorithm filename must be 1-31 ASCII characters")
+        resp = self._send_cmd(bytes([CMD_STAGE_ALGORITHM]) + algorithm_name.encode('ascii'))
+        if not resp or resp[0] != STATUS_OK:
+            raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
+
+    def prepare_download(self, program_name, opt_required):
+        if not program_name or len(program_name.encode('ascii')) > 31:
+            raise ValueError("Program filename must be 1-31 ASCII characters")
+        flags = 1 if opt_required else 0
+        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + program_name.encode('ascii'))
+        if not resp:
+            raise RuntimeError("Prepare response was empty")
+        if resp[0] == STATUS_BUSY:
+            raise RuntimeError("Device is busy")
+        if resp[0] != STATUS_OK:
+            raise RuntimeError("Device rejected download preparation")
 
     def pull(self, remote_path, local_path, callback=None):
         resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
@@ -279,37 +313,49 @@ class ActionWorker(QThread):
 
 
 class ImportWorker(QThread):
-    """Multi-step import: ensure dir -> push program -> push opt."""
+    """Upload a program batch and commit it for offline programming."""
     progress = pyqtSignal(str, int, int)  # step_name, current, total
     log = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, device, program_path, opt_path=None):
+    def __init__(self, device, program_path, algorithm_name, opt_path=None):
         super().__init__()
         self.device = device
         self.program_path = program_path
+        self.algorithm_name = algorithm_name
         self.opt_path = opt_path
 
     def run(self):
         try:
-            # Step 1: ensure remote directory
             try:
                 self.device.mkdir("0:/download/bin/")
             except Exception:
-                pass  # may already exist
+                pass
 
-            # Step 2: push program
             prog_name = os.path.basename(self.program_path)
             self.log.emit("Uploading program: " + prog_name)
-            self.device.push(self.program_path, "0:/download/bin/" + prog_name, self._cb)
+            written = self.device.push(
+                self.program_path,
+                "0:/download/bin/" + prog_name,
+                self._cb)
+            if written != os.path.getsize(self.program_path):
+                raise RuntimeError(f"Program upload incomplete: {written} bytes")
 
-            # Step 3: push opt if present
-            if self.opt_path and os.path.exists(self.opt_path):
+            opt_required = bool(self.opt_path and os.path.exists(self.opt_path))
+            if opt_required:
                 opt_name = os.path.basename(self.opt_path)
                 self.log.emit("Uploading OPT: " + opt_name)
-                self.device.push(self.opt_path, "0:/download/bin/" + opt_name, self._cb)
+                written = self.device.push(
+                    self.opt_path,
+                    "0:/download/bin/" + opt_name,
+                    self._cb)
+                if written != os.path.getsize(self.opt_path):
+                    raise RuntimeError(f"OPT upload incomplete: {written} bytes")
 
-            self.finished.emit(True, "Import complete")
+            self.log.emit("Preparing offline programming")
+            self.device.stage_algorithm(self.algorithm_name)
+            self.device.prepare_download(prog_name, opt_required)
+            self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
             self.finished.emit(False, str(e))
 
@@ -329,9 +375,11 @@ class DAPLinkManager(QMainWindow):
         # OPT configuration
         self.opt_config = OptConfig()
         self.current_chip = None
+        self.current_model = ''
+        self.import_in_progress = False
         self._opt_widgets = {}
 
-        self.setWindowTitle("CMSIS-DAPLINK File Manager")
+        self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
         self.setMinimumSize(900, 600)
         self.resize(1000, 650)
 
@@ -346,43 +394,43 @@ class DAPLinkManager(QMainWindow):
         self.toolbar.setMovable(False)
         self.addToolBar(self.toolbar)
 
-        self.btn_connect = QAction("Connect", self)
+        self.btn_connect = QAction("🔌 连接", self)
         self.btn_connect.triggered.connect(self._on_connect)
         self.toolbar.addAction(self.btn_connect)
 
-        self.btn_disconnect = QAction("Disconnect", self)
+        self.btn_disconnect = QAction("⏏ 断开", self)
         self.btn_disconnect.triggered.connect(self._on_disconnect)
         self.toolbar.addAction(self.btn_disconnect)
 
         self.toolbar.addSeparator()
 
-        self.btn_upload = QAction("Upload", self)
+        self.btn_upload = QAction("⬆ 上传", self)
         self.btn_upload.triggered.connect(self._on_upload)
         self.toolbar.addAction(self.btn_upload)
 
-        self.btn_download = QAction("Download", self)
+        self.btn_download = QAction("⬇ 下载", self)
         self.btn_download.triggered.connect(self._on_download)
         self.toolbar.addAction(self.btn_download)
 
         self.toolbar.addSeparator()
 
-        self.btn_mkdir = QAction("New Folder", self)
+        self.btn_mkdir = QAction("📁 新建文件夹", self)
         self.btn_mkdir.triggered.connect(self._on_mkdir)
         self.toolbar.addAction(self.btn_mkdir)
 
-        self.btn_delete = QAction("Delete", self)
+        self.btn_delete = QAction("🗑 删除", self)
         self.btn_delete.triggered.connect(self._on_delete)
         self.toolbar.addAction(self.btn_delete)
 
         self.toolbar.addSeparator()
 
-        self.btn_refresh = QAction("Refresh", self)
+        self.btn_refresh = QAction("🔄 刷新", self)
         self.btn_refresh.triggered.connect(self._on_refresh)
         self.toolbar.addAction(self.btn_refresh)
 
         self.toolbar.addSeparator()
 
-        self.btn_import = QAction("导入程序", self)
+        self.btn_import = QAction("⚡ 导入程序", self)
         self.btn_import.triggered.connect(self._on_import_program)
         self.toolbar.addAction(self.btn_import)
 
@@ -393,6 +441,13 @@ class DAPLinkManager(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
+        # ── Title Banner ──
+        self.banner = QLabel("⚡  CMSIS-DAPLINK 脱机编程器")
+        self.banner.setObjectName("banner")
+        self.banner.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.banner.setFixedHeight(46)
+        layout.addWidget(self.banner)
+
         # ── Connection Status ──
         self.status_frame = QFrame()
         self.status_frame.setFrameShape(QFrame.StyledPanel)
@@ -402,15 +457,15 @@ class DAPLinkManager(QMainWindow):
         # Row 1: status icon + text
         row1 = QHBoxLayout()
         self.lbl_status_icon = QLabel("●")
-        self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
-        self.lbl_status_text = QLabel("Disconnected")
-        self.lbl_status_text.setFont(QFont("Segoe UI", 10))
+        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+        self.lbl_status_text = QLabel("未连接")
+        self.lbl_status_text.setFont(QFont("Microsoft YaHei", 10))
         row1.addWidget(self.lbl_status_icon)
         row1.addWidget(self.lbl_status_text)
         row1.addStretch()
         status_layout.addLayout(row1)
         # Row 2: path
-        self.lbl_path = QLabel("Path: /")
+        self.lbl_path = QLabel("路径: /")
         self.lbl_path.setFont(QFont("Consolas", 9))
         self.lbl_path.setStyleSheet("color: #555;")
         self.lbl_path.setWordWrap(True)
@@ -435,10 +490,23 @@ class DAPLinkManager(QMainWindow):
         self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
         chip_bar.addWidget(self.cmb_chip)
         chip_bar.addSpacing(8)
+        chip_bar.addWidget(QLabel("算法文件："))
+        self.algorithm_edit = QLineEdit()
+        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的文件名")
+        self.algorithm_edit.setMinimumWidth(220)
+        chip_bar.addWidget(self.algorithm_edit)
+        self.btn_bind_algorithm = QPushButton("保存算法")
+        self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
+        chip_bar.addWidget(self.btn_bind_algorithm)
+        chip_bar.addSpacing(8)
         self.btn_opt_toggle = QPushButton("OPT 配置 ▼")
         self.btn_opt_toggle.setCheckable(True)
         self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
         chip_bar.addWidget(self.btn_opt_toggle)
+        self.chk_opt = QCheckBox("上传 OPT")
+        self.chk_opt.setChecked(True)
+        self.chk_opt.setEnabled(False)
+        chip_bar.addWidget(self.chk_opt)
         chip_bar.addStretch()
         chip_opt_layout.addLayout(chip_bar)
 
@@ -461,12 +529,12 @@ class DAPLinkManager(QMainWindow):
         local_frame.setFrameShape(QFrame.StyledPanel)
         local_layout = QVBoxLayout(local_frame)
         local_layout.setContentsMargins(4, 4, 4, 4)
-        lbl_local = QLabel("Local Computer")
-        lbl_local.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        lbl_local = QLabel("💻 本地电脑")
+        lbl_local.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
         local_layout.addWidget(lbl_local)
 
         self.local_tree = QTreeWidget()
-        self.local_tree.setHeaderLabels(["Name", "Size", "Type"])
+        self.local_tree.setHeaderLabels(["名称", "大小", "类型"])
         self.local_tree.setRootIsDecorated(False)
         self.local_tree.setAlternatingRowColors(True)
         self.local_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -475,12 +543,12 @@ class DAPLinkManager(QMainWindow):
         self.local_tree.itemDoubleClicked.connect(self._on_local_double_click)
         local_layout.addWidget(self.local_tree)
 
-        self.local_path_edit = QLabel("Select a folder...")
+        self.local_path_edit = QLabel("请选择文件夹...")
         self.local_path_edit.setFont(QFont("Consolas", 8))
         self.local_path_edit.setStyleSheet("color: #888; padding: 2px;")
         local_layout.addWidget(self.local_path_edit)
 
-        btn_browse = QPushButton("Browse Folder...")
+        btn_browse = QPushButton("📂 浏览文件夹...")
         btn_browse.clicked.connect(self._on_browse_local)
         local_layout.addWidget(btn_browse)
 
@@ -491,12 +559,12 @@ class DAPLinkManager(QMainWindow):
         remote_frame.setFrameShape(QFrame.StyledPanel)
         remote_layout = QVBoxLayout(remote_frame)
         remote_layout.setContentsMargins(4, 4, 4, 4)
-        lbl_remote = QLabel("Device (SPI Flash)")
-        lbl_remote.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        lbl_remote = QLabel("🔧 设备 (SPI Flash)")
+        lbl_remote.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
         remote_layout.addWidget(lbl_remote)
 
         self.remote_tree = QTreeWidget()
-        self.remote_tree.setHeaderLabels(["Name", "Size", "Type"])
+        self.remote_tree.setHeaderLabels(["名称", "大小", "类型"])
         self.remote_tree.setRootIsDecorated(False)
         self.remote_tree.setAlternatingRowColors(True)
         self.remote_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -509,17 +577,17 @@ class DAPLinkManager(QMainWindow):
 
         # Remote navigation: path input + buttons
         nav_layout = QHBoxLayout()
-        nav_layout.addWidget(QLabel("Path:"))
+        nav_layout.addWidget(QLabel("路径:"))
         self.remote_path_input = QLineEdit("/")
         self.remote_path_input.setFont(QFont("Consolas", 9))
         self.remote_path_input.returnPressed.connect(self._on_go_path)
         nav_layout.addWidget(self.remote_path_input, 1)
-        btn_go = QPushButton("Go")
-        btn_go.setFixedWidth(40)
+        btn_go = QPushButton("转到")
+        btn_go.setFixedWidth(48)
         btn_go.clicked.connect(self._on_go_path)
         nav_layout.addWidget(btn_go)
-        btn_up = QPushButton("Up")
-        btn_up.setFixedWidth(40)
+        btn_up = QPushButton("上级")
+        btn_up.setFixedWidth(48)
         btn_up.clicked.connect(self._on_remote_up)
         nav_layout.addWidget(btn_up)
         btn_root = QPushButton("/")
@@ -539,40 +607,117 @@ class DAPLinkManager(QMainWindow):
         layout.addWidget(self.progress)
 
         # ── Status Bar ──
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage("就绪")
 
     def _apply_style(self):
         self.setStyleSheet("""
-            QMainWindow { background: #f5f5f5; }
-            QToolBar { background: #fff; border-bottom: 1px solid #ddd; spacing: 6px; padding: 4px; }
-            QToolBar QToolButton { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fafafa; }
-            QToolBar QToolButton:hover { background: #e8f0fe; border-color: #4285f4; }
-            QFrame { background: #fff; border-radius: 6px; }
-            QTreeWidget { border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
-            QTreeWidget::item { padding: 3px; }
-            QTreeWidget::item:selected { background: #e8f0fe; color: #000; }
-            QHeaderView::section { background: #f0f0f0; border: none; border-bottom: 1px solid #ddd; padding: 4px; font-weight: bold; }
-            QProgressBar { border: 1px solid #ccc; border-radius: 4px; text-align: center; height: 22px; }
-            QProgressBar::chunk { background: #4285f4; border-radius: 3px; }
-            QPushButton { padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; background: #fafafa; }
-            QPushButton:hover { background: #e8f0fe; border-color: #4285f4; }
+            QMainWindow { background: #eef2f7; }
+            QLabel#banner {
+                color: #ffffff;
+                font-family: 'Microsoft YaHei';
+                font-size: 17px;
+                font-weight: bold;
+                padding-left: 16px;
+                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2b5876, stop:1 #4e9fd1);
+            }
+            QToolBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:1 #e9eef4);
+                border: none;
+                border-bottom: 2px solid #4e9fd1;
+                spacing: 6px;
+                padding: 5px;
+            }
+            QToolBar QToolButton {
+                padding: 6px 14px;
+                border: 1px solid #c3cede;
+                border-radius: 6px;
+                background: #ffffff;
+                font-family: 'Microsoft YaHei';
+                font-size: 13px;
+                color: #2b3a4a;
+            }
+            QToolBar QToolButton:hover {
+                background: #4e9fd1;
+                border-color: #2b5876;
+                color: #ffffff;
+            }
+            QToolBar QToolButton:pressed { background: #2b5876; color: #ffffff; }
+            QToolBar QToolButton:disabled { color: #aeb8c4; background: #f3f5f8; }
+            QToolBar::separator { background: #d0d8e3; width: 1px; margin: 4px 2px; }
+            QFrame { background: #ffffff; border-radius: 8px; border: 1px solid #dde4ec; }
+            QTreeWidget {
+                border: 1px solid #dde4ec; border-radius: 6px;
+                font-size: 12px; background: #fbfcfe;
+                alternate-background-color: #f2f6fb;
+            }
+            QTreeWidget::item { padding: 4px; }
+            QTreeWidget::item:selected { background: #4e9fd1; color: #ffffff; }
+            QHeaderView::section {
+                background: #eaf1f8; border: none;
+                border-bottom: 2px solid #4e9fd1; padding: 5px;
+                font-weight: bold; color: #2b5876;
+            }
+            QProgressBar {
+                border: 1px solid #c3cede; border-radius: 6px;
+                text-align: center; height: 22px; background: #f3f5f8;
+                color: #2b3a4a;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #43cea2, stop:1 #4e9fd1);
+            }
+            QPushButton {
+                padding: 6px 16px; border: 1px solid #c3cede;
+                border-radius: 6px; background: #ffffff;
+                font-family: 'Microsoft YaHei'; color: #2b3a4a;
+            }
+            QPushButton:hover { background: #4e9fd1; border-color: #2b5876; color: #ffffff; }
+            QPushButton:pressed { background: #2b5876; color: #ffffff; }
+            QPushButton:disabled { color: #aeb8c4; background: #f3f5f8; }
+            QComboBox, QLineEdit {
+                border: 1px solid #c3cede; border-radius: 5px;
+                padding: 3px 6px; background: #ffffff;
+            }
+            QComboBox:focus, QLineEdit:focus { border-color: #4e9fd1; }
+            QGroupBox {
+                border: 1px solid #dde4ec; border-radius: 6px;
+                margin-top: 8px; font-weight: bold; color: #2b5876;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin; left: 10px; padding: 0 4px;
+            }
+            QStatusBar { background: #e9eef4; color: #2b3a4a; }
         """)
 
     def _update_toolbar_state(self):
         connected = self.device.is_connected()
-        self.btn_connect.setEnabled(not connected)
-        self.btn_disconnect.setEnabled(connected)
-        self.btn_upload.setEnabled(connected)
-        self.btn_download.setEnabled(connected)
-        self.btn_mkdir.setEnabled(connected)
-        self.btn_delete.setEnabled(connected)
-        self.btn_refresh.setEnabled(connected)
-        self.btn_import.setEnabled(connected)
+        idle = not self.import_in_progress
+        self.btn_connect.setEnabled(not connected and idle)
+        self.btn_disconnect.setEnabled(connected and idle)
+        self.btn_upload.setEnabled(connected and idle)
+        self.btn_download.setEnabled(connected and idle)
+        self.btn_mkdir.setEnabled(connected and idle)
+        self.btn_delete.setEnabled(connected and idle)
+        self.btn_refresh.setEnabled(connected and idle)
+        self.btn_import.setEnabled(connected and idle)
+        self.cmb_chip.setEnabled(idle)
+        self.algorithm_edit.setEnabled(idle)
+        self.btn_bind_algorithm.setEnabled(idle)
+        self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
+        self.chk_opt.setEnabled(idle and self.current_chip is not None)
 
-    # ── Connection ──
+    def _set_import_state(self, active):
+        self.import_in_progress = active
+        self.remote_tree.setEnabled(not active)
+        self.remote_path_input.setEnabled(not active)
+        self._update_toolbar_state()
 
     def _on_connect(self):
-        self.statusBar().showMessage("Connecting...")
+        self.statusBar().showMessage("正在连接...")
         self.btn_connect.setEnabled(False)
         self.worker = ConnectWorker(self.device)
         self.worker.finished.connect(self._connect_done)
@@ -580,22 +725,22 @@ class DAPLinkManager(QMainWindow):
 
     def _connect_done(self, ok, msg):
         if ok:
-            self.lbl_status_icon.setStyleSheet("color: #34a853; font-size: 16px;")
-            self.lbl_status_text.setText("Connected")
-            self.statusBar().showMessage("Device connected")
+            self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
+            self.lbl_status_text.setText("已连接")
+            self.statusBar().showMessage("设备已连接")
             self._navigate_remote("/")
         else:
-            self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
-            self.lbl_status_text.setText("Disconnected")
-            self.statusBar().showMessage(f"Connection failed: {msg}")
+            self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+            self.lbl_status_text.setText("未连接")
+            self.statusBar().showMessage(f"连接失败: {msg}")
         self._update_toolbar_state()
 
     def _on_disconnect(self):
         self.device.disconnect()
-        self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
-        self.lbl_status_text.setText("Disconnected")
+        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+        self.lbl_status_text.setText("未连接")
         self.remote_tree.clear()
-        self.statusBar().showMessage("Disconnected")
+        self.statusBar().showMessage("已断开")
         self._update_toolbar_state()
 
     # ── Remote Navigation ──
@@ -604,9 +749,9 @@ class DAPLinkManager(QMainWindow):
         if not self.device.is_connected():
             return
         self.current_remote_path = path
-        self.lbl_path.setText(f"Path: {path}")
+        self.lbl_path.setText(f"路径: {path}")
         self.remote_path_input.setText(path)
-        self.statusBar().showMessage(f"Listing {path}...")
+        self.statusBar().showMessage(f"正在列出 {path} ...")
         self.worker = ListDirWorker(self.device, path)
         self.worker.finished.connect(self._list_done)
         self.worker.start()
@@ -614,7 +759,7 @@ class DAPLinkManager(QMainWindow):
     def _list_done(self, entries, error):
         self.remote_tree.clear()
         if error:
-            self.statusBar().showMessage(f"Error: {error}")
+            self.statusBar().showMessage(f"错误: {error}")
             return
 
         # Add parent directory entry
@@ -634,7 +779,7 @@ class DAPLinkManager(QMainWindow):
             item.setData(0, Qt.UserRole, (entry_type, name))
             self.remote_tree.addTopLevelItem(item)
 
-        self.statusBar().showMessage(f"{len(entries)} items in {self.current_remote_path}")
+        self.statusBar().showMessage(f"{self.current_remote_path} 共 {len(entries)} 项")
 
     def _on_remote_double_click(self, item, col):
         entry_type, name = item.data(0, Qt.UserRole)
@@ -722,14 +867,14 @@ class DAPLinkManager(QMainWindow):
             return
         item = self.remote_tree.currentItem()
         if not item:
-            QMessageBox.information(self, "Info", "Select a file on the device first.")
+            QMessageBox.information(self, "提示", "请先在设备上选择一个文件。")
             return
         entry_type, name = item.data(0, Qt.UserRole)
         if entry_type != 'FILE':
-            QMessageBox.information(self, "Info", "Select a file (not a directory).")
+            QMessageBox.information(self, "提示", "请选择文件(不是目录)。")
             return
 
-        save_path, _ = QFileDialog.getSaveFileName(self, "Save As", name)
+        save_path, _ = QFileDialog.getSaveFileName(self, "另存为", name)
         if not save_path:
             return
         remote_path = self.current_remote_path.rstrip('/') + '/' + name
@@ -739,8 +884,8 @@ class DAPLinkManager(QMainWindow):
         self.progress.setVisible(True)
         self.progress.setValue(0)
         name = os.path.basename(src if mode == 'push' else dst)
-        direction = "Uploading" if mode == 'push' else "Downloading"
-        self.statusBar().showMessage(f"{direction} {name}...")
+        direction = "上传" if mode == 'push' else "下载"
+        self.statusBar().showMessage(f"正在{direction} {name} ...")
 
         self.worker = TransferWorker(self.device, mode, src, dst)
         self.worker.progress.connect(self._transfer_progress)
@@ -756,10 +901,10 @@ class DAPLinkManager(QMainWindow):
     def _transfer_done(self, nbytes, error):
         self.progress.setVisible(False)
         if error:
-            self.statusBar().showMessage(f"Transfer failed: {error}")
-            QMessageBox.warning(self, "Error", f"Transfer failed:\n{error}")
+            self.statusBar().showMessage(f"传输失败: {error}")
+            QMessageBox.warning(self, "错误", f"传输失败:\n{error}")
         else:
-            self.statusBar().showMessage(f"Transfer complete: {self._format_size(nbytes)}")
+            self.statusBar().showMessage(f"传输完成: {self._format_size(nbytes)}")
             self._navigate_remote(self.current_remote_path)
 
     # ── Mkdir / Delete ──
@@ -767,7 +912,7 @@ class DAPLinkManager(QMainWindow):
     def _on_mkdir(self):
         if not self.device.is_connected():
             return
-        name, ok = QInputDialog.getText(self, "New Folder", "Folder name:")
+        name, ok = QInputDialog.getText(self, "新建文件夹", "文件夹名称:")
         if ok and name:
             path = self.current_remote_path.rstrip('/') + '/' + name
             self.worker = ActionWorker(self.device, 'mkdir', path)
@@ -783,7 +928,7 @@ class DAPLinkManager(QMainWindow):
         entry_type, name = item.data(0, Qt.UserRole)
         if name == "..":
             return
-        reply = QMessageBox.question(self, "Confirm Delete", f"Delete '{name}'?",
+        reply = QMessageBox.question(self, "确认删除", f"确定删除 '{name}' ？",
                                      QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             path = self.current_remote_path.rstrip('/') + '/' + name
@@ -803,17 +948,17 @@ class DAPLinkManager(QMainWindow):
         from PyQt5.QtWidgets import QMenu
         menu = QMenu(self)
         if entry_type == 'FILE':
-            act_download = menu.addAction("Download")
+            act_download = menu.addAction("下载")
             act_download.triggered.connect(self._on_download)
-        act_delete = menu.addAction("Delete")
+        act_delete = menu.addAction("删除")
         act_delete.triggered.connect(self._on_delete)
         menu.exec_(self.remote_tree.viewport().mapToGlobal(pos))
 
     def _action_done(self, ok, msg):
         if ok:
-            self.statusBar().showMessage("Done")
+            self.statusBar().showMessage("完成")
         else:
-            self.statusBar().showMessage(f"Error: {msg}")
+            self.statusBar().showMessage(f"错误: {msg}")
         self._navigate_remote(self.current_remote_path)
 
     # ── OPT Configuration ──
@@ -823,17 +968,48 @@ class DAPLinkManager(QMainWindow):
         self.opt_scroll.setVisible(visible)
         self.btn_opt_toggle.setText("OPT 配置 ▲" if visible else "OPT 配置 ▼")
 
+    @staticmethod
+    def _valid_name(name, require_bin=False):
+        try:
+            encoded = name.encode('ascii')
+        except UnicodeEncodeError:
+            return False
+        if not 1 <= len(encoded) <= 31:
+            return False
+        if name in ('.', '..') or any(c in name for c in '/\\:'):
+            return False
+        return not require_bin or name.lower().endswith('.bin')
+
+    def _bind_algorithm(self):
+        if not self.current_model:
+            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
+            return
+        name = self.algorithm_edit.text().strip()
+        if not self._valid_name(name, require_bin=True):
+            QMessageBox.warning(self, "Algorithm Error", "算法文件名必须是 1-31 个 ASCII 字符的 .bin 文件名。")
+            return
+        self.opt_config.set_algorithm(self.current_model, name)
+        self.algorithm_edit.setText(name)
+        self.statusBar().showMessage(f"已保存 {self.current_model} 的算法绑定: {name}")
+
     def _on_chip_changed(self, model_name):
+        self.current_model = model_name or ''
+        self.algorithm_edit.setText(
+            self.opt_config.get_algorithm(self.current_model) if self.current_model else '')
         if not model_name:
             self.current_chip = None
+            self.chk_opt.setChecked(False)
             self._clear_opt_ui()
+            self._update_toolbar_state()
             return
         self.current_chip = self.opt_config.get_chip(model_name)
+        self.chk_opt.setChecked(True)
         self._build_opt_ui()
         # auto-expand panel when chip selected
         if not self.opt_scroll.isVisible():
             self.btn_opt_toggle.setChecked(True)
             self._toggle_opt_panel()
+        self._update_toolbar_state()
 
     def _clear_opt_ui(self):
         self._opt_widgets.clear()
@@ -1011,6 +1187,18 @@ class DAPLinkManager(QMainWindow):
         if not self.device.is_connected():
             QMessageBox.warning(self, "Warning", "请先连接设备。")
             return
+        if not self.current_model:
+            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
+            return
+        algorithm_name = self.opt_config.get_algorithm(self.current_model)
+        if not algorithm_name:
+            QMessageBox.warning(self, "Warning",
+                                f"芯片 {self.current_model} 尚未绑定算法文件，请先在“算法文件”中填写并保存。")
+            return
+        if not self._valid_name(algorithm_name, require_bin=True):
+            QMessageBox.warning(self, "Warning",
+                                f"已保存的算法文件名无效: {algorithm_name}")
+            return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择程序文件", "",
             "Binary/Hex Files (*.bin *.hex);;Binary Files (*.bin);;Hex Files (*.hex);;All Files (*)")
@@ -1039,15 +1227,22 @@ class DAPLinkManager(QMainWindow):
         if renamed:
             self.statusBar().showMessage(f"文件名已过滤: {os.path.basename(file_path)}")
 
+        prog_name = os.path.basename(file_path)
+        if not self._valid_name(prog_name, require_bin=True):
+            QMessageBox.warning(self, "Warning",
+                                f"程序文件名无效(需 1-31 个 ASCII 字符的 .bin): {prog_name}")
+            return
+
         opt_path = None
-        if self.current_chip:
+        if self.chk_opt.isChecked():
             opt_path = self._generate_opt_bin(file_path)
 
         self.progress.setVisible(True)
         self.progress.setValue(0)
-        self.statusBar().showMessage("Importing...")
+        self.statusBar().showMessage("正在导入...")
+        self._set_import_state(True)
 
-        self.worker = ImportWorker(self.device, file_path, opt_path)
+        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path)
         self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
         self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
         self.worker.finished.connect(self._import_done)
@@ -1096,11 +1291,20 @@ class DAPLinkManager(QMainWindow):
     def _import_done(self, ok, msg):
         self.progress.setVisible(False)
         if ok:
-            self.statusBar().showMessage("Import complete: " + msg)
-            self._navigate_remote(self.current_remote_path)
+            # Device switches to offline mode and drops USB on purpose.
+            self.device.disconnect()
+            self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
+            self.lbl_status_text.setText("Disconnected")
+            self.remote_tree.clear()
+            self.statusBar().showMessage("导入完成，设备已准备离线烧录。再次导入前请让设备回到在线模式。")
+            QMessageBox.information(self, "导入完成",
+                                    "程序与算法已导入，设备已切换到离线烧录选择页，光标停在“开始烧录”。\n"
+                                    "在设备上按一下中键即可烧录。\n\n"
+                                    "设备已按预期断开 USB。再次导入前请让它回到在线模式。")
         else:
-            self.statusBar().showMessage(f"Import failed: {msg}")
-            QMessageBox.warning(self, "Import Error", f"Import failed:\n{msg}")
+            self.statusBar().showMessage(f"导入失败: {msg}")
+            QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")
+        self._set_import_state(False)
 
     # ── Close ──
 
@@ -1113,7 +1317,7 @@ class DAPLinkManager(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DAPLINK File Manager")
+    app.setApplicationName("DAPLINK 脱机编程器")
     app.setStyle("Fusion")
 
     window = DAPLinkManager()

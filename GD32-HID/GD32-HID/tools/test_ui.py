@@ -67,6 +67,18 @@ static void press(unsigned key, unsigned scans) {
     input_key = key;
     while(scans--) CHECK(key_scan() == key_null);
 }
+static key_num hold_capture(unsigned key, unsigned scans) {
+    key_num seen = key_null, event;
+    input_key = key;
+    while(scans--) {
+        event = key_scan();
+        if(event != key_null) {
+            CHECK(seen == key_null);  /* at most one event while held */
+            seen = event;
+        }
+    }
+    return seen;
+}
 static void test_keys(void) {
     unsigned key, n, count, last;
     for(key = key_left; key <= key_right; key += 2) {
@@ -93,10 +105,11 @@ static void test_keys(void) {
     CHECK(key_scan() == key_mid); quiet(20);
     press(key_mid, 5); quiet(5); press(key_mid, 5); quiet(1);
     CHECK(key_scan() == key_d_mid); quiet(20);
-    press(key_mid, key_long_th + 10); quiet(1);
-    CHECK(key_scan() == key_l_mid); quiet(20);
-    press(key_mid, 5); quiet(5); press(key_mid, key_long_th + 10); quiet(1);
-    CHECK(key_scan() == key_l_mid); quiet(20);
+    /* long press fires once while held, nothing on release or continued hold */
+    CHECK(hold_capture(key_mid, key_mid_long_th + 10) == key_l_mid); quiet(20);
+    /* short press then long press: pending single click is cancelled */
+    press(key_mid, 5); quiet(5);
+    CHECK(hold_capture(key_mid, key_mid_long_th + 10) == key_l_mid); quiet(20);
     press(key_mid, 5); quiet(3); press(key_right, 5); quiet(1);
     CHECK(key_scan() == key_right); quiet(40);
     puts("PASS key short/hold/repeat/release/debounce/middle gestures");
@@ -256,9 +269,9 @@ def model_frames(font_header):
     frames = {"glyphs": bytes(frame)}
     frame[:] = bytes(1024)
     chinese(0, 0, 3)
-    string(16, 0, "algorithm.bin")
+    string(16, 0, "firmware.bin")
     chinese(24, 0, 4)
-    string(40, 0, "firmware.bin")
+    string(40, 0, "algorithm.bin")
     chinese(48, 0, 5)
     string(48, 100, "<-", 16)
     frames["selection"] = bytes(frame)

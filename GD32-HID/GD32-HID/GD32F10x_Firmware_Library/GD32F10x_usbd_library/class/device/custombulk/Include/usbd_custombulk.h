@@ -24,6 +24,8 @@
 #define CMD_MKDIR                   0x08U
 #define CMD_GET_STATUS              0x09U
 #define CMD_RENAME                  0x0AU
+#define CMD_STAGE_ALGORITHM         0x0BU
+#define CMD_PREPARE_DOWNLOAD        0x0CU
 
 /* Response status codes */
 #define STATUS_OK                   0x00U
@@ -31,8 +33,9 @@
 #define STATUS_BUSY                 0x02U
 #define STATUS_EOF                  0x03U
 
-/* Max path length */
-#define CB_MAX_PATH                 48U
+/* Max path and file-name lengths */
+#define CB_MAX_PATH                 60U
+#define CB_MAX_NAME                 31U
 
 /* Max data payload per packet (64 - 1 cmd - 1 status - reserved) */
 #define CB_MAX_DATA                 56U
@@ -48,6 +51,12 @@ typedef struct {
 } custombulk_handler;
 
 extern usb_class custombulk_class;
+
+/* Process deferred prepare requests from the application task. */
+void custombulk_prepare_service(usb_dev *udev);
+uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
+                                         uint8_t *program_name,
+                                         uint8_t *opt_required);
 
 /* Send response to host */
 uint8_t custombulk_send_response(usb_dev *udev, uint8_t *data, uint16_t len);
