@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QProgressBar, QStatusBar, QFileDialog,
     QMessageBox, QInputDialog, QHeaderView, QFrame, QStyle,
     QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
-    QButtonGroup, QCheckBox, QGridLayout
+    QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QColor
@@ -380,8 +380,10 @@ class DAPLinkManager(QMainWindow):
         self._opt_widgets = {}
 
         self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
+        self.setFont(QFont("Microsoft YaHei", 10))
+        self.control_height = max(36, self.fontMetrics().height() + 16)
         self.setMinimumSize(900, 600)
-        self.resize(1000, 650)
+        self.resize(1000, 760)
 
         self._init_ui()
         self._apply_style()
@@ -451,6 +453,7 @@ class DAPLinkManager(QMainWindow):
         # ── Connection Status ──
         self.status_frame = QFrame()
         self.status_frame.setFrameShape(QFrame.StyledPanel)
+        self.status_frame.setProperty("panel", True)
         status_layout = QVBoxLayout(self.status_frame)
         status_layout.setContentsMargins(10, 6, 10, 6)
         status_layout.setSpacing(2)
@@ -475,44 +478,56 @@ class DAPLinkManager(QMainWindow):
         # ── Chip & OPT Selection Bar ──
         self.chip_opt_frame = QFrame()
         self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
+        self.chip_opt_frame.setProperty("panel", True)
         chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
-        chip_opt_layout.setContentsMargins(8, 4, 8, 4)
-        chip_opt_layout.setSpacing(4)
+        chip_opt_layout.setContentsMargins(12, 12, 12, 12)
+        chip_opt_layout.setSpacing(12)
 
-        # Row: chip model combo + OPT toggle
-        chip_bar = QHBoxLayout()
-        chip_bar.addWidget(QLabel("芯片型号："))
+        # Two rows share the same input and button columns.
+        chip_bar = QGridLayout()
+        chip_bar.setHorizontalSpacing(12)
+        chip_bar.setVerticalSpacing(10)
+        chip_bar.setColumnStretch(1, 1)
+        chip_bar.addWidget(QLabel("芯片型号："), 0, 0)
         self.cmb_chip = QComboBox()
-        self.cmb_chip.setMinimumWidth(180)
+        self.cmb_chip.setView(QListView())
+        self.cmb_chip.setMinimumWidth(220)
+        self.cmb_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.cmb_chip.addItem("")  # empty default
         for m in self.opt_config.get_chip_models():
             self.cmb_chip.addItem(m)
         self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
-        chip_bar.addWidget(self.cmb_chip)
-        chip_bar.addSpacing(8)
-        chip_bar.addWidget(QLabel("算法文件："))
+        chip_bar.addWidget(self.cmb_chip, 0, 1)
+        chip_bar.addWidget(QLabel("算法文件："), 1, 0)
         self.algorithm_edit = QLineEdit()
-        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的文件名")
+        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的算法文件名")
         self.algorithm_edit.setMinimumWidth(220)
-        chip_bar.addWidget(self.algorithm_edit)
+        chip_bar.addWidget(self.algorithm_edit, 1, 1)
         self.btn_bind_algorithm = QPushButton("保存算法")
         self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
-        chip_bar.addWidget(self.btn_bind_algorithm)
-        chip_bar.addSpacing(8)
+        chip_bar.addWidget(self.btn_bind_algorithm, 1, 2)
         self.btn_opt_toggle = QPushButton("OPT 配置 ▼")
         self.btn_opt_toggle.setCheckable(True)
         self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
-        chip_bar.addWidget(self.btn_opt_toggle)
+        chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
+        button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
+        for control in (self.cmb_chip, self.algorithm_edit,
+                        self.btn_bind_algorithm, self.btn_opt_toggle):
+            control.setFixedHeight(self.control_height)
+        for button in (self.btn_bind_algorithm, self.btn_opt_toggle):
+            button.setFixedWidth(button_width)
         self.chk_opt = QCheckBox("上传 OPT")
         self.chk_opt.setChecked(True)
         self.chk_opt.setEnabled(False)
-        chip_bar.addWidget(self.chk_opt)
-        chip_bar.addStretch()
+        self.chk_opt.setMinimumHeight(self.control_height)
+        chip_bar.addWidget(self.chk_opt, 0, 3)
         chip_opt_layout.addLayout(chip_bar)
 
         # OPT config panel (scrollable, initially hidden)
         self.opt_scroll = QScrollArea()
+        self.opt_scroll.setObjectName("optScroll")
         self.opt_scroll.setWidgetResizable(True)
+        self.opt_scroll.setMinimumHeight(100)
         self.opt_scroll.setMaximumHeight(350)
         self.opt_scroll.setVisible(False)
         self.opt_content = QWidget()
@@ -527,6 +542,7 @@ class DAPLinkManager(QMainWindow):
         # Local files
         local_frame = QFrame()
         local_frame.setFrameShape(QFrame.StyledPanel)
+        local_frame.setProperty("panel", True)
         local_layout = QVBoxLayout(local_frame)
         local_layout.setContentsMargins(4, 4, 4, 4)
         lbl_local = QLabel("💻 本地电脑")
@@ -557,6 +573,7 @@ class DAPLinkManager(QMainWindow):
         # Remote files
         remote_frame = QFrame()
         remote_frame.setFrameShape(QFrame.StyledPanel)
+        remote_frame.setProperty("panel", True)
         remote_layout = QVBoxLayout(remote_frame)
         remote_layout.setContentsMargins(4, 4, 4, 4)
         lbl_remote = QLabel("🔧 设备 (SPI Flash)")
@@ -611,6 +628,7 @@ class DAPLinkManager(QMainWindow):
 
     def _apply_style(self):
         self.setStyleSheet("""
+            QWidget { font-family: 'Microsoft YaHei'; font-size: 10pt; }
             QMainWindow { background: #eef2f7; }
             QLabel#banner {
                 color: #ffffff;
@@ -647,7 +665,12 @@ class DAPLinkManager(QMainWindow):
             QToolBar QToolButton:pressed { background: #2b5876; color: #ffffff; }
             QToolBar QToolButton:disabled { color: #aeb8c4; background: #f3f5f8; }
             QToolBar::separator { background: #d0d8e3; width: 1px; margin: 4px 2px; }
-            QFrame { background: #ffffff; border-radius: 8px; border: 1px solid #dde4ec; }
+            QFrame[panel="true"] {
+                background: #ffffff; border-radius: 8px; border: 1px solid #dde4ec;
+            }
+            QLabel { border: none; background: transparent; color: #2b3a4a; }
+            QScrollArea#optScroll { border: none; background: #ffffff; }
+            QScrollArea#optScroll > QWidget > QWidget { background: #ffffff; }
             QTreeWidget {
                 border: 1px solid #dde4ec; border-radius: 6px;
                 font-size: 12px; background: #fbfcfe;
@@ -671,25 +694,47 @@ class DAPLinkManager(QMainWindow):
                     stop:0 #43cea2, stop:1 #4e9fd1);
             }
             QPushButton {
-                padding: 6px 16px; border: 1px solid #c3cede;
-                border-radius: 6px; background: #ffffff;
-                font-family: 'Microsoft YaHei'; color: #2b3a4a;
+                padding: 4px 10px; border: 1px solid #c3cede;
+                border-radius: 6px; background: #ffffff; color: #2b3a4a;
             }
-            QPushButton:hover { background: #4e9fd1; border-color: #2b5876; color: #ffffff; }
-            QPushButton:pressed { background: #2b5876; color: #ffffff; }
-            QPushButton:disabled { color: #aeb8c4; background: #f3f5f8; }
+            QPushButton:hover { background: #e8f2fc; border-color: #2677bd; color: #174e7d; }
+            QPushButton:pressed, QPushButton:checked { background: #2677bd; color: #ffffff; }
+            QPushButton:disabled { color: #8593a3; background: #f3f5f8; }
             QComboBox, QLineEdit {
                 border: 1px solid #c3cede; border-radius: 5px;
-                padding: 3px 6px; background: #ffffff;
+                padding: 4px 8px; background: #ffffff; color: #24364b;
+                selection-background-color: #2677bd; selection-color: #ffffff;
             }
-            QComboBox:focus, QLineEdit:focus { border-color: #4e9fd1; }
+            QComboBox { padding-right: 28px; }
+            QComboBox:focus, QLineEdit:focus { border-color: #2677bd; }
+            QComboBox:disabled, QLineEdit:disabled { color: #8593a3; background: #f3f5f8; }
+            QComboBox QAbstractItemView {
+                background: #ffffff; color: #24364b;
+                border: 1px solid #b5c6da; padding: 4px;
+                selection-background-color: #2677bd; selection-color: #ffffff;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 28px; padding: 4px 10px;
+                border: none; color: #24364b; background: #ffffff;
+            }
+            QComboBox QAbstractItemView::item:hover {
+                background: #e8f2fc; color: #174e7d;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: #2677bd; color: #ffffff;
+            }
             QGroupBox {
                 border: 1px solid #dde4ec; border-radius: 6px;
-                margin-top: 8px; font-weight: bold; color: #2b5876;
+                margin-top: 1.2em; padding-top: 0; color: #2b5876;
             }
             QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 4px;
+                subcontrol-origin: margin; subcontrol-position: top left;
+                left: 12px; padding: 0 4px; color: #2b5876;
+                background: #ffffff;
             }
+            QCheckBox, QRadioButton { color: #24364b; spacing: 6px; }
+            QCheckBox:disabled, QRadioButton:disabled { color: #8593a3; }
             QStatusBar { background: #e9eef4; color: #2b3a4a; }
         """)
 
@@ -1024,33 +1069,46 @@ class DAPLinkManager(QMainWindow):
             return
 
         layout = QVBoxLayout(self.opt_content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 4, 8, 4)
+        layout.setSpacing(12)
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
 
-        # OPT binary preview (at top, always visible)
-        preview_grp = QGroupBox("OPT Bin 预览")
+        # Let the scroll area scroll rather than squeeze the field rows.
+        preview_grp = QGroupBox("OPT 数据预览", self.opt_content)
+        preview_grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         preview_layout = QHBoxLayout(preview_grp)
-        self.lbl_opt_preview = QLineEdit()
+        preview_layout.setContentsMargins(12, 12, 12, 12)
+        self.lbl_opt_preview = QLineEdit(preview_grp)
         self.lbl_opt_preview.setReadOnly(True)
+        self.lbl_opt_preview.setFixedHeight(self.control_height)
         self.lbl_opt_preview.setFont(QFont("Consolas", 10))
-        self.lbl_opt_preview.setStyleSheet("background: #f0f0f0; color: #333;")
+        self.lbl_opt_preview.setStyleSheet(
+            "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
         preview_layout.addWidget(self.lbl_opt_preview)
         layout.addWidget(preview_grp)
 
-        for w in self.current_chip.get('opt_words', []):
-            grp = QGroupBox(f"{w['name']}  ({w['address']})")
-            grp_layout = QVBoxLayout(grp)
-            grp_layout.setSpacing(2)
+        words = self.current_chip.get('opt_words', [])
+        label_width = max([120] + [
+            self.fontMetrics().horizontalAdvance(field['name']) + 12
+            for word in words for field in word.get('fields', [])
+        ])
+        for w in words:
+            grp = QGroupBox(f"{w['name']}  ({w['address']})", self.opt_content)
+            grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            grp_layout = QGridLayout(grp)
+            grp_layout.setContentsMargins(12, 12, 12, 12)
+            grp_layout.setHorizontalSpacing(16)
+            grp_layout.setVerticalSpacing(10)
+            grp_layout.setColumnStretch(1, 1)
 
-            for field in w.get('fields', []):
-                widget = self._build_field_widget(field)
-                label = QLabel(field['name'])
-                label.setMinimumWidth(120)
-                row = QHBoxLayout()
-                row.addWidget(label)
-                row.addWidget(widget)
-                row.addStretch()
-                grp_layout.addLayout(row)
+            for row, field in enumerate(w.get('fields', [])):
+                widget = self._build_field_widget(field, grp)
+                widget.setMinimumHeight(self.control_height)
+                label = QLabel(field['name'], grp)
+                label.setFixedWidth(label_width)
+                label.setMinimumHeight(self.control_height)
+                grp_layout.addWidget(label, row, 0, Qt.AlignVCenter)
+                grp_layout.addWidget(widget, row, 1)
                 self._opt_widgets[field['name']] = widget
                 # Connect change signals for live preview
                 self._connect_opt_signal(widget)
@@ -1108,12 +1166,14 @@ class DAPLinkManager(QMainWindow):
         except Exception:
             pass
 
-    def _build_field_widget(self, field):
+    def _build_field_widget(self, field, parent):
         options = field.get('options', [])
         default = field.get('default')
 
         if field.get('byte'):
-            combo = QComboBox()
+            combo = QComboBox(parent)
+            combo.setView(QListView())
+            combo.setFixedHeight(self.control_height)
             default_idx = 0
             for i, opt in enumerate(options):
                 combo.addItem(opt['label'], opt['value'])
@@ -1126,10 +1186,10 @@ class DAPLinkManager(QMainWindow):
             has_labels = any(o['label'] not in ('0', '1') for o in options)
             if has_labels:
                 # Wrap radio buttons in a container widget for proper parent chain
-                container = QWidget()
+                container = QWidget(parent)
                 hbox = QHBoxLayout(container)
                 hbox.setContentsMargins(0, 0, 0, 0)
-                hbox.setSpacing(8)
+                hbox.setSpacing(20)
                 group = QButtonGroup(container)
                 for opt in options:
                     radio = QRadioButton(opt['label'], container)
@@ -1137,15 +1197,16 @@ class DAPLinkManager(QMainWindow):
                     hbox.addWidget(radio)
                     if default is not None and opt['value'] == default:
                         radio.setChecked(True)
+                hbox.addStretch()
                 container._btn_group = group
                 return container
             else:
-                cb = QCheckBox()
+                cb = QCheckBox(parent)
                 if default is not None:
                     cb.setChecked(default != 0)
                 return cb
 
-        return QLabel("")
+        return QLabel("", parent)
 
     def _get_field_value(self, field_name):
         widget = self._opt_widgets.get(field_name)
