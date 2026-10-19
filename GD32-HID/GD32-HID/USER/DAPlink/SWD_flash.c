@@ -21,14 +21,38 @@
 uint32_t Flash_Page_Size = 1024;
 error_t target_flash_init(program_target_t *algo, uint32_t flash_start)
 {
+    uint32_t st = 0;
+
     if (0 == swd_set_target_state_hw(RESET_PROGRAM))
     {
+        /* DHCSR lives at a fixed core-debug address; DBG_HCSR needs DBG_Addr
+           which is defined locally in SWD_host.c, so use the raw address here. */
+        uint32_t h = 0;
+        if (swd_read_memory(0xE000EDF0u, (uint8_t *)&h, 4))
+        {
+            g_diag_hcsr = h;
+        }
         return ERROR_RESET;
     }
+
+    /* The reset sequence writes AIRCR without checking the result; a fault
+       there leaves STICKYERR set and every later AP access fails. Clear it
+       before downloading the algorithm blob. */
+    swd_write_dp(DP_ABORT, STKCMPCLR | STKERRCLR | WDERRCLR | ORUNERRCLR);
 
     // 下载编程算法到目标MCU的SRAM，并初始化
     if (0 == swd_write_memory(algo->algo_start, (uint8_t *)algo->algo_blob, algo->algo_size))
     {
+        return ERROR_ALGO_DL;
+    }
+
+    /* A refused AP transfer still returns ACK=OK; the error only shows up as
+       STICKYERR. Treat it as a download failure instead of letting the syscall
+       fail later with a misleading 0xDEE1. */
+    if (swd_read_dp(DP_CTRL_STAT, &st) && (st & (STICKYERR | WDATAERR)))
+    {
+        g_diag_ctrl_stat = st;
+        swd_write_dp(DP_ABORT, STKCMPCLR | STKERRCLR | WDERRCLR | ORUNERRCLR);
         return ERROR_ALGO_DL;
     }
 

@@ -47,7 +47,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
                                    uint8_t opt_required)
 {
-    (void)opt_required;
+    app_data.opt_enable = opt_required ? 1 : 0;
     strncpy((char *)app_data.firmware_name, (const char *)algorithm_name,
             sizeof(app_data.firmware_name) - 1);
     app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = '\0';
@@ -360,6 +360,25 @@ static void show_download_status(const char *status)
 	OLED_Refresh();
 }
 
+/* Error page: 4 text rows. NOTE: in this OLED driver the first argument of
+   OLED_ShowString() is the ROW (GRAM[x/8][y]) and the second is the column. */
+static void show_download_error(const char *status, uint32_t diag, uint32_t step)
+{
+	uint8_t r;
+	for (r = 0; r < 6; r++)
+	{
+		memset(OLED_GRAM[r], 0, sizeof(OLED_GRAM[r]));
+	}
+	OLED_ShowString(0, 0, (uint8_t *)status, 8, 1);
+	sprintf((char *)D, "step=%02lX r0=%lX", (unsigned long)step, (unsigned long)diag);
+	OLED_ShowString(8, 0, D, 8, 1);
+	sprintf((char *)D, "cs=%08lX", (unsigned long)g_diag_ctrl_stat);
+	OLED_ShowString(16, 0, D, 8, 1);
+	sprintf((char *)D, "h =%08lX", (unsigned long)g_diag_hcsr);
+	OLED_ShowString(24, 0, D, 8, 1);
+	OLED_Refresh();
+}
+
 void mode4(void)
 {
 	uint8_t err_flag = 0, is_ext_algo = 0;
@@ -367,6 +386,9 @@ void mode4(void)
 	uint32_t ulReadNum, bin_size;
 	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
 	uint8_t opt_failed = 0;
+	error_t init_err = ERROR_SUCCESS;
+	uint32_t init_diag = 0;
+	uint32_t init_step = 0xFFFF;
 	static uint8_t done = 0;
 
 	if(key_val.mesg == 1)
@@ -427,13 +449,18 @@ void mode4(void)
 		TARGET_PWR_ON;
 		/* Retry SWD: grab CPU before firmware disables SWD */
 		{
-			uint8_t swd_ok = 0;
+			uint8_t swd_ok = 0, swd_seen = 0;
 			for (int _i = 0; _i < 50; _i++) {
-				if (swd_init_debug()) { swd_ok = 1; break; }
+				if (swd_init_debug()) {
+					swd_seen = 1;
+					/* halt right away: the app must not get a chance to
+					   remap PA13/PA14 or enter low power */
+					if (swd_halt_core()) { swd_ok = 1; break; }
+				}
 				delaymS(1);
 			}
 			if (!swd_ok) {
-				show_download_status("DIS: SWD failed");
+				show_download_status(swd_seen ? "DIS: CPU busy" : "DIS: SWD failed");
 				swd_off();
 				TARGET_PWR_OFF;
 				goto download_return;
@@ -473,10 +500,22 @@ void mode4(void)
 		{
 			show_download_status("Loading algorithm...");
 			OLED_Refresh();
-			if(target_flash_init((program_target_t *)DATA_BUFFER, ((program_target_t *)DATA_BUFFER)->flash_addr) == ERROR_SUCCESS)
-				err_flag = 2;								//������¼�㷨��Ŀ��оƬ
+			/* reset diag so a stale value from a previous attempt can't mislead */
+			g_last_syscall_r0 = 0;
+			g_diag_ctrl_stat = 0xFFFFFFFF;
+			g_diag_hcsr = 0xFFFFFFFF;
+			g_diag_step = 0xFFFF;
+			init_err = target_flash_init((program_target_t *)DATA_BUFFER,
+			                             ((program_target_t *)DATA_BUFFER)->flash_addr);
+			if(init_err == ERROR_SUCCESS)
+				err_flag = 2;
 			else
+			{
+				/* keep the diag before uninit overwrites it */
+				init_diag = g_last_syscall_r0;
+				init_step = g_diag_step;
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
+			}
 		}
 		else
 		{			
@@ -503,8 +542,25 @@ void mode4(void)
 		}
 		else 
 		{
-			target_flash_uninit((program_target_t *)DATA_BUFFER);
-			show_download_status("ER2: Algo init");
+			switch(init_err)
+			{
+				case ERROR_RESET:
+					show_download_error("ER2a: Reset/halt", init_diag, init_step);
+					break;
+				case ERROR_ALGO_DL:
+					show_download_error("ER2b: SRAM write", init_diag, init_step);
+					break;
+				case ERROR_INIT:
+					show_download_error("ER2c: Algo init", init_diag, init_step);
+					break;
+				default:
+				{
+					char ebuf[24];
+					sprintf(ebuf, "ER2?: err=%u", (unsigned)init_err);
+					show_download_error(ebuf, init_diag, init_step);
+					break;
+				}
+			}
 			goto download_return;
 		}
 		if(err_flag == 3)
@@ -586,7 +642,7 @@ void mode4(void)
 			}
 
 /* OPT programming for extended algorithm */
-			if(is_ext_algo && i == bin_size)
+			if(is_ext_algo && app_data.opt_enable && i == bin_size)
 			{
 				FIL fd_opt;
 				char opt_name[40];
@@ -651,7 +707,7 @@ void mode4(void)
 			}
 
 			/* Verify OPT bytes - stage by stage */
-			if(is_ext_algo && i == bin_size && opt_prog_addr)
+			if(is_ext_algo && app_data.opt_enable && i == bin_size && opt_prog_addr)
 			{
 				show_download_status("Verifying OPT...");
 				OLED_Refresh();
@@ -816,6 +872,8 @@ void mode3(void)
 						{
 							memset(app_data.bin_name, '\0', 32);
 							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
+							/* manual pick on device: program OPT if the file exists (old behaviour) */
+							app_data.opt_enable = 1;
 						}
 						FileInfo.fname[21] = '\0';   					//������ʾ����			
 						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?

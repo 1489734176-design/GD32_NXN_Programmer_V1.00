@@ -11,6 +11,7 @@ typedef struct
 	
 	uint8_t bin_name[32];					//������¼bin�ļ�
 	uint8_t firmware_name[32];		//������¼�㷨
+	uint8_t opt_enable;						/* 1: OPT file uploaded, program OPT; 0: skip OPT */
 	
 	uint8_t hid_led_blink;
 	uint8_t cb_led_blink;

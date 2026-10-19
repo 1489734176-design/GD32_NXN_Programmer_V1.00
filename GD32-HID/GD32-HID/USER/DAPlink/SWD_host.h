@@ -30,6 +30,7 @@ typedef enum
 uint8_t swd_init(void);
 uint8_t swd_off(void);
 uint8_t swd_init_debug(void);
+uint8_t swd_halt_core(void);
 uint8_t swd_read_dp(uint8_t adr, uint32_t *val);
 uint8_t swd_write_dp(uint8_t adr, uint32_t val);
 uint8_t swd_read_ap(uint32_t adr, uint32_t *val);
@@ -37,6 +38,9 @@ uint8_t swd_write_ap(uint32_t adr, uint32_t val);
 uint8_t swd_read_memory(uint32_t address, uint8_t *data, uint32_t size);
 uint8_t swd_write_memory(uint32_t address, uint8_t *data, uint32_t size);
 extern uint32_t g_last_syscall_r0;
+extern uint32_t g_diag_ctrl_stat;
+extern uint32_t g_diag_hcsr;
+extern uint32_t g_diag_step;
 uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
 void delaymS(uint32_t ms);
 void swd_set_target_reset(uint8_t asserted);

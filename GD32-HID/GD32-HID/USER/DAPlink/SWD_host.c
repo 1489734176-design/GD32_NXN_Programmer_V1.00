@@ -13,6 +13,9 @@ extern uint32_t Flash_Page_Size;
 #define NVIC_Addr (0xe000e000)
 #define DBG_Addr (0xe000edf0)
 
+/* Which sub-step of swd_write_debug_state() failed, for on-screen diagnostics */
+uint32_t g_diag_step = 0xFFFF;
+
 // AP CSW register, base value
 #define CSW_VALUE (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC)
 
@@ -584,6 +587,7 @@ static uint8_t swd_write_debug_state(DEBUG_STATE *state)
 {
 	uint32_t i, status;
 
+	g_diag_step = 0;
 	if (!swd_write_dp(DP_SELECT, 0))
 	{
 		return 0;
@@ -592,6 +596,7 @@ static uint8_t swd_write_debug_state(DEBUG_STATE *state)
 	// R0, R1, R2, R3
 	for (i = 0; i < 4; i++)
 	{
+		g_diag_step = 1 + i;
 		if (!swd_write_core_register(i, state->r[i]))
 		{
 			return 0;
@@ -599,6 +604,7 @@ static uint8_t swd_write_debug_state(DEBUG_STATE *state)
 	}
 
 	// R9
+	g_diag_step = 5;
 	if (!swd_write_core_register(9, state->r[9]))
 	{
 		return 0;
@@ -607,6 +613,7 @@ static uint8_t swd_write_debug_state(DEBUG_STATE *state)
 	// R13, R14, R15
 	for (i = 13; i < 16; i++)
 	{
+		g_diag_step = 6;
 		if (!swd_write_core_register(i, state->r[i]))
 		{
 			return 0;
@@ -614,28 +621,52 @@ static uint8_t swd_write_debug_state(DEBUG_STATE *state)
 	}
 
 	// xPSR
+	g_diag_step = 7;
 	if (!swd_write_core_register(16, state->xpsr))
 	{
 		return 0;
 	}
 
+	g_diag_step = 8;
 	if (!swd_write_word(DBG_HCSR, DBGKEY | C_DEBUGEN))
 	{
 		return 0;
 	}
 
 	// check status
+	g_diag_step = 9;
 	if (!swd_read_dp(DP_CTRL_STAT, &status))
 	{
 		return 0;
 	}
 
+	g_diag_step = 10;
 	if (status & (STICKYERR | WDATAERR))
 	{
 		return 0;
 	}
 
 	return 1;
+}
+
+/* Halt the core as early as possible after connecting.
+   If the application remaps PA13/PA14 or enters a low-power mode it will kill
+   the SWD link, so stop the CPU before any 20 ms reset delay. */
+uint8_t swd_halt_core(void)
+{
+	uint32_t val = 0;
+
+	if (!swd_write_word(DBG_HCSR, DBGKEY | C_DEBUGEN | C_HALT))
+	{
+		return 0;
+	}
+
+	if (!swd_read_word(DBG_HCSR, &val))
+	{
+		return 0;
+	}
+
+	return (val & S_HALT) ? 1 : 0;
 }
 
 static uint8_t swd_read_core_register(uint32_t n, uint32_t *val)
@@ -731,6 +762,37 @@ static uint8_t swd_wait_until_halted(void)
 }
 
 uint32_t g_last_syscall_r0;
+uint32_t g_diag_ctrl_stat = 0xFFFFFFFF;
+uint32_t g_diag_hcsr = 0xFFFFFFFF;
+
+/* Snapshot DP CTRL/STAT and DHCSR right after a failed debug-state write,
+   so the caller can tell "AP denied" from "core not halted".
+   Re-init first: if the link is still alive this gives a real reading,
+   otherwise the sentinel 0xDDDDDDDD says "link lost". */
+static void swd_diag_capture(void)
+{
+	uint32_t v;
+
+	swd_init();
+	if (!swd_init_debug())
+	{
+		g_diag_ctrl_stat = 0xDDDDDDDD;
+		g_diag_hcsr = 0xDDDDDDDD;
+		return;
+	}
+
+	v = 0xFFFFFFFF;
+	if (swd_read_dp(DP_CTRL_STAT, &v))
+		g_diag_ctrl_stat = v;
+	else
+		g_diag_ctrl_stat = 0xEEEEEEEE;
+
+	v = 0xFFFFFFFF;
+	if (swd_read_word(DBG_HCSR, &v))
+		g_diag_hcsr = v;
+	else
+		g_diag_hcsr = 0xEEEEEEEE;
+}
 
 uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
@@ -748,6 +810,7 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
 
 	if (!swd_write_debug_state(&state))
 	{
+		swd_diag_capture();
 		g_last_syscall_r0 = 0xDEE1;
 		return 0;
 	}
@@ -992,13 +1055,17 @@ uint8_t swd_set_target_state_hw(TARGET_RESET_STATE state)
 		break;
 
 	case RESET_PROGRAM:
+		g_diag_step = 0x20;
 		if (!swd_init_debug())
 		{
 			return 0;
 		}
 
-		// Enable debug
-		while (swd_write_word(DBG_HCSR, DBGKEY | C_DEBUGEN) == 0)
+		// Enable debug AND halt the core right away: if we only enable debug,
+		// the application keeps running during the 20 ms reset delays below and
+		// can remap PA13/PA14 / enter low power, killing the SWD link.
+		g_diag_step = 0x21;
+		while (swd_write_word(DBG_HCSR, DBGKEY | C_DEBUGEN | C_HALT) == 0)
 		{
 			if (--ap_retries <= 0)
 				return 0;
@@ -1011,6 +1078,7 @@ uint8_t swd_set_target_state_hw(TARGET_RESET_STATE state)
 		}
 
 		// Enable halt on reset
+		g_diag_step = 0x22;
 		if (!swd_write_word(DBG_EMCR, VC_CORERESET))
 		{
 			return 0;
@@ -1022,15 +1090,32 @@ uint8_t swd_set_target_state_hw(TARGET_RESET_STATE state)
 		swd_set_target_reset(0);
 		delaymS(20);
 
-		do
+		// Wait for halt, but never spin forever: a dead link or a target that
+		// keeps resetting must fall through to the error page.
+		g_diag_step = 0x23;
 		{
-			if (!swd_read_word(DBG_HCSR, &val))
+			int halt_wait = 200;
+			for (;;)
 			{
-				return 0;
+				if (!swd_read_word(DBG_HCSR, &val))
+				{
+					return 0;
+				}
+				if (val & S_HALT)
+				{
+					break;
+				}
+				if (--halt_wait <= 0)
+				{
+					g_diag_step = 0x25;
+					return 0;
+				}
+				delaymS(1);
 			}
-		} while ((val & S_HALT) == 0);
+		}
 
 		// Disable halt on reset
+		g_diag_step = 0x24;
 		if (!swd_write_word(DBG_EMCR, 0))
 		{
 			return 0;
