@@ -362,9 +362,9 @@ static void show_download_status(const char *status)
 
 /* Error page: 4 text rows. NOTE: in this OLED driver the first argument of
    OLED_ShowString() is the ROW (GRAM[x/8][y]) and the second is the column. */
-static void show_download_error(const char *status, uint32_t diag, uint32_t step)
+static void show_download_error(const char *status, uint32_t diag, uint32_t step, uint32_t addr)
 {
-	uint8_t r;
+	uint8_t r, row = 1;
 	for (r = 0; r < 6; r++)
 	{
 		memset(OLED_GRAM[r], 0, sizeof(OLED_GRAM[r]));
@@ -372,11 +372,39 @@ static void show_download_error(const char *status, uint32_t diag, uint32_t step
 	OLED_ShowString(0, 0, (uint8_t *)status, 8, 1);
 	sprintf((char *)D, "step=%02lX r0=%lX", (unsigned long)step, (unsigned long)diag);
 	OLED_ShowString(8, 0, D, 8, 1);
+	if (addr)
+	{
+		sprintf((char *)D, "addr=%08lX", (unsigned long)addr);
+		OLED_ShowString(16, 0, D, 8, 1);
+		row = 2;
+	}
 	sprintf((char *)D, "cs=%08lX", (unsigned long)g_diag_ctrl_stat);
-	OLED_ShowString(16, 0, D, 8, 1);
+	OLED_ShowString((uint8_t)((row + 1) * 8), 0, D, 8, 1);
 	sprintf((char *)D, "h =%08lX", (unsigned long)g_diag_hcsr);
-	OLED_ShowString(24, 0, D, 8, 1);
+	OLED_ShowString((uint8_t)((row + 2) * 8), 0, D, 8, 1);
 	OLED_Refresh();
+}
+
+/* Connect and halt the core as fast as possible.
+   0 = no DP response, 1 = halted, 2 = DP answered but CPU would not stop */
+static uint8_t target_connect_halt(void)
+{
+	uint8_t seen = 0;
+	int i;
+
+	for (i = 0; i < 50; i++)
+	{
+		if (swd_init_debug())
+		{
+			seen = 1;
+			if (swd_halt_core())
+			{
+				return 1;
+			}
+		}
+		delaymS(1);
+	}
+	return seen ? 2 : 0;
 }
 
 void mode4(void)
@@ -449,18 +477,9 @@ void mode4(void)
 		TARGET_PWR_ON;
 		/* Retry SWD: grab CPU before firmware disables SWD */
 		{
-			uint8_t swd_ok = 0, swd_seen = 0;
-			for (int _i = 0; _i < 50; _i++) {
-				if (swd_init_debug()) {
-					swd_seen = 1;
-					/* halt right away: the app must not get a chance to
-					   remap PA13/PA14 or enter low power */
-					if (swd_halt_core()) { swd_ok = 1; break; }
-				}
-				delaymS(1);
-			}
-			if (!swd_ok) {
-				show_download_status(swd_seen ? "DIS: CPU busy" : "DIS: SWD failed");
+			uint8_t c = target_connect_halt();
+			if (c != 1) {
+				show_download_status(c == 2 ? "DIS: CPU busy" : "DIS: SWD failed");
 				swd_off();
 				TARGET_PWR_OFF;
 				goto download_return;
@@ -527,7 +546,27 @@ void mode4(void)
 			show_download_status("Erasing...");
 			OLED_Refresh();
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
+			{
 				err_flag = 3;
+				/* Mass erase also drops the read protection, but that only
+				   takes effect after the target restarts. Programming before
+				   the restart is rejected (ER6), so power-cycle and re-init
+				   the algorithm before writing. */
+				show_download_status("Re-init...");
+				OLED_Refresh();
+				swd_off();
+				TARGET_PWR_OFF;
+				delaymS(100);
+				TARGET_PWR_ON;
+				delaymS(20);
+				if(target_connect_halt() != 1 ||
+				   target_flash_init((program_target_t *)DATA_BUFFER,
+				                     ((program_target_t *)DATA_BUFFER)->flash_addr) != ERROR_SUCCESS)
+				{
+					show_download_error("ER7: Re-init", g_last_syscall_r0, g_diag_step, 0);
+					goto download_return;
+				}
+			}
 			else
 			{
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
@@ -538,26 +577,26 @@ void mode4(void)
 				TARGET_PWR_OFF;
 				{ volatile uint32_t _d; for(_d=0; _d<3000000; _d++); }
 				goto download_return;
-			}								//����Ŀ��оƬ
+			}
 		}
 		else 
 		{
 			switch(init_err)
 			{
 				case ERROR_RESET:
-					show_download_error("ER2a: Reset/halt", init_diag, init_step);
+					show_download_error("ER2a: Reset/halt", init_diag, init_step, 0);
 					break;
 				case ERROR_ALGO_DL:
-					show_download_error("ER2b: SRAM write", init_diag, init_step);
+					show_download_error("ER2b: SRAM write", init_diag, init_step, 0);
 					break;
 				case ERROR_INIT:
-					show_download_error("ER2c: Algo init", init_diag, init_step);
+					show_download_error("ER2c: Algo init", init_diag, init_step, 0);
 					break;
 				default:
 				{
 					char ebuf[24];
 					sprintf(ebuf, "ER2?: err=%u", (unsigned)init_err);
-					show_download_error(ebuf, init_diag, init_step);
+					show_download_error(ebuf, init_diag, init_step, 0);
 					break;
 				}
 			}
@@ -590,9 +629,12 @@ void mode4(void)
 				{
 					if(target_flash_program_page((program_target_t *)DATA_BUFFER, 							
 																			((program_target_t *)DATA_BUFFER)->flash_addr + i,
-																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)  //��¼����Ŀ��оƬ
+																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)
 					{
-						show_download_status("ER6: Program failed");
+						show_download_error("ER6: Program failed",
+						                    g_last_syscall_r0,
+						                    g_diag_step,
+						                    ((program_target_t *)DATA_BUFFER)->flash_addr + i);
 						break;
 					}
 					i += ulReadNum;
