@@ -5,6 +5,7 @@
     "page_size": 1024,
     "page_count": 16,
     "opt_base": "0x1FFFF800",
+    "opt_size": 16,
     "opt_words": [
       {
         "index": 0,
@@ -18,7 +19,7 @@
             "default": 165,
             "options": [
               {"label": "读保护关闭 (芯片数据可读)", "value": 165},
-              {"label": "读保护开启 (芯片锁定)",     "value": 0}
+              {"label": "读保护开启 (芯片锁定)",     "value": 127}
             ]
           }
         ]
@@ -101,6 +102,7 @@
     "page_size": 1024,
     "page_count": 32,
     "opt_base": "0x1FFFF800",
+    "opt_size": 16,
     "opt_words": [
       {
         "index": 0,
@@ -114,7 +116,7 @@
             "default": 165,
             "options": [
               {"label": "读保护关闭 (芯片数据可读)", "value": 165},
-              {"label": "读保护开启 (芯片锁定)",     "value": 0}
+              {"label": "读保护开启 (芯片锁定)",     "value": 127}
             ]
           }
         ]

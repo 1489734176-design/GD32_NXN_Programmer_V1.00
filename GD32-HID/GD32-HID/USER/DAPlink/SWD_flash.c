@@ -155,6 +155,10 @@ error_t target_flash_verify(program_target_t *algo, uint32_t addr, const uint8_t
     return ERROR_SUCCESS;
 }
 
+uint32_t g_vfy_off = 0xFFFFFFFF;   /* 第一个不匹配的字节偏移, 0xFFFFFFFF = 读失败 */
+uint32_t g_vfy_exp = 0xFFFFFFFF;   /* 期望值 */
+uint32_t g_vfy_act = 0xFFFFFFFF;   /* 读回值 */
+
 error_t target_flash_verify_ext(program_target_ext_t *algo, uint32_t addr, const uint8_t *expected, uint32_t size)
 {
     uint8_t readback[256];
@@ -169,10 +173,29 @@ error_t target_flash_verify_ext(program_target_ext_t *algo, uint32_t addr, const
         uint32_t chunk = (size - offset) > sizeof(readback) ? sizeof(readback) : (size - offset);
 
         if (!swd_read_memory(addr + offset, readback, chunk))
+        {
+            /* 读都读不回来(OPT 区不可访问 / 调试口已锁) */
+            g_vfy_off = 0xFFFFFFFF;
+            g_vfy_exp = 0xEEEEEEEE;
+            g_vfy_act = 0xEEEEEEEE;
             return ERROR_VERIFY;
+        }
 
         if (memcmp(readback, expected + offset, chunk) != 0)
+        {
+            uint32_t k;
+            for (k = 0; k < chunk; k++)
+            {
+                if (readback[k] != expected[offset + k])
+                {
+                    g_vfy_off = offset + k;
+                    g_vfy_exp = expected[offset + k];
+                    g_vfy_act = readback[k];
+                    break;
+                }
+            }
             return ERROR_VERIFY;
+        }
 
         offset += chunk;
     }

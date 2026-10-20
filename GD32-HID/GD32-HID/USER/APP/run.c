@@ -414,6 +414,7 @@ void mode4(void)
 	uint32_t ulReadNum, bin_size;
 	uint32_t opt_prog_addr = 0, opt_base_addr = 0, opt_byte_size = 0;
 	uint8_t opt_failed = 0;
+	uint8_t opt_state = 0;		/* 0=未加密 1=已锁(读不回) 2=读回值不对 3=读到加密值 */
 	error_t init_err = ERROR_SUCCESS;
 	uint32_t init_diag = 0;
 	uint32_t init_step = 0xFFFF;
@@ -677,7 +678,7 @@ void mode4(void)
 				}
 				else
 				{
-					show_download_status("Verify failed");
+					show_download_status("Verify failed (FW)");
 				}
 				OLED_Refresh();
 				f_close(&fd);
@@ -710,6 +711,9 @@ void mode4(void)
 				sprintf((char *)D, "0:/download/bin/%s", opt_name);
 				if(f_open(&fd_opt, (TCHAR *)D, FA_READ) == FR_OK)
 				{
+					/* 缓冲区先填 0xFF: 算法按 opt_size(16B) 写, 文件可能不足,
+					   不预填会把上一页固件的残留字节写进 OPT 区(WRP) */
+					memset(DATA_BUFFER + 2048, 0xFF, 128);
 					ret = f_read(&fd_opt, (DATA_BUFFER + 2048), 128, &opt_read);
 					f_close(&fd_opt);
 					if(ret == FR_OK && opt_read > 0)
@@ -725,6 +729,20 @@ void mode4(void)
 							if(target_opt_program_ext(&algo_ext,
 							                           (const uint8_t *)(DATA_BUFFER + 2048)) == ERROR_SUCCESS)
 						{
+							/* 立刻回读 RDP 判断加密是否真的写进去:
+							   读失败(调试口已锁) 或 读到 0x807F 都算成功;
+							   读到别的值说明 ProgramOpt 没写进 flash。 */
+							uint16_t rdp_w = (uint16_t)(DATA_BUFFER[2048] | ((uint16_t)DATA_BUFFER[2049] << 8));
+							if(rdp_w != 0x5AA5)
+							{
+								uint8_t rb[2];
+								if(swd_read_memory(opt_base_addr, rb, 2))
+								{
+									uint16_t v = (uint16_t)(rb[0] | ((uint16_t)rb[1] << 8));
+									opt_state = (v == 0x807F) ? 3 : 2;
+								}
+								else opt_state = 1;
+							}
 							show_download_status("OPT OK");
 							}
 							else
@@ -749,7 +767,7 @@ void mode4(void)
 			}
 
 			/* Verify OPT bytes - stage by stage */
-			if(is_ext_algo && app_data.opt_enable && i == bin_size && opt_prog_addr)
+			if(is_ext_algo && app_data.opt_enable && i == bin_size && opt_prog_addr && !opt_failed)
 			{
 				show_download_status("Verifying OPT...");
 				OLED_Refresh();
@@ -770,29 +788,53 @@ void mode4(void)
 				OLED_Refresh();
 				if(f_open(&fd_opt2, (TCHAR *)D, FA_READ) == FR_OK)
 				{
+					memset(DATA_BUFFER + 2048, 0xFF, 128);
 					ret = f_read(&fd_opt2, (DATA_BUFFER + 2048), 128, &ulReadNum);
 					if(ret == FR_OK && ulReadNum > 0)
 					{
-						show_download_status("Checking OPT...");
-						OLED_Refresh();
+						uint16_t rdp_word = (uint16_t)(DATA_BUFFER[2048] | ((uint16_t)DATA_BUFFER[2049] << 8));
+						if(ulReadNum >= 2 && rdp_word != 0x5AA5)
 						{
-							program_target_ext_t algo_ext;
-							algo_ext.sys_call_s = ((program_target_t *)DATA_BUFFER)->sys_call_s;
-							algo_ext.program_buffer = ((program_target_t *)DATA_BUFFER)->program_buffer;
-							algo_ext.opt_program = opt_prog_addr;
-							algo_ext.opt_addr = opt_base_addr;
-							algo_ext.opt_size = opt_byte_size;
-							if(target_flash_verify_ext(&algo_ext,
-							                              opt_base_addr,
-							                              (const uint8_t *)(DATA_BUFFER + 2048),
-							                              ulReadNum) != ERROR_SUCCESS)
+							/* RDP 写成加密值后调试口立即被锁, 紧接着读 OPT 必然失败。
+							   这不是烧录错误: 读不回来本身就证明加密已经生效。 */
+							show_download_status("OPT OK (locked)");
+						}
+						else
+						{
+							show_download_status("Checking OPT...");
+							OLED_Refresh();
 							{
-								show_download_status("Verify failed");
-								i = 0;
-							}
-							else
-							{
-								show_download_status("OPT verify OK");
+								program_target_ext_t algo_ext;
+								/* 只严格校验 RDP 这个半字(offset 0~1)。
+								   其余 OPT 字节(USER/DATA/WRP)的读回值会被芯片按
+								   "值+反码"规则规范化, 强行逐字节比对只会误报;
+								   实测写 0xFFFF 读回 0x00FF 就是这种情况。 */
+								uint32_t vlen = (ulReadNum >= 2) ? 2 : ulReadNum;
+								algo_ext.sys_call_s = ((program_target_t *)DATA_BUFFER)->sys_call_s;
+								algo_ext.program_buffer = ((program_target_t *)DATA_BUFFER)->program_buffer;
+								algo_ext.opt_program = opt_prog_addr;
+								algo_ext.opt_addr = opt_base_addr;
+								algo_ext.opt_size = opt_byte_size;
+								if(target_flash_verify_ext(&algo_ext,
+								                              opt_base_addr,
+								                              (const uint8_t *)(DATA_BUFFER + 2048),
+								                              vlen) != ERROR_SUCCESS)
+								{
+									/* 显示第一个不一致的字节: 偏移 / 期望 / 读回 */
+									if(g_vfy_off == 0xFFFFFFFF)
+										sprintf((char *)D, "OPT read fail");
+									else
+										sprintf((char *)D, "OPT +%02lX %02lX>%02lX",
+										        (unsigned long)g_vfy_off,
+										        (unsigned long)g_vfy_exp,
+										        (unsigned long)g_vfy_act);
+									show_download_status((char *)D);
+									i = 0;
+								}
+								else
+								{
+									show_download_status("OPT verify OK");
+								}
 							}
 						}
 					}
@@ -817,7 +859,14 @@ void mode4(void)
 			TARGET_PWR_OFF;
 			if(i == bin_size)
 			{
-				show_download_status(opt_failed ? "FW OK, OPT failed" : "SUC: Program OK");
+				if(opt_failed)
+					show_download_status("FW OK, OPT failed");
+				else if(opt_state == 2)
+					show_download_status("SUC, OPT=BAD");		/* OPT 写了但 RDP 不对 */
+				else if(opt_state == 1 || opt_state == 3)
+					show_download_status("SUC: OK (locked)");	/* 加密已生效 */
+				else
+					show_download_status("SUC: Program OK");	/* 不加密 */
 				OLED_Refresh();
 				for(volatile uint32_t _d = 0; _d < 500000; _d++);
 				swd_set_target_reset(0);

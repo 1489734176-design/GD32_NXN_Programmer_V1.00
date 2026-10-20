@@ -506,8 +506,9 @@ class DAPLinkManager(QMainWindow):
         self.btn_bind_algorithm = QPushButton("保存算法")
         self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
         chip_bar.addWidget(self.btn_bind_algorithm, 1, 2)
-        self.btn_opt_toggle = QPushButton("OPT 配置 ▼")
+        self.btn_opt_toggle = QPushButton("OPT 配置 ▲")
         self.btn_opt_toggle.setCheckable(True)
+        self.btn_opt_toggle.setChecked(True)
         self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
         chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
         button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
@@ -523,13 +524,13 @@ class DAPLinkManager(QMainWindow):
         chip_bar.addWidget(self.chk_opt, 0, 3)
         chip_opt_layout.addLayout(chip_bar)
 
-        # OPT config panel (scrollable, initially hidden)
+        # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
         self.opt_scroll = QScrollArea()
         self.opt_scroll.setObjectName("optScroll")
         self.opt_scroll.setWidgetResizable(True)
         self.opt_scroll.setMinimumHeight(100)
         self.opt_scroll.setMaximumHeight(350)
-        self.opt_scroll.setVisible(False)
+        self.opt_scroll.setVisible(True)
         self.opt_content = QWidget()
         self.opt_scroll.setWidget(self.opt_content)
         chip_opt_layout.addWidget(self.opt_scroll)
@@ -1085,6 +1086,11 @@ class DAPLinkManager(QMainWindow):
         self.lbl_opt_preview.setStyleSheet(
             "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
         preview_layout.addWidget(self.lbl_opt_preview)
+        self.lbl_rdp_state = QLabel("", preview_grp)
+        self.lbl_rdp_state.setFixedWidth(76)
+        self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
+        self.lbl_rdp_state.setMinimumHeight(self.control_height)
+        preview_layout.addWidget(self.lbl_rdp_state)
         layout.addWidget(preview_grp)
 
         words = self.current_chip.get('opt_words', [])
@@ -1132,37 +1138,28 @@ class DAPLinkManager(QMainWindow):
         if not self.current_chip:
             return
         try:
-            words = self.current_chip['opt_words']
-            addresses = [int(w['address'], 16) for w in words]
-            base_addr = min(addresses)
-            end_addr = max(addresses) + 2
-            buf = bytearray([0xFF] * (end_addr - base_addr))
-
-            for w in words:
-                offset = int(w['address'], 16) - base_addr
-                byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
-                bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
-
-                if byte_fields:
-                    user_val = self._get_field_value(byte_fields[0]['name'])
-                    low_byte = user_val if user_val is not None else byte_fields[0].get('default', 0xFF)
-                else:
-                    low_byte = 0xFF
-                    for f in bit_fields:
-                        user_val = self._get_field_value(f['name'])
-                        if user_val is None:
-                            user_val = f.get('default', 1)
-                        if user_val:
-                            low_byte |= (1 << f['bit'])
-                        else:
-                            low_byte &= ~(1 << f['bit'])
-
-                high_byte = (~low_byte) & 0xFF
-                value = (high_byte << 8) | low_byte
-                buf[offset:offset + 2] = struct.pack('<H', value)
-
+            buf = self._build_opt_bytes()
             hex_str = ' '.join(f'{b:02X}' for b in buf)
             self.lbl_opt_preview.setText(hex_str)
+
+            # 直接把 RDP 结果标出来: A5 5A = 不加密, 7F 80 = 加密
+            if hasattr(self, 'lbl_rdp_state'):
+                rdp = (buf[0] | (buf[1] << 8)) if len(buf) >= 2 else 0xFFFF
+                if rdp == 0x5AA5:
+                    self.lbl_rdp_state.setText("未加密")
+                    self.lbl_rdp_state.setStyleSheet(
+                        "color:#b03a2e; font-weight:bold; border:1px solid #e6b0aa;"
+                        "border-radius:3px; background:#fdedec;")
+                elif rdp == 0x807F:
+                    self.lbl_rdp_state.setText("已加密")
+                    self.lbl_rdp_state.setStyleSheet(
+                        "color:#1e8449; font-weight:bold; border:1px solid #a9dfbf;"
+                        "border-radius:3px; background:#eafaf1;")
+                else:
+                    self.lbl_rdp_state.setText("RDP 异常")
+                    self.lbl_rdp_state.setStyleSheet(
+                        "color:#b9770e; font-weight:bold; border:1px solid #f5cba7;"
+                        "border-radius:3px; background:#fef5e7;")
         except Exception:
             pass
 
@@ -1309,17 +1306,25 @@ class DAPLinkManager(QMainWindow):
         self.worker.finished.connect(self._import_done)
         self.worker.start()
 
-    def _generate_opt_bin(self, program_path):
+    def _build_opt_bytes(self):
+        """按当前 UI 值构造 OPT 二进制（长度 = 配置里定义的 word 范围）。"""
         chip = self.current_chip
         words = chip['opt_words']
 
         addresses = [int(w['address'], 16) for w in words]
         base_addr = min(addresses)
         end_addr = max(addresses) + 2
-        buf = bytearray([0xFF] * (end_addr - base_addr))
+        # 文件长度按实际定义的 word 生成(MM32G0001 为 10 字节: OPT0~WRP0)。
+        # 算法会按 opt_size(16B) 写入, 但固件已用 0xFF 预填缓冲区,
+        # 超出文件的部分写进去就是"未编程", 安全; 而校验也只比对文件长度,
+        # 不会去读 OPT 区后面那些读不回来的保留字节。
+        total = end_addr - base_addr
+        buf = bytearray([0xFF] * total)
 
         for w in words:
             offset = int(w['address'], 16) - base_addr
+            if offset + 2 > total:
+                continue
 
             byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
             bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
@@ -1338,9 +1343,17 @@ class DAPLinkManager(QMainWindow):
                     else:
                         low_byte &= ~(1 << f['bit'])
 
-            high_byte = (~low_byte) & 0xFF
-            value = (high_byte << 8) | low_byte
+            # 半字格式 = 低字节(值) + 高字节(值的反码)。
+            # 高字节必须严格等于 ~低字节, 芯片会按这个规则校验/规范化:
+            # 实测低字节 0xFF 时, 写 0xFFFF 读回是 0x00FF —— 反码位被纠正为 0x00。
+            # 所以这里统一按反码规则算, 不要特判 0xFF。
+            value = (((~low_byte) & 0xFF) << 8) | low_byte
             buf[offset:offset + 2] = struct.pack('<H', value)
+
+        return buf
+
+    def _generate_opt_bin(self, program_path):
+        buf = self._build_opt_bytes()
 
         base_name = os.path.splitext(program_path)[0]
         opt_path = base_name + '_opt.bin'
