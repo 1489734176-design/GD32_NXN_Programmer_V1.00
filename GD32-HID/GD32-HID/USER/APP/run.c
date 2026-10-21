@@ -43,6 +43,42 @@ void mode4(void);
 void show_top(uint8_t status);
 uint8_t D[64] = {0};
 
+/* ---- automatic burning (auto mode) ----
+   WAIT   : probe the socket until a chip answers SWD
+   BURN   : mode4() runs the normal burn sequence
+   RESULT : show OK / FAIL for a while
+   HOLD   : keep the result on screen until the chip is taken out
+   The chip is detected by powering the socket and looking for an SWD
+   answer - the same thing the burn path does, so a chip that can be
+   burned can also be detected. */
+#define AUTO_PROBE_MS       200     /* min interval between two probes */
+#define AUTO_PRESENT_CNT    2       /* consecutive hits before we burn */
+#define AUTO_ABSENT_CNT     2       /* consecutive misses before "removed" */
+#define AUTO_HOLD_MIN_MS    600     /* stay in HOLD at least this long */
+#define AUTO_OK_MS          1500    /* result dwell on success */
+#define AUTO_FAIL_MS        3000    /* result dwell on failure */
+
+enum { AUTO_ST_WAIT = 0, AUTO_ST_BURN, AUTO_ST_RESULT, AUTO_ST_HOLD };
+
+static uint8_t  g_auto_en      = 1;             /* 0 = manual, 1 = automatic */
+static uint8_t  g_auto_st      = AUTO_ST_WAIT;
+static uint8_t  g_absent_seen  = 0;             /* consecutive probes without a chip */
+static uint8_t  g_present_seen = 0;             /* consecutive probes with a chip */
+static uint8_t  g_burn_done    = 0;             /* mode4: this chip was already handled */
+static uint8_t  g_burn_ok      = 0;             /* result of the last burn */
+static uint32_t g_auto_t0      = 0;             /* tick when the state was entered */
+static uint32_t g_auto_tprobe  = 0;             /* tick of the last probe */
+
+static void auto_standby_tick(void);
+static void auto_draw(void);
+static void auto_start_burn(void);
+static uint8_t auto_has_files(void);
+static uint32_t auto_now_ms(void);
+
+/* last text pushed to the OLED status row, kept so the standby page can
+   repeat the failure reason after mode4 has returned */
+static char g_last_status[24] = {0};
+
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
                                    uint8_t opt_required)
@@ -281,6 +317,11 @@ void mode1(void)
 /* mode2: 离线下载选择页 (算法 / 文件 / 开始烧录), 只负责选择, 烧录在 mode4 */
 void mode2(void)
 {
+	/* auto mode always burns the pair that is already loaded; file selection
+	   is done in manual mode (long press right to switch) */
+	if(g_auto_en)
+		app_data.head = 2;
+
 	if(key_val.mesg == 1)
 	{
 		switch(key_val.key)
@@ -297,11 +338,24 @@ void mode2(void)
 				usbd_connect(&usb_hid);
 				return;
 			case key_left:                      /* 上一个(循环) */
+				if(g_auto_en)                   /* 自动模式下不切换焦点 */
+					break;
 				app_data.head = (app_data.head + 2) % 3;
 				break;
 			case key_right:                     /* 下一个(循环) */
+				if(g_auto_en)
+					break;
 				app_data.head = (app_data.head + 1) % 3;
 				break;
+			case key_l_right:                   /* 长按右键 -> 自动/手动 切换 */
+				g_auto_en = g_auto_en ? 0 : 1;
+				g_auto_st = AUTO_ST_WAIT;
+				g_present_seen = 0;
+				g_absent_seen = 0;
+				g_auto_tprobe = auto_now_ms() - AUTO_PROBE_MS;
+				oled.Refresh_flag = 1;
+				key_val.mesg = 0;
+				return;
 			case key_mid:
 				if(app_data.head != 2)          /* 选算法/文件 */
 				{
@@ -310,8 +364,16 @@ void mode2(void)
 					key_val.mesg = 0;
 					return;
 				}
+				else if(g_auto_en)              /* 自动模式: 中键 = 立刻烧录 */
+				{
+					if(auto_has_files())
+						auto_start_burn();
+					key_val.mesg = 0;
+					return;
+				}
 				else                            /* 开始烧录 -> 进度界面 */
 				{
+					g_burn_done = 0;        /* 重新开始, 不受上一次结果页影响 */
 					app_data.mode = 4;
 					OLED_Clear();
 					oled.Refresh_flag = 1;
@@ -326,17 +388,32 @@ void mode2(void)
 		key_val.mesg = 0;
 	}
 
+	/* auto mode: watch the socket, start a burn as soon as a chip shows up */
+	if(g_auto_en)
+	{
+		auto_standby_tick();
+		if(app_data.mode != 2)
+			return;
+	}
+
 	if(oled.Refresh_flag == 1)
 	{
 		OLED_Clear();
-		OLED_ShowChinese(0, 0, 4, 4, 1);
-		sprintf((char *)D, "%.21s", app_data.firmware_name);
-		OLED_ShowString(16, 0, D, 8, 1);
-		OLED_ShowChinese(24, 0, 3, 4, 1);
-		sprintf((char *)D, "%.21s", app_data.bin_name);
-		OLED_ShowString(40, 0, D, 8, 1);
-		OLED_ShowChinese(48, 0, 5, 4, 1);
-		OLED_ShowString(app_data.head * 24, 100, "<-", 16, 1);
+		if(g_auto_en)
+		{
+			auto_draw();
+		}
+		else
+		{
+			OLED_ShowChinese(0, 0, 4, 4, 1);
+			sprintf((char *)D, "%.21s", app_data.firmware_name);
+			OLED_ShowString(16, 0, D, 8, 1);
+			OLED_ShowChinese(24, 0, 3, 4, 1);
+			sprintf((char *)D, "%.21s", app_data.bin_name);
+			OLED_ShowString(40, 0, D, 8, 1);
+			OLED_ShowChinese(48, 0, 5, 4, 1);
+			OLED_ShowString(app_data.head * 24, 100, "<-", 16, 1);
+		}
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
 	}
@@ -357,6 +434,8 @@ static void show_download_status(const char *status)
 {
 	memset(OLED_GRAM[5], 0, sizeof(OLED_GRAM[5]));
 	OLED_ShowString(40, 0, (uint8_t *)status, 8, 1);
+	strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+	g_last_status[sizeof(g_last_status) - 1] = '\0';
 	OLED_Refresh();
 }
 
@@ -372,6 +451,8 @@ static void show_download_error(const char *status, uint32_t diag, uint32_t step
 	OLED_ShowString(0, 0, (uint8_t *)status, 8, 1);
 	sprintf((char *)D, "step=%02lX r0=%lX", (unsigned long)step, (unsigned long)diag);
 	OLED_ShowString(8, 0, D, 8, 1);
+	strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+	g_last_status[sizeof(g_last_status) - 1] = '\0';
 	if (addr)
 	{
 		sprintf((char *)D, "addr=%08lX", (unsigned long)addr);
@@ -407,6 +488,167 @@ static uint8_t target_connect_halt(void)
 	return seen ? 2 : 0;
 }
 
+/* ================= automatic burning ================= */
+
+static uint32_t auto_now_ms(void)
+{
+	return (uint32_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
+}
+
+static uint8_t auto_has_files(void)
+{
+	return (app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0');
+}
+
+/* 1 = a chip answered on SWD, 0 = nothing in the socket */
+static uint8_t auto_probe(void)
+{
+	uint8_t ok = 0;
+	int i;
+
+	swd_off();
+	TARGET_PWR_ON;
+	/* same timing as the burn path: start looking right at power-on,
+	   because the target application may disable SWD within a few ms */
+	for(i = 0; i < 50; i++)
+	{
+		if(swd_init_debug())
+		{
+			ok = 1;
+			break;
+		}
+		delaymS(1);
+	}
+	swd_off();
+	TARGET_PWR_OFF;
+	return ok;
+}
+
+static void auto_start_burn(void)
+{
+	g_burn_done = 0;
+	g_burn_ok = 0;
+	g_present_seen = 0;
+	g_absent_seen = 0;
+	g_auto_st = AUTO_ST_BURN;
+	app_data.mode = 4;
+	OLED_Clear();
+	oled.Refresh_flag = 1;
+	key_val.mesg = 0;
+}
+
+/* Called from mode2() only. Returns with app_data.mode changed to 4 when a
+   burn has to start. */
+static void auto_standby_tick(void)
+{
+	uint32_t now = auto_now_ms();
+
+	if(!auto_has_files())
+	{
+		g_auto_st = AUTO_ST_WAIT;
+		g_present_seen = 0;
+		return;
+	}
+
+	switch(g_auto_st)
+	{
+		case AUTO_ST_WAIT:
+			if(now - g_auto_tprobe < AUTO_PROBE_MS)
+				return;
+			g_auto_tprobe = now;
+			if(auto_probe())
+			{
+				if(++g_present_seen >= AUTO_PRESENT_CNT)
+					auto_start_burn();
+			}
+			else g_present_seen = 0;
+			break;
+
+		case AUTO_ST_BURN:
+			/* mode4 returned without reporting (key pressed during the burn) */
+			g_burn_ok = 0;
+			g_auto_st = AUTO_ST_RESULT;
+			g_auto_t0 = now;
+			oled.Refresh_flag = 1;
+			break;
+
+		case AUTO_ST_RESULT:
+			if(now - g_auto_t0 >= (g_burn_ok ? AUTO_OK_MS : AUTO_FAIL_MS))
+			{
+				g_auto_st = AUTO_ST_HOLD;
+				g_absent_seen = 0;
+				g_auto_tprobe = now;
+				oled.Refresh_flag = 1;
+			}
+			break;
+
+		default:	/* AUTO_ST_HOLD: wait for the chip to be taken out */
+			if(now - g_auto_t0 < AUTO_HOLD_MIN_MS)
+				return;
+			if(now - g_auto_tprobe < AUTO_PROBE_MS)
+				return;
+			g_auto_tprobe = now;
+			if(!auto_probe())
+			{
+				if(++g_absent_seen >= AUTO_ABSENT_CNT)
+				{
+					g_absent_seen = 0;
+					g_present_seen = 0;
+					g_auto_st = AUTO_ST_WAIT;
+					oled.Refresh_flag = 1;
+				}
+			}
+			else g_absent_seen = 0;
+			break;
+	}
+}
+
+/* Full standby screen for auto mode (the manual menu uses the Chinese
+   labels, so auto mode gets its own clean layout):
+     row0  state
+     row2  algorithm file
+     row4  bin file
+     row6  detail (OK / failure reason)
+     row7  key hint */
+static void auto_draw(void)
+{
+	const char *st, *detail;
+
+	if(!auto_has_files())
+	{
+		st = "AUTO:NO FILE";
+		detail = "";
+	}
+	else if(g_auto_st == AUTO_ST_WAIT)
+	{
+		st = "AUTO:WAIT CHIP";
+		detail = "";
+	}
+	else if(g_auto_st == AUTO_ST_BURN)
+	{
+		st = "AUTO:BURNING...";
+		detail = "";
+	}
+	else if(g_burn_ok)
+	{
+		st = "AUTO:OK";
+		detail = "REMOVE CHIP";
+	}
+	else
+	{
+		st = "AUTO:FAIL";
+		detail = g_last_status[0] ? g_last_status : "REMOVE CHIP";
+	}
+
+	OLED_ShowString(0, 0, (uint8_t *)st, 8, 1);
+	sprintf((char *)D, "ALG:%.17s", app_data.firmware_name);
+	OLED_ShowString(16, 0, D, 8, 1);
+	sprintf((char *)D, "BIN:%.17s", app_data.bin_name);
+	OLED_ShowString(32, 0, D, 8, 1);
+	OLED_ShowString(48, 0, (uint8_t *)detail, 8, 1);
+	OLED_ShowString(56, 0, "R-long:MANU", 8, 1);
+}
+
 void mode4(void)
 {
 	uint8_t err_flag = 0, is_ext_algo = 0;
@@ -418,7 +660,10 @@ void mode4(void)
 	error_t init_err = ERROR_SUCCESS;
 	uint32_t init_diag = 0;
 	uint32_t init_step = 0xFFFF;
-	static uint8_t done = 0;
+
+	/* auto mode: mode4() runs once per chip, so start from a clean slate */
+	if(g_auto_en)
+		g_burn_done = 0;
 
 	if(key_val.mesg == 1)
 	{
@@ -427,10 +672,10 @@ void mode4(void)
 			case key_left:
 			case key_right:
 			case key_mid:
-				if(done)                    /* 结果页: 单击任一键返回选择页 */
+				if(g_burn_done)             /* 结果页: 单击任一键返回选择页 */
 				{
 					app_data.mode = 2;
-					done = 0;
+					g_burn_done = 0;
 					OLED_Clear();
 					oled.Refresh_flag = 1;
 					key_val.mesg = 0;
@@ -439,7 +684,7 @@ void mode4(void)
 				break;
 			case key_d_mid:                     /* 双击 -> 返回选择页 */
 				app_data.mode = 2;
-				done = 0;
+				g_burn_done = 0;
 				OLED_Clear();
 				oled.Refresh_flag = 1;
 				key_val.mesg = 0;
@@ -447,7 +692,7 @@ void mode4(void)
 			case key_l_mid:                     /* 长按 -> 模式选择页 */
 				app_data.mode = 0;
 				app_data.head = 0;
-				done = 0;
+				g_burn_done = 0;
 				OLED_Clear();
 				show_top(1);
 				oled.Refresh_flag = 1;
@@ -461,9 +706,10 @@ void mode4(void)
 		key_val.mesg = 0;
 	}
 
-	if(done)                                    /* 已烧录完, 停留在结果页等待按键 */
+	if(g_burn_done)                             /* 已烧录完, 停留在结果页等待按键 */
 		return;
-	done = 1;
+	g_burn_done = 1;
+	g_burn_ok = 0;
 
 	OLED_Clear();
 	show_download_progress(0);
@@ -867,6 +1113,11 @@ void mode4(void)
 					show_download_status("SUC: OK (locked)");	/* 加密已生效 */
 				else
 					show_download_status("SUC: Program OK");	/* 不加密 */
+
+				/* only a clean run counts as a success for auto mode */
+				if(!opt_failed && opt_state != 2)
+					g_burn_ok = 1;
+
 				OLED_Refresh();
 				for(volatile uint32_t _d = 0; _d < 500000; _d++);
 				swd_set_target_reset(0);
@@ -880,6 +1131,15 @@ download_return:
 		swd_off();
 		TARGET_PWR_OFF;
 		oled.Refresh_flag = 1;
+		if(g_auto_en)
+		{
+			/* hand the result back to the standby page; it decides when the
+			   chip has been taken out and the next one can be burned */
+			g_auto_st = AUTO_ST_RESULT;
+			g_auto_t0 = auto_now_ms();
+			app_data.mode = 2;
+			OLED_Clear();
+		}
 	}
 	else
 	{

@@ -56,6 +56,26 @@ void OLED_DrawPoint(uint8_t x, uint8_t y, uint8_t t) {
     CHECK(x < 64 && y < 128);
     raw_DrawPoint(x, y, t);
 }
+
+/* ---- auto-burn stubs: the real state machine needs hardware ---- */
+#define AUTO_PROBE_MS 200
+#define AUTO_PRESENT_CNT 2
+#define AUTO_ABSENT_CNT 2
+#define AUTO_HOLD_MIN_MS 600
+#define AUTO_OK_MS 1500
+#define AUTO_FAIL_MS 3000
+enum { AUTO_ST_WAIT = 0, AUTO_ST_BURN, AUTO_ST_RESULT, AUTO_ST_HOLD };
+uint8_t g_auto_en = 1, g_auto_st = AUTO_ST_WAIT;
+uint8_t g_absent_seen, g_present_seen, g_burn_done, g_burn_ok;
+uint32_t g_auto_t0, g_auto_tprobe;
+char g_last_status[24];
+static void auto_draw(void);
+static uint32_t auto_now_ms(void) { return 0; }
+static uint8_t auto_has_files(void) {
+    return app_data.bin_name[0] != 0 && app_data.firmware_name[0] != 0;
+}
+static void auto_start_burn(void) { app_data.mode = 4; }
+static void auto_standby_tick(void) {}
 '''
 
 TESTS = r'''
@@ -160,6 +180,7 @@ static void event(unsigned key, void (*page)(void)) {
 static void test_pages(void) {
     unsigned sizes[] = {0, 1, 9, 130, 300}, s, i;
     char expected[32];
+    g_auto_en = 0;                       /* manual menu behaviour */
     app_data.mode = 2; app_data.head = 0;
     strcpy((char *)app_data.firmware_name, "algorithm-with-a-long-name.bin");
     strcpy((char *)app_data.bin_name, "firmware-with-a-long-name.bin");
@@ -193,8 +214,36 @@ static void test_pages(void) {
     }
     puts("PASS selector wrap and file lists: 0/1/9/130/300 entries");
 }
+static void test_auto_page(void) {
+    unsigned p, c, ink;
+    key_val.mesg = 0;
+    g_auto_en = 1; g_auto_st = AUTO_ST_WAIT; g_burn_ok = 0;
+    app_data.mode = 2; app_data.head = 2;
+    strcpy((char *)app_data.firmware_name, "MM32G0001.FLM");
+    strcpy((char *)app_data.bin_name, "app.bin");
+    oled.Refresh_flag = 1; mode2(); dump_frame("auto");
+    ink = 0;
+    for(p = 0; p < 8; p++) for(c = 0; c < 128; c++) ink += OLED_GRAM[p][c] != 0;
+    CHECK(ink > 100);
+    for(c = 0; c < 128; c++) CHECK(OLED_GRAM[6][c] == 0);   /* nothing on row 6 while waiting */
+    /* a finished burn must put the result on row 6 */
+    g_auto_st = AUTO_ST_RESULT; g_burn_ok = 1;
+    oled.Refresh_flag = 1; mode2();
+    CHECK(OLED_GRAM[6][0] != 0);
+    /* a failure must show the reason there instead */
+    g_burn_ok = 0; strcpy(g_last_status, "ER2c: Algo init");
+    oled.Refresh_flag = 1; mode2();
+    CHECK(OLED_GRAM[6][0] != 0);
+    /* no files -> auto must not burn */
+    app_data.bin_name[0] = 0;
+    g_auto_st = AUTO_ST_WAIT;
+    oled.Refresh_flag = 1; mode2();
+    CHECK(app_data.mode == 2);
+    g_auto_en = 0;
+    puts("PASS auto standby page layout and state rows");
+}
 int main(void) {
-    test_keys(); test_oled(); test_pages();
+    test_keys(); test_oled(); test_pages(); test_auto_page();
     puts("UI TESTS PASSED");
     return 0;
 }
@@ -280,6 +329,12 @@ def model_frames(font_header):
     string(24, 22, " " * 7, inverse=True)
     string(40, 0, "Programming...")
     frames["progress"] = bytes(frame)
+    frame[:] = bytes(1024)
+    string(0, 0, "AUTO:WAIT CHIP")
+    string(16, 0, "ALG:MM32G0001.FLM")
+    string(32, 0, "BIN:app.bin")
+    string(56, 0, "R-long:MANU")
+    frames["auto"] = bytes(frame)
     return frames
 
 
@@ -320,7 +375,7 @@ def main():
     source += function(oled, "OLED_DrawPoint").replace("void OLED_DrawPoint(", "void raw_DrawPoint(")
     for name in ("OLED_Clear", "OLED_ShowChar", "OLED_ShowString", "OLED_ShowChinese"):
         source += "\n" + function(oled, name)
-    for name in ("show_download_progress", "show_download_status", "mode2", "mode3"):
+    for name in ("show_download_progress", "show_download_status", "auto_draw", "mode2", "mode3"):
         source += "\n" + function(run, name)
     source += TESTS
     with tempfile.TemporaryDirectory(prefix="daplink-ui-test-") as tmp:
@@ -356,8 +411,9 @@ def main():
                 byte = glyphs[(48 + row) // 8 * 128 + index * 16 + col]
                 assert (byte >> (row % 8)) & 1 == reference[row][col]
     if args.preview:
-        canvas = Image.new("RGB", (128 * 4, 64 * 4 * 3 + 32), "#242424")
-        for index, name in enumerate(("glyphs", "selection", "progress")):
+        names = ("glyphs", "selection", "progress", "auto")
+        canvas = Image.new("RGB", (128 * 4, (len(names) - 1) * 272 + 256 + 16), "#242424")
+        for index, name in enumerate(names):
             image = Image.new("RGB", (128, 64), "black")
             for row in range(64):
                 for col in range(128):
