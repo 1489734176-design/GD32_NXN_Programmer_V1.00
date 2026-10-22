@@ -83,8 +83,9 @@ extern "C" {
 #define TGT_TCK_GPIO_Port GPIOB
 #define TGT_REREST_Pin GPIO_PIN_12
 #define TGT_REREST_GPIO_Port GPIOB
-#define USB_EN_Pin GPIO_PIN_3
-#define USB_EN_GPIO_Port GPIOB
+/* USB_EN 已飞线到 PA8（原 PB3，R25 10k 上拉到 3.3V，低有效），PB3 保持浮空 */
+#define USB_EN_Pin GPIO_PIN_8
+#define USB_EN_GPIO_Port GPIOA
 #define PWR_EN_Pin GPIO_PIN_4
 #define PWR_EN_GPIO_Port GPIOB
 #define BAT_CHARG_Pin GPIO_PIN_0
