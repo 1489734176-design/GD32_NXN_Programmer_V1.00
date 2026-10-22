@@ -4,6 +4,7 @@
 void led_init(void)
 {
 	rcu_periph_clock_enable(RCU_GPIOB);
+	rcu_periph_clock_enable(RCU_GPIOA);   /* CDC_LED 已改到 PA9 */
 	gpio_init(HID_LED_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, HID_LED_Pin);
 	gpio_init(MSC_LED_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, MSC_LED_Pin);
 	gpio_init(CDC_LED_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, CDC_LED_Pin);

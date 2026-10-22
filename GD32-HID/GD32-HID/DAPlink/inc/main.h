@@ -59,8 +59,11 @@ extern "C" {
 #define SWCLK_GPIO_Port GPIOA
 #define PWR_CRTL_Pin GPIO_PIN_4
 #define PWR_CRTL_GPIO_Port GPIOB
-#define CDC_LED_Pin GPIO_PIN_5
-#define CDC_LED_GPIO_Port GPIOB
+
+/* CDC_LED 已飞线到 PA9（原 PB5，低电平点亮）。PA9 原为 TGT_TDI，不再作 JTAG TDI */
+#define CDC_LED_Pin GPIO_PIN_9
+#define CDC_LED_GPIO_Port GPIOA
+
 #define MSC_LED_Pin GPIO_PIN_6
 #define MSC_LED_GPIO_Port GPIOB
 #define HID_LED_Pin GPIO_PIN_7
@@ -71,11 +74,15 @@ extern "C" {
 #define IIC_SDA_GPIO_Port GPIOB
 #define TGT_NTRST_Pin GPIO_PIN_10
 #define TGT_NTRST_GPIO_Port GPIOA
+/* 注意：PA9 已改作 CDC_LED 输出，TGT_TDI 实际不可用，仅保留符号避免旧代码报错 */
 #define TGT_TDI_Pin GPIO_PIN_9
 #define TGT_TDI_GPIO_Port GPIOA
 #define TGT_TDO_Pin GPIO_PIN_8
 #define TGT_TDO_GPIO_Port GPIOA
-#define TGT_TMS_Pin GPIO_PIN_15
+/* TGT_SWDIO 网络：板上 PB14/PB15 原本短接在一起。已割断 PB15 一侧，
+   SWDIO 改由 PB14 单独驱动/回读（见 DAP_config.h 的 JTAG_TMS_Pin），
+   PB15 不再属于该网络，可另作他用。以下两个宏仅为兼容保留，实际未使用 */
+#define TGT_TMS_Pin GPIO_PIN_14
 #define TGT_TMS_GPIO_Port GPIOB
 #define TGT_TMS_IN_Pin GPIO_PIN_14
 #define TGT_TMS_IN_GPIO_Port GPIOB

@@ -195,7 +195,9 @@ __STATIC_INLINE uint8_t DAP_GetSerNumString (char *str) {
 #define JTAG_TCK_Pin 							GPIO_PIN_13
 #define JTAG_TCK_GPIO_Port 				GPIOB
 
-#define JTAG_TMS_Pin 							GPIO_PIN_15
+/* SWDIO 从 PB15 改到 PB14：板上 PB14/PB15 短接在同一条 TGT_SWDIO 网络上，
+   割掉 PB15 那一侧后，PB14 独占该网络，PB15 释放出来做别的用 */
+#define JTAG_TMS_Pin 							GPIO_PIN_14
 #define JTAG_TMS_GPIO_Port 				GPIOB
 
 #define JTAG_nRESET_Pin 					GPIO_PIN_12
@@ -268,13 +270,13 @@ __STATIC_INLINE void PORT_JTAG_SETUP (void) {
 	
 	GPIO_BOP(JTAG_TCK_GPIO_Port) = (uint32_t)JTAG_TCK_Pin;
 	GPIO_BOP(JTAG_TMS_GPIO_Port) = (uint32_t)JTAG_TMS_Pin;
-	GPIO_BOP(JTAG_TDI_GPIO_Port) = (uint32_t)JTAG_TDI_Pin;
+	/* PA9(TDI) 已改作 CDC_LED 输出，JTAG 模式不再驱动 TDI */
 	GPIO_BOP(JTAG_nTRST_GPIO_Port) = (uint32_t)JTAG_nTRST_Pin;
 	GPIO_BOP(JTAG_nRESET_GPIO_Port) = (uint32_t)JTAG_nRESET_Pin;
 	
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
-	gpio_init(JTAG_TDI_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TDI_Pin);
+	/* PA9(TDI) 已改作 CDC_LED，不再配置为输出 */
 	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 	/* PA8(TDO) 已改作 USB_EN 输出，不再作为 TDO 输入配置 */
@@ -296,7 +298,7 @@ __STATIC_INLINE void PORT_SWD_SETUP (void) {
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 	
-	gpio_init(JTAG_TDI_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TDI_Pin);
+	/* PA9(TDI) 已改作 CDC_LED 输出，若在此设成浮空输入，swd_init() 会把 LED 关掉 */
 	/* PA8(TDO) 不再配置：已改作 USB_EN 输出。若在此设为浮空输入，
 	   每次 swd_init() 都会把 USB_EN 拉飞，USB 会掉线 */
 	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
@@ -311,7 +313,7 @@ __STATIC_INLINE void PORT_OFF (void) {
 
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
-	gpio_init(JTAG_TDI_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TDI_Pin);
+	/* PA9(TDI) 已改作 CDC_LED，PORT_OFF 不再动它 */
 	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 
@@ -437,11 +439,8 @@ __STATIC_FORCEINLINE uint32_t PIN_TDI_IN  (void) {
 */
 __STATIC_FORCEINLINE void     PIN_TDI_OUT (uint32_t bit) {
 	
-  if ((bit & 1U) == 1) {
-		GPIO_BOP(JTAG_TDI_GPIO_Port) = (uint32_t)JTAG_TDI_Pin;
-  } else {
-		GPIO_BC(JTAG_TDI_GPIO_Port) = (uint32_t)JTAG_TDI_Pin;
-  }
+  /* PA9(TDI) 已改作 CDC_LED，这里绝不能再驱动该脚，否则 LED 会跟着 TDI 乱闪 */
+  (void)bit;
 	
 }
 

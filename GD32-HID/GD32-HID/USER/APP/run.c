@@ -1340,6 +1340,18 @@ void usb_task(void *pvParameters)
 
 void led_task(void *pvParameters)
 {
+#if CDC_LED_SELFTEST
+	/* 上电自检：CDC_LED 已飞线到 PA9，这里闪 3 下确认接线正确。
+	   正常运行时 CDC_LED 不参与指示，只有关机充电时才会轮到它 */
+	{
+		uint8_t n;
+		for(n = 0; n < 3; n++)
+		{
+			CDC_LED_ON;  vTaskDelay(120);
+			CDC_LED_OFF; vTaskDelay(120);
+		}
+	}
+#endif
 	while(1)
 	{
 		if(app_data.hid_led_blink)

@@ -6,6 +6,12 @@
 #define CDC_LED_ON    	gpio_bit_reset(CDC_LED_GPIO_Port, CDC_LED_Pin)
 #define CDC_LED_OFF     gpio_bit_set(CDC_LED_GPIO_Port, CDC_LED_Pin)
 #define CDC_LED_TOG     
+
+/* 1 = 上电时让 CDC_LED(PA9) 闪 3 下，用来确认飞线是否接对；
+   验证完把这里改成 0（或注释掉）即可 */
+#ifndef CDC_LED_SELFTEST
+#define CDC_LED_SELFTEST   1
+#endif
 #define MSC_LED_ON    	gpio_bit_reset(MSC_LED_GPIO_Port, MSC_LED_Pin)
 #define MSC_LED_OFF     gpio_bit_set(MSC_LED_GPIO_Port, MSC_LED_Pin)
 #define MSC_LED_TOG     
