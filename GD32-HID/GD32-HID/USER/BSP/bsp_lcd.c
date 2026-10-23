@@ -176,35 +176,14 @@ void LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color) { LCD_Fill(x, y, 1, 1
 /* 设置软件反显标志，仅影响下一次 OLED 显存转换。 */
 void LCD_SetInvert(uint8_t invert) { ui_invert = (uint8_t)(invert != 0); }
 /* 设置软件旋转 180 度标志，与 LCD_DIRECTION 的屏幕方向配置独立。 */
-void LCD_SetFlip(uint8_t flip) { ui_flip = (uint8_t)(flip != 0); }
-
-/* 把原 OLED 的 128x64 单色显存转换为 LCD 黑白像素，按比例居中输出。
- * 不修改原显存，也不创建整屏彩色缓冲区。
- */
-void LCD_BlitGRAM(const uint8_t gram[8][128])
+void LCD_SetFlip(uint8_t flip)
 {
-    uint16_t row, offset, pixel;
-    uint8_t sx, sy, bit;
-    /* OLED_DrawPoint(行,列) 将页内最上方像素存于 bit0，8 行组成一页。
-     * 按原界面文字顺序渲染，屏幕扫描方向由 LCD_DIRECTION 控制。
-     */
-    for (row = 0; row < 64 * LCD_UI_SCALE; row++) {
-        sy = (uint8_t)(row / LCD_UI_SCALE); /* LCD 行映射回原 OLED 行 */
-        if (ui_flip) sy = 63 - sy;
-        for (offset = 0; offset < 128 * LCD_UI_SCALE; offset += LCD_CHUNK_PIXELS) {
-            SPI0_LCDSelect();
-            window(LCD_UI_X + offset, LCD_UI_Y + row, LCD_CHUNK_PIXELS);
-            for (pixel = 0; pixel < LCD_CHUNK_PIXELS; pixel++) {
-                sx = (uint8_t)((offset + pixel) / LCD_UI_SCALE); /* 映射回原 OLED 列 */
-                if (ui_flip) sx = 127 - sx;
-                /* sy/8 选页，sy%8 选位；异或标志实现软件黑白反显。 */
-                bit = (uint8_t)(((gram[sy >> 3][sx] >> (sy & 7)) & 1) ^ ui_invert);
-                data16(bit ? LCD_WHITE : LCD_BLACK);
-            }
-            SPI0_LCDRelease();
-            if (!SPI0_BusOK()) return;
-        }
-    }
+    static const uint8_t madctl[] = {0x00, 0x60, 0xC0, 0xA0};
+    ui_flip = (uint8_t)(flip != 0);
+    SPI0_LCDSelect();
+    command(0x36);
+    SPI0_LCDWrite(madctl[LCD_DIRECTION] ^ (ui_flip ? 0xC0 : 0));
+    SPI0_LCDRelease();
 }
 
 /* 直接字库显示仅供应用使用，Bootloader 不编译以下接口以节省空间。 */
@@ -289,3 +268,41 @@ void LCD_ShowNum(uint16_t x, uint16_t y, uint32_t number, uint8_t length, uint16
     LCD_ShowString(x, y, str, color, back, size);
 }
 #endif
+
+/* Write monochrome bitmaps directly into native LCD pixel coordinates.
+ * row-major: MSB at left; column-page: LSB at top of each eight-row page.
+ * No temporary pixel array. Each SPI transaction remains <= 128 pixels. */
+void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                  uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                  uint8_t scale, uint8_t mode)
+{
+    uint16_t row, offset, count, pixel, sx, sy, out_width, out_height;
+    uint8_t bit;
+    if(!bitmap || !scale || scale > 4 || !width || !height ||
+       x >= LCD_WIDTH || y >= LCD_HEIGHT) return;
+    out_width = width * scale;
+    out_height = height * scale;
+    if(out_width > LCD_WIDTH - x) out_width = LCD_WIDTH - x;
+    if(out_height > LCD_HEIGHT - y) out_height = LCD_HEIGHT - y;
+    for(row = 0; row < out_height; row++)
+    {
+        sy = row / scale;
+        for(offset = 0; offset < out_width; offset += count)
+        {
+            count = out_width - offset;
+            if(count > LCD_CHUNK_PIXELS) count = LCD_CHUNK_PIXELS;
+            SPI0_LCDSelect();
+            window(x + offset, y + row, count);
+            for(pixel = 0; pixel < count; pixel++)
+            {
+                sx = (offset + pixel) / scale;
+                if(column_pages) bit = (bitmap[(sy >> 3) * stride + sx] >> (sy & 7)) & 1;
+                else bit = (bitmap[sy * stride + sx / 8] >> (7 - (sx & 7))) & 1;
+                bit ^= (uint8_t)(!mode) ^ ui_invert;
+                data16(bit ? LCD_WHITE : LCD_BLACK);
+            }
+            SPI0_LCDRelease();
+            if(!SPI0_BusOK()) return;
+        }
+    }
+}

@@ -36,7 +36,10 @@ OF SUCH DAMAGE.
 */
 
 #include "usbd_transc.h"
+#include "firmware_features.h"
 #include "custom_hid_core.h"
+#if DAP_ONLINE_ENABLE
+
 #include <string.h>
 #include "bsp_led.h"
 
@@ -75,6 +78,11 @@ OF SUCH DAMAGE.
 #define USB_DESCTYPE_CDT                            0x10U
 #define USBD_WINUSB_VENDOR_CODE     								0x20
 
+
+#ifdef USBD_BOS_ENABLE
+extern const uint8_t binaryobjectstore_desc[];
+extern const uint8_t winusbdescriptorsetdescriptor[];
+#endif
 
 extern void USBD_HID0_SetReport (usb_dev *udev, uint8_t ep_num);
 /* Note:it should use the C99 standard when compiling the below codes */
@@ -179,74 +187,7 @@ usb_hid_desc_config_set custom_hid_config_desc =
     }
 };
 
-#ifdef USBD_BOS_ENABLE
-/* BOS Descriptor: only headers (5 + 28 = 33 bytes) */
-const uint8_t binaryobjectstore_desc[] = {
-		5,                                        // bLength
-    USB_DESCTYPE_BOS,                         // bDescriptorType (0x0F)
-    WBVAL(33),                                // wTotalLength (5 BOS + 28 Platform Cap)
-    USBD_NUM_DEV_CAPABILITIES,                // bNumDeviceCaps
 
-    /*** MS OS 2.0 Platform Capability Descriptor (header only) ***/
-    28,                                       // bLength (0x1C)
-    USB_DESCTYPE_CDT,                         // bDescriptorType (0x10)
-    USB_DEVICE_CAPABILITY_PLATFORM,           // bDevCapabilityType (0x05)
-    0x00,                                     // bReserved
-    0xDF, 0x60, 0xDD, 0xD8,                   // PlatformCapabilityUUID
-    0x89, 0x45, 0xC7, 0x4C,
-    0x9C, 0xD2, 0x65, 0x9D,
-    0x9E, 0x64, 0x8A, 0x9F,
-    0x00, 0x00, 0x03, 0x06,                   // dwWindowsVersion: 0x06030000
-    WBVAL(USBD_WINUSB_DESC_SET_LEN),          // wMSOSDescriptorSetTotalLength (170)
-    USBD_WINUSB_VENDOR_CODE,                  // bMS_VendorCode (0x20)
-    0x00,                                     // bAltEnumCode
-};
-
-const uint8_t winusbdescriptorsetdescriptor[] = {
-    /*** Microsoft OS 2.0 Descriptor Set Header ***/
-    WBVAL(WINUSB_DESCRIPTOR_SET_HEADER_SIZE), // wLength
-    WBVAL(WINUSB_SET_HEADER_DESCRIPTOR_TYPE),   //wDescriptorType
-
-    0x00, 0x00, 0x03, 0x06,     // dwWindowsVersion: 0x06030000 for Windows 8.1
-
-    WBVAL(USBD_WINUSB_DESC_SET_LEN),          // wDescriptorSetTotalLength
-
-    /*** Microsoft OS 2.0 function subset header ***/
-    WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE),/* wLength */
-    WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE),/* wDescriptorType */
-    1,                                        /* bFirstInterface - CustomBulk IF1 */
-    0,                                        /* bReserved */
-    WBVAL(FUNCTION_SUBSET_LEN),               /* wSubsetLength */
-
-    /*** Microsoft OS 2.0 compatible ID descriptor ***/
-    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_SIZE), /* wLength */
-    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_TYPE), /* wDescriptorType */
-    'W', 'I', 'N', 'U', 'S', 'B', 0, 0,       /* CompatibleId*/
-    0, 0, 0, 0, 0, 0, 0, 0,                   /* SubCompatibleId*/
-
-    /*** MS OS 2.0 registry property descriptor ***/
-    WBVAL(DEVICE_INTERFACE_GUIDS_FEATURE_LEN),/* wLength */
-    WBVAL(WINUSB_FEATURE_REG_PROPERTY_TYPE),  /* wDescriptorType */
-    WBVAL(WINUSB_PROP_DATA_TYPE_REG_MULTI_SZ), /* wPropertyDataType */
-
-    // PropertyName: "DeviceInterfaceGUID"
-    WBVAL(42), /* wPropertyNameLength */
-    'D',0,'e',0,'v',0,'i',0,'c',0,'e',0,
-    'I',0,'n',0,'t',0,'e',0,'r',0,'f',0,'a',0,'c',0,'e',0,
-    'G',0,'U',0,'I',0,'D',0,'s',0,0,0,
-
-    // PropertyData: "{CDB3B5AD-293B-4663-AA36-1AAE46463776}"
-    WBVAL(80), /* wPropertyDataLength */
-    '{',0,
-    'C',0,'D',0,'B',0,'3',0,'B',0,'5',0,'A',0,'D',0,'-',0,
-    '2',0,'9',0,'3',0,'B',0,'-',0,
-    '4',0,'6',0,'6',0,'3',0,'-',0,
-    'A',0,'A',0,'3',0,'6',0,'-',
-    0,'1',0,'A',0,'A',0,'E',0,'4',0,'6',0,'4',0,'6',0,'3',0,'7',0,'7',0,'6',0,
-    '}',0,0,0,0,0,
-};
-
-#endif
 /* USB language ID descriptor */
 const static usb_desc_LANGID usbd_language_id_desc = 
 {
@@ -581,3 +522,5 @@ static void custom_hid_data_out (usb_dev *udev, uint8_t ep_num)
 		app_data.hid_cnt++;
 		USBD_HID0_SetReport(udev, ep_num);
 }
+
+#endif /* DAP_ONLINE_ENABLE */

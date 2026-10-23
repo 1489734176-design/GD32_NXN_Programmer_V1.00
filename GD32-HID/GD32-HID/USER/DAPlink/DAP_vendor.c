@@ -28,6 +28,8 @@
 #include "DAP_config.h"
 #include "DAP.h"
 
+#if DAP_ONLINE_ENABLE
+
 //**************************************************************************************************
 /** 
 \defgroup DAP_Vendor_Adapt_gr Adapt Vendor Commands
@@ -98,3 +100,5 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
 }
 
 ///@}
+
+#endif /* DAP_ONLINE_ENABLE */

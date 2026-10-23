@@ -54,6 +54,7 @@
 
 
          DAP_Data_t DAP_Data;           // DAP Data
+#if DAP_ONLINE_ENABLE
 volatile uint8_t    DAP_TransferAbort;  // Transfer Abort Flag
 
 
@@ -1746,6 +1747,9 @@ uint32_t DAP_ExecuteCommand(const uint8_t *request, uint8_t *response) {
 }
 
 
+#endif /* DAP_ONLINE_ENABLE */
+
+/* Shared initialization is required by offline SWD_host.c. */
 // Setup DAP
 void DAP_Setup(void) {
 

@@ -71,6 +71,8 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#include "firmware_features.h"
+
 #include	"stdio.h"
 //针对不同的编译器调用不同的stdint.h文件
 #if defined(__ICCARM__) || defined(__CC_ARM) || defined(__GNUC__)
@@ -117,7 +119,12 @@
 /*                                FreeRTOS与内存申请有关配置选项                                                */
 /***************************************************************************************************************/
 #define configSUPPORT_DYNAMIC_ALLOCATION        1                       //支持动态内存申请
+#if DAP_ONLINE_ENABLE
 #define configTOTAL_HEAP_SIZE										((size_t)(8*1024))     //系统所有总的堆大小
+#else
+/* USB DAP + timer daemon stacks/TCBs are absent; retain offline heap headroom. */
+#define configTOTAL_HEAP_SIZE ((size_t)(6*1024))
+#endif
 
 /***************************************************************************************************************/
 /*                                FreeRTOS与钩子函数有关的配置选项                                              */
@@ -143,7 +150,7 @@
 /***************************************************************************************************************/
 /*                                FreeRTOS与软件定时器有关的配置选项                                            */
 /***************************************************************************************************************/
-#define configUSE_TIMERS				        				1                               //为1时启用软件定时器
+#define configUSE_TIMERS				        				DAP_ONLINE_ENABLE                               //为1时启用软件定时器
 #define configTIMER_TASK_PRIORITY		        		(configMAX_PRIORITIES-1)        //软件定时器优先级
 #define configTIMER_QUEUE_LENGTH		        		5                               //软件定时器队列长度
 #define configTIMER_TASK_STACK_DEPTH	        	(configMINIMAL_STACK_SIZE*2)    //软件定时器任务堆栈大小
@@ -160,7 +167,7 @@
 #define INCLUDE_vTaskDelayUntil			        		1
 #define INCLUDE_vTaskDelay				        			1
 #define INCLUDE_eTaskGetState			        			1
-#define INCLUDE_xTimerPendFunctionCall	        1
+#define INCLUDE_xTimerPendFunctionCall	        DAP_ONLINE_ENABLE
 
 /***************************************************************************************************************/
 /*                                FreeRTOS与中断有关的配置选项                                                  */

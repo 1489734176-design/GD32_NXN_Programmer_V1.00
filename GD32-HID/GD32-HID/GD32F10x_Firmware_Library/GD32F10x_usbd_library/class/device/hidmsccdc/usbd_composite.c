@@ -123,6 +123,7 @@ const Composite_desc_config Composite_config_desc =
         .bmAttributes         = 0x80U,
         .bMaxPower            = 0xFAU
     },
+#if DAP_ONLINE_ENABLE
 		.hid_iad =
 		{
 				 .header =
@@ -189,6 +190,20 @@ const Composite_desc_config Composite_config_desc =
         .wMaxPacketSize       = CUSTOMHID_IN_PACKET,
         .bInterval            = 0x01U
     },
+#else
+    /* Endpoint-free IF0 preserves existing PC tool and driver interface numbers. */
+    .reserved_itf =
+    {
+        .header = { .bLength = sizeof(usb_desc_itf), .bDescriptorType = USB_DESCTYPE_ITF },
+        .bInterfaceNumber = 0x00U,
+        .bAlternateSetting = 0x00U,
+        .bNumEndpoints = 0x00U,
+        .bInterfaceClass = 0xFFU,
+        .bInterfaceSubClass = 0x00U,
+        .bInterfaceProtocol = 0x00U,
+        .iInterface = 0x00U
+    },
+#endif
 		.cb_iad =
 		{
 				 .header =
@@ -392,10 +407,18 @@ const static usb_desc_str product_string =
 {
     .header =
      {
+#if DAP_ONLINE_ENABLE
          .bLength         = USB_STRING_LEN(14U),
+#else
+         .bLength         = USB_STRING_LEN(15U),
+#endif
          .bDescriptorType = USB_DESCTYPE_STR,
      },
+#if DAP_ONLINE_ENABLE
     .unicode_string = {'C', 'M', 'S', 'I', 'S', '-', 'D', 'A', 'P', ' ','v','2','.','1'}
+#else
+    .unicode_string = {'D','A','P','L','I','N','K',' ','O','f','f','l','i','n','e'}
+#endif
 };
 
 /* USB serial string */
@@ -441,9 +464,74 @@ static uint8_t* usbd_hid_strings[] =
 		[9]								= (uint8_t *)&os_string
 };
 
+/* Shared WinUSB descriptors belong to the composite device, not the optional HID. */
 #ifdef USBD_BOS_ENABLE
-extern const uint8_t binaryobjectstore_desc[];
-extern const uint8_t winusbdescriptorsetdescriptor[];
+/* BOS Descriptor: only headers (5 + 28 = 33 bytes) */
+const uint8_t binaryobjectstore_desc[] = {
+		5,                                        // bLength
+    USB_DESCTYPE_BOS,                         // bDescriptorType (0x0F)
+    WBVAL(33),                                // wTotalLength (5 BOS + 28 Platform Cap)
+    USBD_NUM_DEV_CAPABILITIES,                // bNumDeviceCaps
+
+    /*** MS OS 2.0 Platform Capability Descriptor (header only) ***/
+    28,                                       // bLength (0x1C)
+    0x10U,                         // bDescriptorType (0x10)
+    USB_DEVICE_CAPABILITY_PLATFORM,           // bDevCapabilityType (0x05)
+    0x00,                                     // bReserved
+    0xDF, 0x60, 0xDD, 0xD8,                   // PlatformCapabilityUUID
+    0x89, 0x45, 0xC7, 0x4C,
+    0x9C, 0xD2, 0x65, 0x9D,
+    0x9E, 0x64, 0x8A, 0x9F,
+    0x00, 0x00, 0x03, 0x06,                   // dwWindowsVersion: 0x06030000
+    WBVAL(USBD_WINUSB_DESC_SET_LEN),          // wMSOSDescriptorSetTotalLength (170)
+    USBD_WINUSB_VENDOR_CODE,                  // bMS_VendorCode (0x20)
+    0x00,                                     // bAltEnumCode
+};
+
+const uint8_t winusbdescriptorsetdescriptor[] = {
+    /*** Microsoft OS 2.0 Descriptor Set Header ***/
+    WBVAL(WINUSB_DESCRIPTOR_SET_HEADER_SIZE), // wLength
+    WBVAL(WINUSB_SET_HEADER_DESCRIPTOR_TYPE),   //wDescriptorType
+
+    0x00, 0x00, 0x03, 0x06,     // dwWindowsVersion: 0x06030000 for Windows 8.1
+
+    WBVAL(USBD_WINUSB_DESC_SET_LEN),          // wDescriptorSetTotalLength
+
+    /*** Microsoft OS 2.0 function subset header ***/
+    WBVAL(WINUSB_FUNCTION_SUBSET_HEADER_SIZE),/* wLength */
+    WBVAL(WINUSB_SUBSET_HEADER_FUNCTION_TYPE),/* wDescriptorType */
+    1,                                        /* bFirstInterface - CustomBulk IF1 */
+    0,                                        /* bReserved */
+    WBVAL(FUNCTION_SUBSET_LEN),               /* wSubsetLength */
+
+    /*** Microsoft OS 2.0 compatible ID descriptor ***/
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_SIZE), /* wLength */
+    WBVAL(WINUSB_FEATURE_COMPATIBLE_ID_TYPE), /* wDescriptorType */
+    'W', 'I', 'N', 'U', 'S', 'B', 0, 0,       /* CompatibleId*/
+    0, 0, 0, 0, 0, 0, 0, 0,                   /* SubCompatibleId*/
+
+    /*** MS OS 2.0 registry property descriptor ***/
+    WBVAL(DEVICE_INTERFACE_GUIDS_FEATURE_LEN),/* wLength */
+    WBVAL(WINUSB_FEATURE_REG_PROPERTY_TYPE),  /* wDescriptorType */
+    WBVAL(WINUSB_PROP_DATA_TYPE_REG_MULTI_SZ), /* wPropertyDataType */
+
+    // PropertyName: "DeviceInterfaceGUID"
+    WBVAL(42), /* wPropertyNameLength */
+    'D',0,'e',0,'v',0,'i',0,'c',0,'e',0,
+    'I',0,'n',0,'t',0,'e',0,'r',0,'f',0,'a',0,'c',0,'e',0,
+    'G',0,'U',0,'I',0,'D',0,'s',0,0,0,
+
+    // PropertyData: "{CDB3B5AD-293B-4663-AA36-1AAE46463776}"
+    WBVAL(80), /* wPropertyDataLength */
+    '{',0,
+    'C',0,'D',0,'B',0,'3',0,'B',0,'5',0,'A',0,'D',0,'-',0,
+    '2',0,'9',0,'3',0,'B',0,'-',0,
+    '4',0,'6',0,'6',0,'3',0,'-',0,
+    'A',0,'A',0,'3',0,'6',0,'-',
+    0,'1',0,'A',0,'A',0,'E',0,'4',0,'6',0,'4',0,'6',0,'3',0,'7',0,'7',0,'6',0,
+    '}',0,0,0,0,0,
+};
+
 #endif
 
 usb_desc Composite_desc =
@@ -477,7 +565,9 @@ usb_class Composite_class = {
 
 static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 {
+#if DAP_ONLINE_ENABLE
 		custom_hid_class.init(udev, config_index);
+#endif
 		custombulk_class.init(udev, config_index);
 	  cdc_class.init(udev, config_index);
     return USBD_OK;
@@ -492,7 +582,9 @@ static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 */
 static uint8_t Composite_deinit (usb_dev *udev, uint8_t config_index)
 {
+#if DAP_ONLINE_ENABLE
 		custom_hid_class.deinit(udev, config_index);
+#endif
 		custombulk_class.deinit(udev, config_index);
 	  cdc_class.deinit(udev, config_index);
     return USBD_OK;
@@ -524,7 +616,9 @@ static uint8_t Composite_req_handler (usb_dev *udev, usb_req *req)
 
 		switch(req->wIndex & 0xFF)
 		{
+#if DAP_ONLINE_ENABLE
 			case CUSTOM_HID_INTERFACE : status = custom_hid_class.req_process(udev, req); break;
+#endif
 			case CUSTOMBULK_INTERFACE : status = custombulk_class.req_process(udev, req); break;
 			case CDC_COM_INTERFACE : status = cdc_class.req_process(udev, req); break;
 		}
@@ -537,7 +631,9 @@ static void Composite_data_in (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
+#if DAP_ONLINE_ENABLE
 			case (CUSTOMHID_IN_EP & 0x7FU): custom_hid_class.data_in(udev, ep_num); break;
+#endif
 			case (CUSTOMBULK_IN_EP & 0x7FU): custombulk_class.data_in(udev, ep_num); break;
 			case (CDC_IN_EP & 0x7FU): cdc_class.data_in(udev, ep_num); break;
 		}
@@ -554,7 +650,9 @@ static void Composite_data_out (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
+#if DAP_ONLINE_ENABLE
 			case (CUSTOMHID_OUT_EP & 0x7FU): custom_hid_class.data_out(udev, ep_num); break;
+#endif
 			case (CUSTOMBULK_OUT_EP & 0x7FU): custombulk_class.data_out(udev, ep_num); break;
 			case (CDC_OUT_EP & 0x7FU): cdc_class.data_out(udev, ep_num); break;
 		}

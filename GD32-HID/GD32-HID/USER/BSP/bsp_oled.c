@@ -1,336 +1,171 @@
 #include "bsp_oled.h"
-#include "font.h"
-#include "gd32f10x_i2c.h"
 #include "bsp_lcd.h"
+#include "font.h"
+#include "ui_chinese_font.h"
 
-/* LCD 移植兼容层：保留原 OLED 绘图及 128x64 显存接口，
- * 刷新时由 LCD_BlitGRAM 转换到 ST7789，原上层界面继续使用 OLED API。
- */
+/* Native pixel coordinates, no MCU framebuffer. LCD owns the displayed pixels.
+ * Chinese: the same thin SimSun 16x16 bitmap at 1x or integer 2x scale.
+ * Text size is its pixel height; x is the column, y is the row. */
+oled_TypeDef oled = {0x79, 0x78, 0};
 
-uint8_t OLED_GRAM[8][128];
-
-oled_TypeDef oled = 
-{
-    .oled_Read_addr = 0X79,
-    .oled_Write_addr = 0X78,
-		.Refresh_flag = 0,
-};
-
-void OLED_Init(void)
-{
-    LCD_Init();
-    OLED_Clear();
-}
-
-//发送一个字节
-//mode:数据/命令标志 0,表示命令;1,表示数据;
-void OLED_WR_Byte(uint8_t dat, uint8_t mode)
-{
-    /* 原 SSD1306 的原始命令不适用于 ST7789；保留接口但不发送这些字节。 */
-    (void)dat;
-    (void)mode;
-}
-
-
-//开启OLED显示 
+void OLED_Init(void) { LCD_Init(); }
+void OLED_WR_Byte(uint8_t dat, uint8_t mode) { (void)dat; (void)mode; }
 void OLED_DisPlay_On(void) { LCD_DisplayOn(); }
-
-//关闭OLED显示 
 void OLED_DisPlay_Off(void) { LCD_DisplayOff(); }
-
-//清屏函数
-void OLED_Clear(void)
-{
-	uint8_t i,j;
-	for(i=0;i<8;i++)
-	{
-	    for(j=0;j<128;j++)
-	    {
-			 OLED_GRAM[i][j]=0;//清除所有数据
-		}
-    }
-//	OLED_Refresh();//更新显示
-}
-
-
-// 将原 OLED 显存按比例居中刷新到 LCD，不再通过 I2C 访问 OLED
-void OLED_Refresh(void) { LCD_BlitGRAM((const uint8_t (*)[128])OLED_GRAM); }
-//反显函数
+void OLED_Clear(void) { LCD_Clear(LCD_BLACK); }
+void OLED_Refresh(void) { /* Direct drawing is complete on return. */ }
 void OLED_ColorTurn(uint8_t i) { LCD_SetInvert(i); }
+void OLED_DisplayTurn(uint8_t i) { LCD_SetFlip((uint8_t)(i == 0)); }
 
-//屏幕旋转180度
-void OLED_DisplayTurn(uint8_t i)
+static const uint8_t *find_chinese(uint16_t code)
 {
-    /* 保持原接口约定：i=1 为正常安装方向，i=0 对界面旋转 180 度。 */
-    LCD_SetFlip((uint8_t)(i == 0));
-}
-//画点 
-//x:0~63
-//y:0~127
-//t:1 填充 0,清空	
-void OLED_DrawPoint(uint8_t x,uint8_t y,uint8_t t)
-{
-	uint8_t i,m,n;
-	i=x/8;
-	m=x%8;
-	n=1<<m;
-	if(t){OLED_GRAM[i][y]|=n;}
-	else
-	{
-		OLED_GRAM[i][y]=~OLED_GRAM[i][y];
-		OLED_GRAM[i][y]|=n;
-		OLED_GRAM[i][y]=~OLED_GRAM[i][y];
-	}
-}
-
-//画线
-//x1,y1:起点坐标
-//x2,y2:结束坐标
-void OLED_DrawLine(uint8_t x1,uint8_t y1,uint8_t x2,uint8_t y2,uint8_t mode)
-{
-	uint16_t t; 
-	int xerr=0,yerr=0,delta_x,delta_y,distance;
-	int incx,incy,uRow,uCol;
-	delta_x=x2-x1; //计算坐标增量 
-	delta_y=y2-y1;
-	uRow=x1;//画线起点坐标
-	uCol=y1;
-	if(delta_x>0)incx=1; //设置单步方向 
-	else if (delta_x==0)incx=0;//垂直线 
-	else {incx=-1;delta_x=-delta_x;}
-	if(delta_y>0)incy=1;
-	else if (delta_y==0)incy=0;//水平线 
-	else {incy=-1;delta_y=-delta_x;}
-	if(delta_x>delta_y)distance=delta_x; //选取基本增量坐标轴 
-	else distance=delta_y;
-	for(t=0;t<distance+1;t++)
-	{
-		OLED_DrawPoint(uRow,uCol,mode);//画点
-		xerr+=delta_x;
-		yerr+=delta_y;
-		if(xerr>distance)
-		{
-			xerr-=distance;
-			uRow+=incx;
-		}
-		if(yerr>distance)
-		{
-			yerr-=distance;
-			uCol+=incy;
-		}
-	}
-}
-//x,y:圆心坐标
-//r:圆的半径
-void OLED_DrawCircle(uint8_t x,uint8_t y,uint8_t r)
-{
-	int a, b,num;
-    a = 0;
-    b = r;
-    while(2 * b * b >= r * r)      
+    uint16_t lo = 0, hi = sizeof(ui_glyph16) / sizeof(ui_glyph16[0]);
+    while(lo < hi)
     {
-        OLED_DrawPoint(x + a, y - b,1);
-        OLED_DrawPoint(x - a, y - b,1);
-        OLED_DrawPoint(x - a, y + b,1);
-        OLED_DrawPoint(x + a, y + b,1);
- 
-        OLED_DrawPoint(x + b, y + a,1);
-        OLED_DrawPoint(x + b, y - a,1);
-        OLED_DrawPoint(x - b, y - a,1);
-        OLED_DrawPoint(x - b, y + a,1);
-        
-        a++;
-        num = (a * a + b * b) - r*r;//计算画的点离圆心的距离
-        if(num > 0)
+        uint16_t mid = (lo + hi) / 2;
+        if(ui_glyph16[mid].code == code) return ui_glyph16[mid].data;
+        if(ui_glyph16[mid].code < code) lo = mid + 1;
+        else hi = mid;
+    }
+    return NULL;
+}
+
+static uint8_t gbk(const char *s)
+{
+    uint8_t first = (uint8_t)s[0], next;
+    if(first < 0x81 || first > 0xFE) return 0;
+    next = (uint8_t)s[1];
+    return next >= 0x40 && next <= 0xFE && next != 0x7F;
+}
+
+uint16_t UI_TextWidth(const char *s, uint8_t size)
+{
+    uint16_t width = 0;
+    if(!s || (size != 16 && size != 32)) return 0;
+    while(*s)
+    {
+        if(gbk(s)) { width += size; s += 2; }
+        else { width += size / 2; s++; }
+    }
+    return width;
+}
+
+/* Return the first undisplayed character, always at a complete GBK boundary. */
+const char *UI_TextLine(uint16_t x, uint16_t y, uint16_t width,
+                        const char *s, uint8_t size, uint8_t mode)
+{
+    uint16_t end, advance;
+    uint8_t scale = size / 16;
+    const uint8_t *bitmap;
+    if(!s || (size != 16 && size != 32) || x >= LCD_WIDTH ||
+       y >= LCD_HEIGHT || size > LCD_HEIGHT - y) return s;
+    if(width > LCD_WIDTH - x) width = LCD_WIDTH - x;
+    end = x + width;
+    while(*s)
+    {
+        advance = gbk(s) ? size : size / 2;
+        if(advance > end - x) break;
+        if(gbk(s))
         {
-            b--;
-            a--;
+            bitmap = find_chinese(((uint16_t)(uint8_t)s[0] << 8) | (uint8_t)s[1]);
+            if(bitmap) LCD_BlitMono(x, y, 16, 16, 2, bitmap, 0, scale, mode);
+            else LCD_BlitMono(x, y, 8, 16, 8, asc2_1608['?' - ' '], 1, scale, mode);
+            s += 2;
         }
+        else
+        {
+            uint8_t ch = (uint8_t)*s++;
+            if(ch < ' ' || ch > '~') ch = '?';
+            LCD_BlitMono(x, y, 8, 16, 8, asc2_1608[ch - ' '], 1, scale, mode);
+        }
+        x += advance;
+    }
+    return s;
+}
+
+void UI_Text(uint16_t x, uint16_t y, const char *s, uint8_t size, uint8_t mode)
+{
+    UI_TextLine(x, y, LCD_WIDTH, s, size, mode);
+}
+
+void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                const char *s, uint8_t size, uint8_t mode)
+{
+    const char *next;
+    if(!s || y >= LCD_HEIGHT) return;
+    if(height > LCD_HEIGHT - y) height = LCD_HEIGHT - y;
+    UI_Fill(x, y, width, height, (uint8_t)(!mode));
+    UI_Fill(x, y, width, height, (uint8_t)(!mode));
+    while(*s && height >= size)
+    {
+        next = UI_TextLine(x, y, width, s, size, mode);
+        if(next == s) break;
+        s = next;
+        y += size;
+        height -= size;
     }
 }
 
-//x,y：起点坐标
-//sizex,sizey,图片长宽
-//BMP[]：要写入的图片数组
-//mode:0,反色显示;1,正常显示
-void OLED_ShowPicture(uint8_t x,uint8_t y,uint8_t sizex,uint8_t sizey,uint8_t BMP[],uint8_t mode)
+void UI_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t on)
 {
-	uint16_t j=0;
-	uint8_t i,n,temp,m;
-	uint8_t x0=x,y0=y;
-	sizey=sizey/8+((sizey%8)?1:0);
-	for(n=0;n<sizey;n++)
-	{
-		for(i=0;i<sizex;i++)
-		{
-			temp=BMP[j];
-			j++;
-			for(m=0;m<8;m++)
-			{
-				if(temp&0x01)OLED_DrawPoint(x,y,mode);
-				else OLED_DrawPoint(x,y,!mode);
-				temp>>=1;
-				y++;
-			}
-			x++;
-			if((x-x0)==sizex)
-			{
-				x=x0;
-				y0=y0+8;
-			}
-			y=y0;
+    LCD_Fill(x, y, width, height, on ? LCD_WHITE : LCD_BLACK);
+}
+
+void UI_Logo(uint16_t x, uint16_t y, uint8_t index)
+{
+#ifndef LCD_BAREMETAL
+    if(index < sizeof(logo) / sizeof(logo[0]))
+        LCD_BlitMono(x, y, 18, 8, 18, logo[index], 1, 2, 1);
+#else
+    (void)x; (void)y; (void)index;
+#endif
+}
+
+void UI_BootLogo(const uint8_t *data)
+{
+    LCD_BlitMono(32, 40, 128, 64, 128, data, 1, 2, 1);
+}
+
+void UI_Progress(uint16_t y, uint8_t percent)
+{
+    char text[5];
+    if(percent > 100) percent = 100;
+    UI_Fill(8, y, 304, 32, 0);
+    UI_Fill(8, y + 4, 220, 24, 1);
+    UI_Fill(10, y + 6, 216, 20, 0);
+    UI_Fill(10, y + 6, (uint16_t)(216U * percent / 100), 20, 1);
+    text[0] = percent == 100 ? '1' : ' ';
+    text[1] = percent >= 10 ? '0' + (percent / 10) % 10 : ' ';
+    text[2] = '0' + percent % 10;
+    text[3] = '%'; text[4] = 0;
+    UI_Text(244, y, text, 32, 1);
+}
+
+/* Legacy optional online traffic graphs retain their row/column API.
+ * The default offline UI uses UI_* exclusively. */
+void OLED_DrawPoint(uint8_t row, uint8_t col, uint8_t on)
+{
+    if(row < 64 && col < 128) UI_Fill(8 + col * 2, 32 + row * 2, 2, 2, on);
+}
+
+void OLED_DrawLine(uint8_t r1, uint8_t c1, uint8_t r2, uint8_t c2, uint8_t on)
+{
+    int r = r1, c = c1, dr = r2 - r1, dc = c2 - c1;
+    int sr = dr < 0 ? -1 : 1, sc = dc < 0 ? -1 : 1, error, twice;
+    if(dr < 0) dr = -dr;
+    if(dc < 0) dc = -dc;
+    error = dr - dc;
+    for(;;)
+    {
+        OLED_DrawPoint((uint8_t)r, (uint8_t)c, on);
+        if(r == r2 && c == c2) break;
+        twice = 2 * error;
+        if(twice > -dc) { error -= dc; r += sr; }
+        if(twice < dr) { error += dr; c += sc; }
     }
-	}
 }
-//m^n
-uint32_t OLED_Pow(uint8_t m,uint8_t n)
+
+void OLED_ShowString(uint8_t row, uint8_t col, uint8_t *s, uint8_t size, uint8_t mode)
 {
-	uint32_t result=1;
-	while(n--)
-	{
-	  result*=m;
-	}
-	return result;
+    UI_Text(8 + col * 2, 32 + row * 2, (const char *)s, size == 16 ? 32 : 16, mode);
 }
-//在指定位置显示一个字符,包括部分字符
-//x:0~127
-//y:0~63
-//size1:选择字体 6x8/6x12/8x16/12x24
-//mode:0,反色显示;1,正常显示
-void OLED_ShowChar(uint8_t x,uint8_t y,uint8_t chr,uint8_t size1,uint8_t mode)
-{
-	uint8_t i,m,temp,size2,chr1;
-	uint8_t x0=x,y0=y;
-	if(size1==8)size2=6;
-	else size2=(size1/8+((size1%8)?1:0))*(size1/2);  //得到字体一个字符对应点阵集所占的字节数
-	chr1=chr-' ';  //计算偏移后的值
-	for(i=0;i<size2;i++)
-	{
-		if(size1==8)
-			  {temp=asc2_0806[chr1][i];} //调用0806字体
-		else if(size1==12)
-        {temp=asc2_1206[chr1][i];} //调用1206字体
-		else if(size1==16)
-        {temp=asc2_1608[chr1][i];} //调用1608字体
-		else return;
-		for(m=0;m<8;m++)
-		{
-			if(temp&0x01)OLED_DrawPoint(x,y,mode);
-			else OLED_DrawPoint(x,y,!mode);
-			temp>>=1;
-			x++;
-		}
-		y++;
-		if((size1!=8)&&((y-y0)==size1/2))
-		{y=y0;x0=x0+8;}
-		x=x0;
-  }
-}
-
-
-//显示字符串
-//x,y:起点坐标  
-//size1:字体大小 
-//*chr:字符串起始地址 
-//mode:0,反色显示;1,正常显示
-void OLED_ShowString(uint8_t x,uint8_t y,uint8_t *chr,uint8_t size1,uint8_t mode)
-{
-	while((*chr>=' ')&&(*chr<='~'))//判断是不是非法字符!
-	{
-		OLED_ShowChar(x,y,*chr,size1,mode);
-		if(size1==8)y+=6;
-		else y+=size1/2;
-		chr++;
-  }
-}
-
-//显示数字
-//x,y :起点坐标
-//num :要显示的数字
-//len :数字的位数
-//size:字体大小
-//mode:0,反色显示;1,正常显示
-void OLED_ShowNum(uint8_t x,uint8_t y,uint32_t num,uint8_t len,uint8_t size1,uint8_t mode)
-{
-	uint8_t t,temp,m=0;
-	if(size1==8)m=2;
-	for(t=0;t<len;t++)
-	{
-		temp=(num/OLED_Pow(10,len-t-1))%10;
-			if(temp==0)
-			{
-				OLED_ShowChar(x,y+(size1/2+m)*t,'0',size1,mode);
-      }
-			else 
-			{
-			  OLED_ShowChar(x,y+(size1/2+m)*t,temp+'0',size1,mode);
-			}
-  }
-}
-
-//显示数字
-//x,y :起点坐标
-//index :要显示保存的汉字
-//len :汉字的位数
-//mode:0,反色显示;1,正常显示
-void OLED_ShowChinese(uint8_t x, uint8_t y, uint8_t index, uint8_t len, uint8_t mode)
-{
-	uint8_t i,j,z;
-	uint8_t x1 = x, x2 = x, y1 = y, y2 = y;
-	uint8_t temp;
-	
-	for(i = 0; i < len; i++)
-	{
-		for(j = 0; j < 32; j++)
-		{
-			switch(index)
-			{
-				case 1: temp = string_1[i][j];break;
-				case 2: temp = string_2[i][j];break;
-				case 3: temp = string_3[i][j];break;
-				case 4: temp = string_4[i][j];break;
-				case 5: temp = string_5[i][j];break;
-			}
-			
-			for(z = 0; z < 8; z++)
-			{
-				if(temp&0x01)OLED_DrawPoint(x1,y1,mode);
-				else OLED_DrawPoint(x1,y1,!mode);
-				temp>>=1;
-				x1++;
-			}
-			if(j == 15)  x2 += 8, y1 = y2;
-			else
-				y1++;
-			x1 = x2;
-			
-		}
-		x2 = x;
-		x1 = x;
-		y2 = y + 16*(i + 1);
-	}
-	
-}
-void OLED_ShowLogo(uint8_t x, uint8_t y, uint8_t index, uint8_t mode)
-{
-	uint8_t i,j;
-	uint8_t temp;
-	for(i = 0; i < 18; i++)
-	{
-		temp = logo[index][i];
-		for(j = 0; j < 8; j++)
-		{
-			if(temp&0x01)OLED_DrawPoint(x + j,y + i,mode);
-			else OLED_DrawPoint(x + j,y + i,!mode);
-			temp>>=1;
-		}
-	}
-}
-
-
-
-
-
-
-
-

@@ -1,6 +1,7 @@
 #ifndef __USBD_COMPOSITE_H_
 #define __USBD_COMPOSITE_H_
 
+#include "firmware_features.h"
 #include "usb_ch9_std.h"
 #include "custom_hid_core.h"
 #include "usbd_custombulk.h"
@@ -10,11 +11,15 @@
 typedef struct
 {
     usb_desc_config         				 config;
+#if DAP_ONLINE_ENABLE
 		usb_desc_iad										 hid_iad;
 		usb_desc_itf            				 hid_itf;
     usb_desc_hid            				 hid_vendor;
     usb_desc_ep             				 hid_epout;
     usb_desc_ep             				 hid_epin;
+#else
+    usb_desc_itf reserved_itf; /* Preserve WinUSB IF1 and CDC IF2/3. */
+#endif
 		usb_desc_iad										 cb_iad;
 		usb_desc_itf            				 cb_itf;
     usb_desc_ep             				 cb_epin;

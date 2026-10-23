@@ -26,19 +26,14 @@
 #ifndef LCD_DIRECTION
 #define LCD_DIRECTION 1
 #endif
-/* 原 OLED 界面为 128x64：竖屏原尺寸显示，横屏放大 2 倍。 */
+/* Native screen geometry; the UI uses 320x240 landscape pixel coordinates. */
 #if LCD_DIRECTION == 0 || LCD_DIRECTION == 2
 #define LCD_WIDTH 240
 #define LCD_HEIGHT 320
-#define LCD_UI_SCALE 1
 #else
 #define LCD_WIDTH 320
 #define LCD_HEIGHT 240
-#define LCD_UI_SCALE 2
 #endif
-/* 将兼容 OLED 的界面区域居中，四周保留 LCD 背景。 */
-#define LCD_UI_X ((LCD_WIDTH - 128 * LCD_UI_SCALE) / 2)
-#define LCD_UI_Y ((LCD_HEIGHT - 64 * LCD_UI_SCALE) / 2)
 /* 常用颜色：RGB565 格式，红 5 位、绿 6 位、蓝 5 位。 */
 #define LCD_BLACK 0x0000
 #define LCD_WHITE 0xFFFF
@@ -53,6 +48,10 @@
 
 /* 初始化共用 SPI0、控制引脚与 ST7789；清为黑屏后开启显示和背光。 */
 void LCD_Init(void);
+/* Native monochrome drawing, no framebuffer; stride is measured in bytes. */
+void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                  uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                  uint8_t scale, uint8_t mode);
 /* 开显示同时点亮背光；关显示先关闭背光。 */
 void LCD_DisplayOn(void);
 void LCD_DisplayOff(void);
@@ -63,11 +62,7 @@ void LCD_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t 
 /* 全屏填充与单像素绘制。 */
 void LCD_Clear(uint16_t color);
 void LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color);
-/* 将 OLED 的 8 页 x 128 列显存转换为黑白 RGB565 图像，按比例居中显示。
- * 每页每字节表示竖直 8 个像素，最低位对应页内最上方像素。
- */
-void LCD_BlitGRAM(const uint8_t gram[8][128]);
-/* 仅设置兼容 OLED 界面的反显/180 度翻转标志，下次 LCD_BlitGRAM 时生效。 */
+/* 单色字模反显和硬件 180 度翻转设置。 */
 void LCD_SetInvert(uint8_t invert);
 void LCD_SetFlip(uint8_t flip);
 /* 以下直接字符接口仅在未定义 LCD_BAREMETAL 的应用中实现。

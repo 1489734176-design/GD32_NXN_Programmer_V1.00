@@ -15,10 +15,12 @@ FILINFO FileInfo;
 DIR DirInfo;
 app_TypeDef app_data;
 
+#if DAP_ONLINE_ENABLE
 #define USB_TASK_PRIO		5	
 #define USB_STK_SIZE 		256  
 TaskHandle_t UsbTask_Handler;
 void usb_task(void *pvParameters);
+#endif
 	
 #define LED_TASK_PRIO		3	
 #define LED_STK_SIZE 		64  
@@ -30,9 +32,11 @@ void led_task(void *pvParameters);
 TaskHandle_t KeyTask_Handler;
 void key_task(void *pvParameters);
 
+#if DAP_ONLINE_ENABLE
 EventGroupHandle_t  EventGroupHandle;
 
 extern void DAP_Thread (void *argument);
+#endif
 extern void DAP_Setup(void);
 void page(void);
 void USB_UNPLUG(void);
@@ -77,7 +81,7 @@ static uint32_t auto_now_ms(void);
 
 /* last text pushed to the OLED status row, kept so the standby page can
    repeat the failure reason after mode4 has returned */
-static char g_last_status[24] = {0};
+static char g_last_status[64] = {0};
 
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
@@ -112,33 +116,31 @@ void INTX_ENABLE(void)
 
 void start_page(void)
 {
-	uint8_t ret;
-	uint32_t ulReadNum;
-
-	ret = f_mount(&fs, "0:", 1);
-	if(ret != FR_OK)
-	{
-		OLED_ShowString(56, 0, (uint8_t *)"FATFS FAIL", 8, 1);
-	}
-	else
-	{
-		ret = f_open(&fd, "0:/system/logo.bin", FA_READ);
-		if(ret == FR_OK)
-		{
-			ret = f_read(&fd, OLED_GRAM, 128*8, &ulReadNum);
-			if(ret == FR_OK && ulReadNum == 128*8)
-				OLED_ShowString(56, 0, (uint8_t *)"LOGO OK", 8, 1);
-				
-			f_close(&fd);
-		}
-		else
-			OLED_ShowString(56, 0, (uint8_t *)"LOGO FAIL", 8, 1);
-	}
-	OLED_Refresh();
-	vTaskDelay(1000);
-	OLED_Clear();
-	
+    uint8_t ret;
+    uint32_t ulReadNum;
+    const char *status;
+    ret = f_mount(&fs, "0:", 1);
+    status = "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3";
+    if(ret == FR_OK)
+    {
+        status = "\xCD\xBC\xB1\xEA\xBC\xD3\xD4\xD8\xCA\xA7\xB0\xDC";
+        if(f_open(&fd, "0:/system/logo.bin", FA_READ) == FR_OK)
+        {
+            /* Reuse the existing 4096-byte flash workspace, no logo framebuffer. */
+            ret = f_read(&fd, DATA_BUFFER, 1024, &ulReadNum);
+            if(ret == FR_OK && ulReadNum == 1024)
+            {
+                UI_BootLogo(DATA_BUFFER);
+                status = "\xCD\xBC\xB1\xEA\xD2\xD1\xBC\xD3\xD4\xD8";
+            }
+            f_close(&fd);
+        }
+    }
+    UI_Text(8, 196, status, 32, 1);
+    vTaskDelay(1000);
+    OLED_Clear();
 }
+#if DAP_ONLINE_ENABLE
 void data_move(uint8_t *d, uint8_t m, uint8_t max)
 {
 	uint8_t i;
@@ -147,6 +149,7 @@ void data_move(uint8_t *d, uint8_t m, uint8_t max)
 		d[max-(i+1)] = d[max-(m+i+1)];
 	}
 }
+#endif /* DAP_ONLINE_ENABLE */
 void page(void)
 {
 	uint8_t i,j;
@@ -225,18 +228,21 @@ void page(void)
 	
 	if(oled.Refresh_flag == 1)
 	{
-		OLED_ShowChinese(16, 32, 1, 4, 1);
-		OLED_ShowChinese(32, 32, 2, 4, 1);
-		if(app_data.head == 0) 			OLED_ShowString(16, 96, "<-", 16, 1),OLED_ShowString(32, 96, "  ", 16, 1);
-		else if(app_data.head == 1) OLED_ShowString(16, 96, "  ", 16, 1),OLED_ShowString(32, 96, "<-", 16, 1);
-		
-		OLED_Refresh();
-		OLED_Clear();
+        UI_Fill(0, 32, 320, 208, 0);
+#if DAP_ONLINE_ENABLE
+        UI_Text(8, 64, "\xD4\xDA\xCF\xDF\xB7\xC2\xD5\xE6", 32, 1);
+#else
+        UI_Text(8, 64, "\xCE\xC4\xBC\xFE\xB4\xAB\xCA\xE4", 32, 1);
+#endif
+        UI_Text(8, 136, "\xC0\xEB\xCF\xDF\xCF\xC2\xD4\xD8", 32, 1);
+        UI_Text(272, app_data.head == 0 ? 64 : 136, "<-", 32, 1);
+        OLED_Refresh();
 		oled.Refresh_flag = 0;
 	}
 }
 
 
+#if DAP_ONLINE_ENABLE
 void mode1(void)
 {
 	uint8_t i;
@@ -262,6 +268,7 @@ void mode1(void)
 	if(oled.Refresh_flag == 1)
 	{
 
+        UI_Fill(0, 32, 320, 208, 0);
 		sprintf((char *)D, "HID:%3d%% \0",app_data.hid_d[0]);
 		OLED_ShowString(16, 0, D, 8, 1);
 		for(i = 0; i < 9; i++)
@@ -269,7 +276,7 @@ void mode1(void)
 			OLED_DrawLine(28 - app_data.hid_d[i]*0.15, 50+i*8, 28 - app_data.hid_d[i+1]*0.15, 50+(i+1)*8, 1);
 		}
 		OLED_DrawLine(29,50, 29, 122, 1);
-		sprintf((char *)D, "File:%2d%% \0",app_data.cb_d[0]);
+		sprintf((char *)D, "\xCE\xC4\xBC\xFE\x3A\x25\x32\x64\x25\x25",app_data.cb_d[0]);
 		OLED_ShowString(32, 0, D, 8, 1);
 		for(i = 0; i < 9; i++)
 		{
@@ -284,7 +291,6 @@ void mode1(void)
 		}
 		OLED_DrawLine(61,50, 61, 122, 1);
 		OLED_Refresh();
-		OLED_Clear();
 		oled.Refresh_flag = 0;
 	}
 	
@@ -318,6 +324,47 @@ void mode1(void)
 	}
 			
 }
+#else
+/* Mode 1 keeps USB available for the existing PC file manager. */
+void mode1(void)
+{
+    if(key_val.mesg == 1)
+    {
+        switch(key_val.key)
+        {
+            case key_mid:
+                app_data.mode = 2;
+                app_data.head = 2;
+                usbd_disconnect(&usb_hid);
+                rcu_periph_clock_disable(RCU_USBD);
+                break;
+            case key_l_mid:
+            case key_d_mid:
+                app_data.mode = 0;
+                app_data.head = 0;
+                break;
+            default:
+                break;
+        }
+        OLED_Clear();
+        show_top(1);
+        oled.Refresh_flag = 1;
+        key_val.mesg = 0;
+        if(app_data.mode != 1) return;
+    }
+    show_top(0);
+    if(oled.Refresh_flag == 1)
+    {
+        UI_Fill(0, 32, 320, 208, 0);
+        UI_Text(8, 56, "\xCE\xC4\xBC\xFE\xB4\xAB\xCA\xE4", 32, 1);
+        UI_Text(8, 112, "\xB5\xE7\xC4\xD4\xB4\xAB\xCA\xE4\xCE\xC4\xBC\xFE", 32, 1);
+        UI_Text(8, 184, "\xD6\xD0\xBC\xFC\xBD\xF8\xC8\xEB\xC9\xD5\xC2\xBC", 32, 1);
+        OLED_Refresh();
+        oled.Refresh_flag = 0;
+    }
+}
+#endif /* DAP_ONLINE_ENABLE */
+
 /* mode2: 离线下载选择页 (算法 / 文件 / 开始烧录), 只负责选择, 烧录在 mode4 */
 void mode2(void)
 {
@@ -411,14 +458,13 @@ void mode2(void)
 		}
 		else
 		{
-			OLED_ShowChinese(0, 0, 4, 4, 1);
-			sprintf((char *)D, "%.21s", app_data.firmware_name);
-			OLED_ShowString(16, 0, D, 8, 1);
-			OLED_ShowChinese(24, 0, 3, 4, 1);
-			sprintf((char *)D, "%.21s", app_data.bin_name);
-			OLED_ShowString(40, 0, D, 8, 1);
-			OLED_ShowChinese(48, 0, 5, 4, 1);
-			OLED_ShowString(app_data.head * 24, 100, "<-", 16, 1);
+            UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
+            UI_Text(8, 48, (const char *)app_data.firmware_name, 16, 1);
+            UI_Text(8, 88, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+            UI_Text(8, 128, (const char *)app_data.bin_name, 16, 1);
+            UI_Text(8, 176, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
+            UI_Text(272, app_data.head == 2 ? 176 : 8 + app_data.head * 80, "<-", 32, 1);
+            UI_Text(8, 220, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1);
 		}
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
@@ -427,49 +473,36 @@ void mode2(void)
 
 static void show_download_progress(uint8_t percent)
 {
-	uint8_t text[17];
-	memset(OLED_GRAM[3], 0, sizeof(OLED_GRAM[3]));
-	sprintf((char *)text, "[          ]%3u%%", (unsigned int)percent);
-	OLED_ShowString(24, 16, text, 8, 1);
-	text[percent / 10 + 1] = '\0';
-	OLED_ShowString(24, 22, text + 1, 8, 0);
-	OLED_Refresh();
+    UI_Progress(112, percent);
 }
 
 static void show_download_status(const char *status)
 {
-	memset(OLED_GRAM[5], 0, sizeof(OLED_GRAM[5]));
-	OLED_ShowString(40, 0, (uint8_t *)status, 8, 1);
-	strncpy(g_last_status, status, sizeof(g_last_status) - 1);
-	g_last_status[sizeof(g_last_status) - 1] = '\0';
-	OLED_Refresh();
+    uint16_t size = UI_TextWidth(status, 32) <= 576 ? 32 : 16;
+    UI_Fill(0, 160, 320, 80, 0);
+    UI_TextBox(8, 160, 304, 80, status, (uint8_t)size, 1);
+    strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+    g_last_status[sizeof(g_last_status) - 1] = '\0';
 }
 
-/* Error page: 4 text rows. NOTE: in this OLED driver the first argument of
-   OLED_ShowString() is the ROW (GRAM[x/8][y]) and the second is the column. */
+/* Native LCD error page: wrapped 32px title, complete 16px register values. */
 static void show_download_error(const char *status, uint32_t diag, uint32_t step, uint32_t addr)
 {
-	uint8_t r, row = 1;
-	for (r = 0; r < 6; r++)
-	{
-		memset(OLED_GRAM[r], 0, sizeof(OLED_GRAM[r]));
-	}
-	OLED_ShowString(0, 0, (uint8_t *)status, 8, 1);
-	sprintf((char *)D, "step=%02lX r0=%lX", (unsigned long)step, (unsigned long)diag);
-	OLED_ShowString(8, 0, D, 8, 1);
-	strncpy(g_last_status, status, sizeof(g_last_status) - 1);
-	g_last_status[sizeof(g_last_status) - 1] = '\0';
-	if (addr)
-	{
-		sprintf((char *)D, "addr=%08lX", (unsigned long)addr);
-		OLED_ShowString(16, 0, D, 8, 1);
-		row = 2;
-	}
-	sprintf((char *)D, "cs=%08lX", (unsigned long)g_diag_ctrl_stat);
-	OLED_ShowString((uint8_t)((row + 1) * 8), 0, D, 8, 1);
-	sprintf((char *)D, "h =%08lX", (unsigned long)g_diag_hcsr);
-	OLED_ShowString((uint8_t)((row + 2) * 8), 0, D, 8, 1);
-	OLED_Refresh();
+    OLED_Clear();
+    UI_TextBox(8, 8, 304, 64, status, 32, 1);
+    sprintf((char *)D, "\xB2\xBD\xD6\xE8\x3D\x25\x30\x32\x6C\x58\x20\x72\x30\x3D\x25\x6C\x58", (unsigned long)step, (unsigned long)diag);
+    UI_Text(8, 88, (char *)D, 16, 1);
+    strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+    g_last_status[sizeof(g_last_status) - 1] = '\0';
+    if(addr)
+    {
+        sprintf((char *)D, "\xB5\xD8\xD6\xB7\x3D\x25\x30\x38\x6C\x58", (unsigned long)addr);
+        UI_Text(8, 116, (char *)D, 16, 1);
+    }
+    sprintf((char *)D, "CTRL/STAT=%08lX", (unsigned long)g_diag_ctrl_stat);
+    UI_Text(8, 144, (char *)D, 16, 1);
+    sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
+    UI_Text(8, 172, (char *)D, 16, 1);
 }
 
 /* Connect and halt the core as fast as possible.
@@ -609,50 +642,48 @@ static void auto_standby_tick(void)
 	}
 }
 
-/* Full standby screen for auto mode (the manual menu uses the Chinese
-   labels, so auto mode gets its own clean layout):
-     row0  state
-     row2  algorithm file
-     row4  bin file
-     row6  detail (OK / failure reason)
-     row7  key hint */
+/* Full 320x240 auto screen. File names have separate 16px lines; normal
+   Chinese text uses the same thin 32px glyphs as the manual menu. */
 static void auto_draw(void)
 {
 	const char *st, *detail;
 
 	if(!auto_has_files())
 	{
-		st = "AUTO:NO FILE";
+		st = "\xD7\xD4\xB6\xAF\x3A\xCE\xB4\xD1\xA1\xCE\xC4\xBC\xFE";
 		detail = "";
 	}
 	else if(g_auto_st == AUTO_ST_WAIT)
 	{
-		st = "AUTO:WAIT CHIP";
+		st = "\xD7\xD4\xB6\xAF\x3A\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC";
 		detail = "";
 	}
 	else if(g_auto_st == AUTO_ST_BURN)
 	{
-		st = "AUTO:BURNING...";
+		st = "\xD7\xD4\xB6\xAF\x3A\xD5\xFD\xD4\xDA\xC9\xD5\xC2\xBC";
 		detail = "";
 	}
 	else if(g_burn_ok)
 	{
-		st = "AUTO:OK";
-		detail = "REMOVE CHIP";
+		st = "\xD7\xD4\xB6\xAF\x3A\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6";
+		detail = "\xC7\xEB\xC8\xA1\xB3\xF6\xD0\xBE\xC6\xAC";
 	}
 	else
 	{
-		st = "AUTO:FAIL";
-		detail = g_last_status[0] ? g_last_status : "REMOVE CHIP";
+		st = "\xD7\xD4\xB6\xAF\x3A\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC";
+		detail = g_last_status[0] ? g_last_status : "\xC7\xEB\xC8\xA1\xB3\xF6\xD0\xBE\xC6\xAC";
 	}
 
-	OLED_ShowString(0, 0, (uint8_t *)st, 8, 1);
-	sprintf((char *)D, "ALG:%.17s", app_data.firmware_name);
-	OLED_ShowString(16, 0, D, 8, 1);
-	sprintf((char *)D, "BIN:%.17s", app_data.bin_name);
-	OLED_ShowString(32, 0, D, 8, 1);
-	OLED_ShowString(48, 0, (uint8_t *)detail, 8, 1);
-	OLED_ShowString(56, 0, "R-long:MANU", 8, 1);
+    UI_Text(8, 8, st, 32, 1);
+    UI_Text(8, 48, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
+    UI_Text(8, 84, (const char *)app_data.firmware_name, 16, 1);
+    UI_Text(8, 108, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+    UI_Text(8, 144, (const char *)app_data.bin_name, 16, 1);
+    if(UI_TextWidth(detail, 32) <= 304)
+        UI_Text(8, 168, detail, 32, 1);
+    else
+        UI_TextBox(8, 168, 304, 32, detail, 16, 1);
+    UI_Text(8, 204, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 32, 1);
 }
 
 void mode4(void)
@@ -721,12 +752,17 @@ void mode4(void)
 	g_burn_done = 1;
 	g_burn_ok = 0;
 
-	OLED_Clear();
-	show_download_progress(0);
+    OLED_Clear();
+    UI_Text(8, 8, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
+    sprintf((char *)D, "\xCB\xE3\xB7\xA8\x3A\x25\x73", app_data.firmware_name);
+    UI_Text(8, 56, (char *)D, 16, 1);
+    sprintf((char *)D, "\xB9\xCC\xBC\xFE\x3A\x25\x73", app_data.bin_name);
+    UI_Text(8, 80, (char *)D, 16, 1);
+    show_download_progress(0);
 
 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
-		show_download_status("Connecting...");
+		show_download_status("\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC");
 		/* Power-cycle target and grab SWD before programming */
 		swd_off();
 		TARGET_PWR_OFF;
@@ -736,7 +772,7 @@ void mode4(void)
 		{
 			uint8_t c = target_connect_halt();
 			if (c != 1) {
-				show_download_status(c == 2 ? "DIS: CPU busy" : "DIS: SWD failed");
+				show_download_status(c == 2 ? "\xD0\xBE\xC6\xAC\xCE\xDE\xB7\xA8\xD4\xDD\xCD\xA3" : "\x53\x57\x44\xC1\xAC\xBD\xD3\xCA\xA7\xB0\xDC");
 				swd_off();
 				TARGET_PWR_OFF;
 				goto download_return;
@@ -769,12 +805,12 @@ void mode4(void)
 		}
 		else 
 		{
-			show_download_status("ER0: Algo open");
+			show_download_status("\x45\x52\x30\x3A\xCB\xE3\xB7\xA8\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC");
 			goto download_return;
 		}
 		if(err_flag == 1)
 		{
-			show_download_status("Loading algorithm...");
+			show_download_status("\xD5\xFD\xD4\xDA\xBC\xD3\xD4\xD8\xCB\xE3\xB7\xA8");
 			OLED_Refresh();
 			/* reset diag so a stale value from a previous attempt can't mislead */
 			g_last_syscall_r0 = 0;
@@ -795,12 +831,12 @@ void mode4(void)
 		}
 		else
 		{			
-			show_download_status("ER1: Algo read");
+			show_download_status("\x45\x52\x31\x3A\xCB\xE3\xB7\xA8\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
 			goto download_return;
 		}
 		if(err_flag == 2)
 		{
-			show_download_status("Erasing...");
+			show_download_status("\xD5\xFD\xD4\xDA\xB2\xC1\xB3\xFD\xD0\xBE\xC6\xAC");
 			OLED_Refresh();
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
 			{
@@ -809,7 +845,7 @@ void mode4(void)
 				   takes effect after the target restarts. Programming before
 				   the restart is rejected (ER6), so power-cycle and re-init
 				   the algorithm before writing. */
-				show_download_status("Re-init...");
+				show_download_status("\xD5\xFD\xD4\xDA\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF");
 				OLED_Refresh();
 				swd_off();
 				TARGET_PWR_OFF;
@@ -820,14 +856,14 @@ void mode4(void)
 				   target_flash_init((program_target_t *)DATA_BUFFER,
 				                     ((program_target_t *)DATA_BUFFER)->flash_addr) != ERROR_SUCCESS)
 				{
-					show_download_error("ER7: Re-init", g_last_syscall_r0, g_diag_step, 0);
+					show_download_error("\x45\x52\x37\x3A\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF\xCA\xA7\xB0\xDC", g_last_syscall_r0, g_diag_step, 0);
 					goto download_return;
 				}
 			}
 			else
 			{
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
-				sprintf((char *)D, "Erase error: %04X", (unsigned int)(g_erase_diag & 0xFFFF));
+				sprintf((char *)D, "\xB2\xC1\xB3\xFD\xCA\xA7\xB0\xDC\x3A\x25\x30\x34\x58", (unsigned int)(g_erase_diag & 0xFFFF));
 				show_download_status((char *)D);
 				OLED_Refresh();
 				swd_off();
@@ -841,18 +877,18 @@ void mode4(void)
 			switch(init_err)
 			{
 				case ERROR_RESET:
-					show_download_error("ER2a: Reset/halt", init_diag, init_step, 0);
+					show_download_error("\x45\x52\x32\x61\x3A\xB8\xB4\xCE\xBB\xD4\xDD\xCD\xA3\xCA\xA7\xB0\xDC", init_diag, init_step, 0);
 					break;
 				case ERROR_ALGO_DL:
-					show_download_error("ER2b: SRAM write", init_diag, init_step, 0);
+					show_download_error("\x45\x52\x32\x62\x3A\x53\x52\x41\x4D\xD0\xB4\xC8\xEB\xCA\xA7\xB0\xDC", init_diag, init_step, 0);
 					break;
 				case ERROR_INIT:
-					show_download_error("ER2c: Algo init", init_diag, init_step, 0);
+					show_download_error("\x45\x52\x32\x63\x3A\xCB\xE3\xB7\xA8\xB3\xF5\xCA\xBC\xBB\xAF\xCA\xA7\xB0\xDC", init_diag, init_step, 0);
 					break;
 				default:
 				{
 					char ebuf[24];
-					sprintf(ebuf, "ER2?: err=%u", (unsigned)init_err);
+					sprintf(ebuf, "\x45\x52\x32\x3A\xB4\xED\xCE\xF3\x3D\x25\x75", (unsigned)init_err);
 					show_download_error(ebuf, init_diag, init_step, 0);
 					break;
 				}
@@ -869,12 +905,12 @@ void mode4(void)
 		else 
 		{
 			target_flash_uninit((program_target_t *)DATA_BUFFER);
-			show_download_status("ER3: Erase failed");
+			show_download_status("\x45\x52\x33\x3A\xB2\xC1\xB3\xFD\xCA\xA7\xB0\xDC");
 			goto download_return;
 		}
 		if(err_flag == 4)
 		{
-			show_download_status("Programming...");
+			show_download_status("\xD5\xFD\xD4\xDA\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE");
 			OLED_Refresh();
 			
 			bin_size = f_size(&fd);
@@ -888,7 +924,7 @@ void mode4(void)
 																			((program_target_t *)DATA_BUFFER)->flash_addr + i,
 																			(const uint8_t *)(DATA_BUFFER + 2048), ulReadNum) != ERROR_SUCCESS)
 					{
-						show_download_error("ER6: Program failed",
+						show_download_error("\x45\x52\x36\x3A\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC",
 						                    g_last_syscall_r0,
 						                    g_diag_step,
 						                    ((program_target_t *)DATA_BUFFER)->flash_addr + i);
@@ -902,7 +938,7 @@ void mode4(void)
 				}
 				else 
 				{
-					show_download_status("ER5: Firmware read");
+					show_download_status("\x45\x52\x35\x3A\xB9\xCC\xBC\xFE\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
 					break;
 				}
 			}
@@ -910,7 +946,7 @@ void mode4(void)
 						/* Verify firmware after programming */
 			if(i == bin_size)
 			{
-				show_download_status("Verifying...");
+				show_download_status("\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE");
 				OLED_Refresh();
 				f_close(&fd);
 				sprintf((char *)D, "0:/download/bin/%s", app_data.bin_name);
@@ -930,11 +966,11 @@ void mode4(void)
 				else { i = 0; }
 				if(i == bin_size)
 				{
-					show_download_status("Verify OK");
+					show_download_status("\xB9\xCC\xBC\xFE\xD0\xA3\xD1\xE9\xCD\xA8\xB9\xFD");
 				}
 				else
 				{
-					show_download_status("Verify failed (FW)");
+					show_download_status("\xB9\xCC\xBC\xFE\xD0\xA3\xD1\xE9\xCA\xA7\xB0\xDC");
 				}
 				OLED_Refresh();
 				f_close(&fd);
@@ -948,7 +984,7 @@ void mode4(void)
 				uint8_t *dot;
 				uint32_t opt_read;
 
-				show_download_status("Programming OPT...");
+				show_download_status("\xD5\xFD\xD4\xDA\xD0\xB4\xC8\xEB\x4F\x50\x54");
 				OLED_Refresh();
 
 				dot = (uint8_t *)strrchr((const char *)app_data.bin_name, '.');
@@ -999,24 +1035,24 @@ void mode4(void)
 								}
 								else opt_state = 1;
 							}
-							show_download_status("OPT OK");
+							show_download_status("\x4F\x50\x54\xD0\xB4\xC8\xEB\xCD\xEA\xB3\xC9");
 							}
 							else
 							{
-								show_download_status("OPT program failed");
+								show_download_status("\x4F\x50\x54\xD0\xB4\xC8\xEB\xCA\xA7\xB0\xDC");
 								opt_failed = 1;
 							}
 						} /* end of algo_ext scope */
 					}
 					else
 					{
-						show_download_status("OPT read failed");
+						show_download_status("\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
 						opt_failed = 1;
 					}
 				}
 				else
 				{
-					show_download_status("OPT file missing");
+					show_download_status("\xC8\xB1\xC9\xD9\x4F\x50\x54\xCE\xC4\xBC\xFE");
 					opt_failed = 1;
 				}
 				OLED_Refresh();
@@ -1025,7 +1061,7 @@ void mode4(void)
 			/* Verify OPT bytes - stage by stage */
 			if(is_ext_algo && app_data.opt_enable && i == bin_size && opt_prog_addr && !opt_failed)
 			{
-				show_download_status("Verifying OPT...");
+				show_download_status("\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\x4F\x50\x54");
 				OLED_Refresh();
 				{
 					char opt_name2[40];
@@ -1040,7 +1076,7 @@ void mode4(void)
 					else strcpy(opt_name2, "default_opt.bin");
 					sprintf((char *)D, "0:/download/bin/%s", opt_name2);
 				}
-				show_download_status("Reading OPT file...");
+				show_download_status("\xD5\xFD\xD4\xDA\xB6\xC1\xC8\xA1\x4F\x50\x54\xCE\xC4\xBC\xFE");
 				OLED_Refresh();
 				if(f_open(&fd_opt2, (TCHAR *)D, FA_READ) == FR_OK)
 				{
@@ -1053,11 +1089,11 @@ void mode4(void)
 						{
 							/* RDP 写成加密值后调试口立即被锁, 紧接着读 OPT 必然失败。
 							   这不是烧录错误: 读不回来本身就证明加密已经生效。 */
-							show_download_status("OPT OK (locked)");
+							show_download_status("\x4F\x50\x54\xCD\xEA\xB3\xC9\xB2\xA2\xD2\xD1\xCB\xF8\xB6\xA8");
 						}
 						else
 						{
-							show_download_status("Checking OPT...");
+							show_download_status("\xD5\xFD\xD4\xDA\xBC\xEC\xB2\xE9\x4F\x50\x54");
 							OLED_Refresh();
 							{
 								program_target_ext_t algo_ext;
@@ -1078,7 +1114,7 @@ void mode4(void)
 								{
 									/* 显示第一个不一致的字节: 偏移 / 期望 / 读回 */
 									if(g_vfy_off == 0xFFFFFFFF)
-										sprintf((char *)D, "OPT read fail");
+										sprintf((char *)D, "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
 									else
 										sprintf((char *)D, "OPT +%02lX %02lX>%02lX",
 										        (unsigned long)g_vfy_off,
@@ -1089,21 +1125,21 @@ void mode4(void)
 								}
 								else
 								{
-									show_download_status("OPT verify OK");
+									show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xCD\xA8\xB9\xFD");
 								}
 							}
 						}
 					}
 					else
 					{
-						show_download_status("OPT verify read error");
+						show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
 						opt_failed = 1;
 					}
 					f_close(&fd_opt2);
 				}
 				else
 				{
-					show_download_status("OPT verify file error");
+					show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xCE\xC4\xBC\xFE\xD2\xEC\xB3\xA3");
 					opt_failed = 1;
 				}
 				OLED_Refresh();
@@ -1116,13 +1152,13 @@ void mode4(void)
 			if(i == bin_size)
 			{
 				if(opt_failed)
-					show_download_status("FW OK, OPT failed");
+					show_download_status("\xB9\xCC\xBC\xFE\xCD\xEA\xB3\xC9\x2C\x4F\x50\x54\xCA\xA7\xB0\xDC");
 				else if(opt_state == 2)
-					show_download_status("SUC, OPT=BAD");		/* OPT 写了但 RDP 不对 */
+					show_download_status("\xC9\xD5\xC2\xBC\xCD\xEA\xB3\xC9\x2C\x4F\x50\x54\xD2\xEC\xB3\xA3");		/* OPT 写了但 RDP 不对 */
 				else if(opt_state == 1 || opt_state == 3)
-					show_download_status("SUC: OK (locked)");	/* 加密已生效 */
+					show_download_status("\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6\x2C\xD2\xD1\xBC\xD3\xC3\xDC");	/* 加密已生效 */
 				else
-					show_download_status("SUC: Program OK");	/* 不加密 */
+					show_download_status("\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6");	/* 不加密 */
 
 				/* only a clean run counts as a success for auto mode */
 				if(!opt_failed && opt_state != 2)
@@ -1135,7 +1171,7 @@ void mode4(void)
 			taskEXIT_CRITICAL();
 			f_close(&fd);
 		}
-		else show_download_status("ER4: Firmware open");
+		else show_download_status("\x45\x52\x34\x3A\xB9\xCC\xBC\xFE\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC");
 		
 download_return:		
 		swd_off();
@@ -1153,7 +1189,7 @@ download_return:
 	}
 	else
 	{
-		show_download_status("No file selected");
+		show_download_status("\xC7\xEB\xCF\xC8\xD1\xA1\xD4\xF1\xCE\xC4\xBC\xFE");
 		OLED_Refresh();
 	}
 }
@@ -1207,8 +1243,9 @@ void mode3(void)
 
 	if(oled.Refresh_flag == 1)
 	{
-		OLED_Clear();
-		sum = 0;
+        OLED_Clear();
+        UI_Text(8, 8, app_data.head == 0 ? "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8" : "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+        sum = 0;
 		if(app_data.head == 0)
 			ret = f_opendir(&DirInfo, "0:/download/firmware");
 		else if(app_data.head == 1)
@@ -1222,10 +1259,10 @@ void mode3(void)
 			{
 				if(!FileInfo.fname[0])
 					break;
-				j = index / 8;
-				if(sum >= j*8 && sum < (j + 1)*8)
+				j = index / 5;
+				if(sum >= j*5 && sum < (j + 1)*5)
 				{	
-					if(i == index % 8)
+					if(i == index % 5)
 					{
 //						OLED_ShowString(i*8, 110, "<-", 8, 1);
 						if(app_data.head == 0)
@@ -1240,13 +1277,14 @@ void mode3(void)
 							/* manual pick on device: program OPT if the file exists (old behaviour) */
 							app_data.opt_enable = 1;
 						}
-						FileInfo.fname[21] = '\0';   					//������ʾ����			
-						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 0);  //���Դ����ͷ�����ļ�����ʾ����?
+						/* Full filename drawn below. */   					//������ʾ����			
+						UI_Fill(8, 52 + i * 32, 304, 28, 1);
+                        UI_Text(16, 58 + i * 32, FileInfo.fname, 16, 0);  //���Դ����ͷ�����ļ�����ʾ����?
 					}
 					else
 					{
-						FileInfo.fname[21] = '\0';   					//������ʾ����	
-						OLED_ShowString(i*8, 0, (uint8_t *)FileInfo.fname, 8, 1);
+						/* Full filename drawn below. */   					//������ʾ����	
+						UI_Text(16, 58 + i * 32, FileInfo.fname, 16, 1);
 					}		
 					i++;
 				}
@@ -1257,11 +1295,13 @@ void mode3(void)
 		if(!sum)
 		{
 			index = 0;
-			OLED_ShowString(0, 0, "No files", 8, 1);
+			UI_Text(8, 64, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1);
 		}
-		OLED_Refresh();
-		oled.Refresh_flag = 0;
-	}
+        sprintf((char *)D, "%lu/%lu", (unsigned long)(sum ? index + 1 : 0), (unsigned long)sum);
+        UI_Text(8, 220, (char *)D, 16, 1);
+        OLED_Refresh();
+        oled.Refresh_flag = 0;
+    }
 }
 
 void run_task(void *pvParameters)
@@ -1288,12 +1328,14 @@ void run_task(void *pvParameters)
 		DAP_Setup();
 	
 		taskENTER_CRITICAL();
+#if DAP_ONLINE_ENABLE
 		xTaskCreate((TaskFunction_t )usb_task,     	
                 (const char*    )"usb_task",   	
                 (uint16_t       )USB_STK_SIZE, 
                 (void*          )NULL,				
                 (UBaseType_t    )USB_TASK_PRIO,	
                 (TaskHandle_t*  )&UsbTask_Handler);
+#endif
 		xTaskCreate((TaskFunction_t )led_task,     	
                 (const char*    )"led_task",   	
                 (uint16_t       )LED_STK_SIZE, 
@@ -1306,7 +1348,9 @@ void run_task(void *pvParameters)
                 (void*          )NULL,				
                 (UBaseType_t    )KEY_TASK_PRIO,	
                 (TaskHandle_t*  )&KeyTask_Handler);								
+#if DAP_ONLINE_ENABLE
 		EventGroupHandle = xEventGroupCreate();
+#endif
 		taskEXIT_CRITICAL();
 		
 		start_page();
@@ -1344,6 +1388,7 @@ void run_task(void *pvParameters)
 		}
 }
 
+#if DAP_ONLINE_ENABLE
 void usb_task(void *pvParameters)
 {
 	while(1)
@@ -1352,6 +1397,7 @@ void usb_task(void *pvParameters)
 	}
 }
 
+#endif /* DAP_ONLINE_ENABLE */
 void led_task(void *pvParameters)
 {
 #if CDC_LED_SELFTEST
@@ -1368,8 +1414,10 @@ void led_task(void *pvParameters)
 #endif
 	while(1)
 	{
+#if DAP_ONLINE_ENABLE
 		if(app_data.hid_led_blink)
 			app_data.hid_led_blink = 0, HID_LED_ON;
+#endif
 		if(app_data.cb_led_blink)
 			app_data.cb_led_blink = 0, MSC_LED_ON;
 		if(app_data.cdc_led_blink)
@@ -1406,42 +1454,43 @@ void show_top(uint8_t status)
 	if(cnt > 500000 || status)
 	{
 		cnt = 0;
+        UI_Fill(0, 0, 320, 32, 0);
 		adc_get_val();
 		i = bat_status_get();
 		if(i == 0)
 		{
-			OLED_ShowLogo(0, 0, 7, 1);    				//USB
-			OLED_ShowString(0, 20, "DIS", 8, 1);
+			UI_Logo(8, 8, 7);    				//USB
+			UI_Text(52, 8, "DIS", 16, 1);
 			
 			bat = (uint8_t)((val.bat_vol - 3.5)*100/0.5);
 			sprintf((char *)D, "%3d%%\0", bat);
-			OLED_ShowString(0, 93, D, 8, 1);
+			UI_Text(272, 8, (char *)D, 16, 1);
 			
-			if(bat < 20) OLED_ShowLogo(0, 74, 0, 1);
-			else if(bat < 40) OLED_ShowLogo(0, 74, 1, 1);
-			else if(bat < 60) OLED_ShowLogo(0, 74, 2, 1);
-			else if(bat < 80) OLED_ShowLogo(0, 74, 3, 1);
-			else OLED_ShowLogo(0, 74, 4, 1);
+			if(bat < 20) UI_Logo(228, 8, 0);
+			else if(bat < 40) UI_Logo(228, 8, 1);
+			else if(bat < 60) UI_Logo(228, 8, 2);
+			else if(bat < 80) UI_Logo(228, 8, 3);
+			else UI_Logo(228, 8, 4);
 		}
 		else
 		{
-			OLED_ShowLogo(0, 0, 6, 1);    								//USB
-			OLED_ShowString(0, 20, "CON", 8, 1);
+			UI_Logo(8, 8, 6);    								//USB
+			UI_Text(52, 8, "CON", 16, 1);
 			if(i == 1) 
 			{
-				OLED_ShowLogo(0, 74, 5, 1);
+				UI_Logo(228, 8, 5);
 			}
 			else
 			{
-				OLED_ShowLogo(0, 74, 4, 1);
+				UI_Logo(228, 8, 4);
 				sprintf((char *)D, "%3d%%\0", 100);
-				OLED_ShowString(0, 93, D, 8, 1);
+				UI_Text(272, 8, (char *)D, 16, 1);
 			}
 		}
 		
-		sprintf((char *)D, "%4.1fC\0", val.chip_temp);
+		sprintf((char *)D, "%3.1fC", val.chip_temp);
 //		sprintf((char *)D, "%4.1fC\0", val.bat_vol);
-		OLED_ShowString(0, 40, D, 8, 1);
+		UI_Text(104, 8, (char *)D, 16, 1);
 		adc_trigger();
 		if(!status)
 			oled.Refresh_flag = 1;

@@ -45,6 +45,8 @@
 #include "DAP.h"
 #include "main.h"
 
+#if DAP_ONLINE_ENABLE
+
 uint8_t  	USB_Request[DAP_PACKET_SIZE];
 uint8_t 	USB_Request_len;
 uint8_t  	USB_Response[DAP_PACKET_SIZE]; 
@@ -87,3 +89,5 @@ void DAP_Thread (void *argument) {
 
 
 
+
+#endif /* DAP_ONLINE_ENABLE */
