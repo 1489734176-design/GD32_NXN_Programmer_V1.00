@@ -1,3 +1,4 @@
+#include "bsp_spi0_bus.h"
 #ifndef _BSP_GD25QXX_H__
 #define _BSP_GD25QXX_H__
 
@@ -35,8 +36,8 @@
 #define GD25X_Exit4ByteAddr      	0xE9
 
 
-#define GD25QXX_CS_HIGH             gpio_bit_set(SPI_CS_GPIO_Port, SPI_CS_Pin)
-#define GD25QXX_CS_LOW              gpio_bit_reset(SPI_CS_GPIO_Port, SPI_CS_Pin)
+#define GD25QXX_CS_HIGH SPI0_FlashRelease()
+#define GD25QXX_CS_LOW SPI0_FlashSelect()
 
 
 typedef struct

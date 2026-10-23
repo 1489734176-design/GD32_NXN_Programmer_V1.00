@@ -6,32 +6,8 @@ gd25qxx_TypeDef gd25qxx;
 void GD25QXX_Init(void)
 {	
     uint8_t temp;
-		spi_parameter_struct spi_init_struct;
-
-    rcu_periph_clock_enable(RCU_GPIOA);
-    rcu_periph_clock_enable(RCU_SPI0);
-
-    /* SPI0_CS(PA4), SPI0_SCK(PA5), SPI0_MISO(PA6) and SPI0_MOSI(PA7) GPIO pin configuration */
-    gpio_init(GPIOA, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, SPI_CS_Pin);
-    gpio_init(GPIOA, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, SPI_SCK_Pin | SPI_MOSI_Pin);
-    gpio_init(GPIOA, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, SPI_MISO_Pin);
-
-    /* chip select invalid*/
-    GD25QXX_CS_HIGH;
-
-    /* SPI0 parameter config */
-    spi_init_struct.trans_mode           = SPI_TRANSMODE_FULLDUPLEX;
-    spi_init_struct.device_mode          = SPI_MASTER;
-    spi_init_struct.frame_size           = SPI_FRAMESIZE_8BIT;
-    spi_init_struct.clock_polarity_phase = SPI_CK_PL_LOW_PH_1EDGE;
-    spi_init_struct.nss                  = SPI_NSS_SOFT;
-    spi_init_struct.prescale             = SPI_PSC_4;
-    spi_init_struct.endian               = SPI_ENDIAN_MSB;
-    spi_init(SPI0, &spi_init_struct);
-
-    /* enable SPI0 */
-    spi_enable(SPI0);
-		GD25QXX_WAKEUP();
+    SPI0_BusInit();
+    GD25QXX_WAKEUP();
     gd25qxx.gd25qxx_type = GD25QXX_ReadID();	        
     if(gd25qxx.gd25qxx_type == GD25Q256)                
     {
@@ -47,22 +23,7 @@ void GD25QXX_Init(void)
 }  
 uint8_t SPI_ReadWriteByte(uint8_t TxData)
 {
-    uint8_t Rxdata;
-//		taskENTER_CRITICAL();
-		    /* loop while data register in not emplty */
-    while (RESET == spi_i2s_flag_get(SPI0, SPI_FLAG_TBE));
-
-    /* send byte through the SPI0 peripheral */
-    spi_i2s_data_transmit(SPI0, TxData);
-
-    /* wait to receive a byte */
-    while(RESET == spi_i2s_flag_get(SPI0, SPI_FLAG_RBNE));
-
-    /* return the byte read from the SPI bus */
-    Rxdata = spi_i2s_data_receive(SPI0);
-//		taskEXIT_CRITICAL();
-	
-		return Rxdata;          		    		
+    return SPI0_FlashExchange(TxData);
 }
 
 //读取GD25QXX的状态寄存器，GD25QXX一共有3个状态寄存器
@@ -173,23 +134,25 @@ uint16_t GD25QXX_ReadID(void)
 //pBuffer:数据存储区
 //ReadAddr:开始读取的地址(24bit)
 //NumByteToRead:要读取的字节数(最大65535)
-void GD25QXX_Read(uint8_t* pBuffer,uint32_t ReadAddr,uint16_t NumByteToRead)   
-{ 
- 	uint16_t i;   										    
-	GD25QXX_CS_LOW;                           //使能器件   
-    SPI_ReadWriteByte(GD25X_ReadData);      //发送读取命令  
-    if(gd25qxx.gd25qxx_type==GD25Q256)                //如果是GD25Q256的话地址为4字节的，要发送最高8位
-    {
-        SPI_ReadWriteByte((uint8_t)((ReadAddr)>>24));    
+void GD25QXX_Read(uint8_t* pBuffer, uint32_t ReadAddr, uint16_t NumByteToRead)
+{
+    uint16_t i, count;
+    /* Bound IRQ masking while retaining hardware SPI throughput. */
+    while (NumByteToRead) {
+        count = NumByteToRead > 256U ? 256U : NumByteToRead;
+        GD25QXX_CS_LOW;
+        SPI_ReadWriteByte(GD25X_ReadData);
+        if (gd25qxx.gd25qxx_type == GD25Q256)
+            SPI_ReadWriteByte((uint8_t)(ReadAddr >> 24));
+        SPI_ReadWriteByte((uint8_t)(ReadAddr >> 16));
+        SPI_ReadWriteByte((uint8_t)(ReadAddr >> 8));
+        SPI_ReadWriteByte((uint8_t)ReadAddr);
+        for (i = 0; i < count; i++) pBuffer[i] = SPI_ReadWriteByte(0xFF);
+        GD25QXX_CS_HIGH;
+        pBuffer += count;
+        ReadAddr += count;
+        NumByteToRead -= count;
     }
-    SPI_ReadWriteByte((uint8_t)((ReadAddr)>>16));   //发送24bit地址    
-    SPI_ReadWriteByte((uint8_t)((ReadAddr)>>8));   
-    SPI_ReadWriteByte((uint8_t)ReadAddr);   
-    for(i=0;i<NumByteToRead;i++)
-	{ 
-        pBuffer[i]=SPI_ReadWriteByte(0XFF);    //循环读数  
-    }
-	GD25QXX_CS_HIGH; 				    	      
 }  
 //SPI在一页(0~65535)内写入少于256个字节的数据
 //在指定地址开始写入最大256字节的数据

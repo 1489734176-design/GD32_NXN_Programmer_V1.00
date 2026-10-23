@@ -1,7 +1,7 @@
 #include "bsp_oled.h"
 #include "font.h"
 #include "gd32f10x_i2c.h"
-#include "bsp_i2c.h"
+#include "bsp_lcd.h"
 
 uint8_t OLED_GRAM[8][128];
 
@@ -14,71 +14,25 @@ oled_TypeDef oled =
 
 void OLED_Init(void)
 {
-	i2c_init();
-	vTaskDelay(10);
-  OLED_WR_Byte(0xAE,OLED_CMD);//--turn off oled panel
-	OLED_WR_Byte(0x00,OLED_CMD);//---set low column address
-	OLED_WR_Byte(0x10,OLED_CMD);//---set high column address
-	OLED_WR_Byte(0x40,OLED_CMD);//--set start line address  Set Mapping RAM Display Start Line (0x00~0x3F)
-	OLED_WR_Byte(0x81,OLED_CMD);//--set contrast control register
-	OLED_WR_Byte(0xCF,OLED_CMD);// Set SEG Output Current Brightness
-	OLED_WR_Byte(0xA1,OLED_CMD);//--Set SEG/Column Mapping     0xa0左右反置 0xa1正常
-	OLED_WR_Byte(0xC8,OLED_CMD);//Set COM/Row Scan Direction   0xc0上下反置 0xc8正常
-	OLED_WR_Byte(0xA6,OLED_CMD);//--set normal display
-	OLED_WR_Byte(0xA8,OLED_CMD);//--set multiplex ratio(1 to 64)
-	OLED_WR_Byte(0x3f,OLED_CMD);//--1/64 duty
-	OLED_WR_Byte(0xD3,OLED_CMD);//-set display offset	Shift Mapping RAM Counter (0x00~0x3F)
-	OLED_WR_Byte(0x00,OLED_CMD);//-not offset
-	OLED_WR_Byte(0xd5,OLED_CMD);//--set display clock divide ratio/oscillator frequency
-	OLED_WR_Byte(0x80,OLED_CMD);//--set divide ratio, Set Clock as 100 Frames/Sec
-	OLED_WR_Byte(0xD9,OLED_CMD);//--set pre-charge period
-	OLED_WR_Byte(0xF1,OLED_CMD);//Set Pre-Charge as 15 Clocks & Discharge as 1 Clock
-	OLED_WR_Byte(0xDA,OLED_CMD);//--set com pins hardware configuration
-	OLED_WR_Byte(0x12,OLED_CMD);
-	OLED_WR_Byte(0xDB,OLED_CMD);//--set vcomh
-	OLED_WR_Byte(0x30,OLED_CMD);//Set VCOM Deselect Level
-	OLED_WR_Byte(0x20,OLED_CMD);//-Set Page Addressing Mode (0x00/0x01/0x02)
-	OLED_WR_Byte(0x02,OLED_CMD);//
-	OLED_WR_Byte(0x8D,OLED_CMD);//--set Charge Pump enable/disable
-	OLED_WR_Byte(0x14,OLED_CMD);//--set(0x10) disable
-	OLED_DisplayTurn(1);
-	OLED_DisPlay_On();
-	OLED_Clear();
-	OLED_WR_Byte(0xAF,OLED_CMD);
-    
+    LCD_Init();
+    OLED_Clear();
 }
 
 //发送一个字节
 //mode:数据/命令标志 0,表示命令;1,表示数据;
-void OLED_WR_Byte(uint8_t dat,uint8_t mode)
+void OLED_WR_Byte(uint8_t dat, uint8_t mode)
 {
-    uint8_t date[2];
-    if(mode == OLED_DATA)
-        date[0] = 0X40;
-    else
-        date[0] = 0X00;
-    date[1] = dat;		
-
-		i2c_write(date, 2);
-
+    /* Legacy SSD1306 raw commands have no equivalent in the LCD bridge. */
+    (void)dat;
+    (void)mode;
 }
 
 
 //开启OLED显示 
-void OLED_DisPlay_On(void)
-{
-	OLED_WR_Byte(0x8D,OLED_CMD);//电荷泵使能
-	OLED_WR_Byte(0x14,OLED_CMD);//开启电荷泵
-	OLED_WR_Byte(0xAF,OLED_CMD);//点亮屏幕
-}
+void OLED_DisPlay_On(void) { LCD_DisplayOn(); }
 
 //关闭OLED显示 
-void OLED_DisPlay_Off(void)
-{
-	OLED_WR_Byte(0x8D,OLED_CMD);//电荷泵使能
-	OLED_WR_Byte(0x10,OLED_CMD);//关闭电荷泵
-	OLED_WR_Byte(0xAE,OLED_CMD);//关闭屏幕
-}
+void OLED_DisPlay_Off(void) { LCD_DisplayOff(); }
 
 //清屏函数
 void OLED_Clear(void)
@@ -96,45 +50,15 @@ void OLED_Clear(void)
 
 
 //更新显存到OLED	
-void OLED_Refresh(void)
-{
-	uint8_t i;
-	for(i=0;i<8;i++)
-	{
-		OLED_WR_Byte(0xb0+i,OLED_CMD); //设置行起始地址
-		OLED_WR_Byte(0x00,OLED_CMD);   //设置低列起始地址
-		OLED_WR_Byte(0x10,OLED_CMD);   //设置高列起始地址
-		
-//		HAL_I2C_Mem_Write(oled.IIC, oled.oled_Write_addr, 0x40, I2C_MEMADD_SIZE_8BIT, &OLED_GRAM[i][0], 128, 50);
-		i2c_dma_write(&OLED_GRAM[i][0], 0x40, 128);
-  }
-}
+void OLED_Refresh(void) { LCD_BlitGRAM((const uint8_t (*)[128])OLED_GRAM); }
 //反显函数
-void OLED_ColorTurn(uint8_t i)
-{
-	if(i==0)
-		{
-			OLED_WR_Byte(0xA6,OLED_CMD);//正常显示
-		}
-	if(i==1)
-		{
-			OLED_WR_Byte(0xA7,OLED_CMD);//反色显示
-		}
-}
+void OLED_ColorTurn(uint8_t i) { LCD_SetInvert(i); }
 
 //屏幕旋转180度
 void OLED_DisplayTurn(uint8_t i)
 {
-	if(i==0)
-    {
-		OLED_WR_Byte(0xC8,OLED_CMD);//正常显示
-		OLED_WR_Byte(0xA1,OLED_CMD);
-	}
-	if(i==1)
-	{
-		OLED_WR_Byte(0xC0,OLED_CMD);//反转显示
-		OLED_WR_Byte(0xA0,OLED_CMD);
-	}
+    /* Legacy value 1 was the normal board mounting. */
+    LCD_SetFlip((uint8_t)(i == 0));
 }
 //画点 
 //x:0~63

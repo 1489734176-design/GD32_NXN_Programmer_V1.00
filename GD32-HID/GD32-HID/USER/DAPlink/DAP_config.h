@@ -78,7 +78,7 @@ This information includes:
 
 /// Indicate that JTAG communication mode is available at the Debug Port.
 /// This information is returned by the command \ref DAP_Info as part of <b>Capabilities</b>.
-#define DAP_JTAG                1               ///< JTAG Mode: 1 = available, 0 = not available.
+#define DAP_JTAG                0               ///< PA8/PA9/PA10 are USB_EN/CDC_LED/LCD_BLK.
 
 /// Configure maximum number of JTAG devices on the scan chain connected to the Debug Access Port.
 /// This setting impacts the RAM requirements of the Debug Unit. Valid range is 1 .. 255.
@@ -271,13 +271,12 @@ __STATIC_INLINE void PORT_JTAG_SETUP (void) {
 	GPIO_BOP(JTAG_TCK_GPIO_Port) = (uint32_t)JTAG_TCK_Pin;
 	GPIO_BOP(JTAG_TMS_GPIO_Port) = (uint32_t)JTAG_TMS_Pin;
 	/* PA9(TDI) 已改作 CDC_LED 输出，JTAG 模式不再驱动 TDI */
-	GPIO_BOP(JTAG_nTRST_GPIO_Port) = (uint32_t)JTAG_nTRST_Pin;
+	/* PA10 belongs to LCD_BLK; debug setup must not touch it. */
 	GPIO_BOP(JTAG_nRESET_GPIO_Port) = (uint32_t)JTAG_nRESET_Pin;
 	
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
 	/* PA9(TDI) 已改作 CDC_LED，不再配置为输出 */
-	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 	/* PA8(TDO) 已改作 USB_EN 输出，不再作为 TDO 输入配置 */
 
@@ -301,7 +300,7 @@ __STATIC_INLINE void PORT_SWD_SETUP (void) {
 	/* PA9(TDI) 已改作 CDC_LED 输出，若在此设成浮空输入，swd_init() 会把 LED 关掉 */
 	/* PA8(TDO) 不再配置：已改作 USB_EN 输出。若在此设为浮空输入，
 	   每次 swd_init() 都会把 USB_EN 拉飞，USB 会掉线 */
-	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
+	/* Keep PA10 configured by the LCD backlight driver. */
 
 }
 
@@ -314,7 +313,7 @@ __STATIC_INLINE void PORT_OFF (void) {
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
 	/* PA9(TDI) 已改作 CDC_LED，PORT_OFF 不再动它 */
-	gpio_init(JTAG_nTRST_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nTRST_Pin);
+	/* Keep PA10 configured by the LCD backlight driver. */
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 
 	
@@ -463,7 +462,7 @@ __STATIC_FORCEINLINE uint32_t PIN_TDO_IN  (void) {
 */
 __STATIC_FORCEINLINE uint32_t PIN_nTRST_IN   (void) {
 	
-  return (uint32_t)((GPIO_ISTAT(JTAG_nTRST_GPIO_Port)&(JTAG_nTRST_Pin)) ? 1:0);
+  return 1U; /* nTRST is unavailable on the LCD board. */
 	
 }
 
@@ -474,11 +473,7 @@ __STATIC_FORCEINLINE uint32_t PIN_nTRST_IN   (void) {
 */
 __STATIC_FORCEINLINE void     PIN_nTRST_OUT  (uint32_t bit) {
 	
-  if ((bit & 1U) == 1) {
-		GPIO_BOP(JTAG_nTRST_GPIO_Port) = (uint32_t)JTAG_nTRST_Pin;
-  } else {
-		GPIO_BC(JTAG_nTRST_GPIO_Port) = (uint32_t)JTAG_nTRST_Pin;
-  }
+  (void)bit; /* PA10 is LCD_BLK, including for DAP_SWJ_Pins commands. */
 
 }
 
