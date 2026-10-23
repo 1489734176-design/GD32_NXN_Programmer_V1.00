@@ -3,6 +3,10 @@
 #include "gd32f10x_i2c.h"
 #include "bsp_lcd.h"
 
+/* LCD 移植兼容层：保留原 OLED 绘图及 128x64 显存接口，
+ * 刷新时由 LCD_BlitGRAM 转换到 ST7789，原上层界面继续使用 OLED API。
+ */
+
 uint8_t OLED_GRAM[8][128];
 
 oled_TypeDef oled = 
@@ -22,7 +26,7 @@ void OLED_Init(void)
 //mode:数据/命令标志 0,表示命令;1,表示数据;
 void OLED_WR_Byte(uint8_t dat, uint8_t mode)
 {
-    /* Legacy SSD1306 raw commands have no equivalent in the LCD bridge. */
+    /* 原 SSD1306 的原始命令不适用于 ST7789；保留接口但不发送这些字节。 */
     (void)dat;
     (void)mode;
 }
@@ -49,7 +53,7 @@ void OLED_Clear(void)
 }
 
 
-//更新显存到OLED	
+// 将原 OLED 显存按比例居中刷新到 LCD，不再通过 I2C 访问 OLED
 void OLED_Refresh(void) { LCD_BlitGRAM((const uint8_t (*)[128])OLED_GRAM); }
 //反显函数
 void OLED_ColorTurn(uint8_t i) { LCD_SetInvert(i); }
@@ -57,7 +61,7 @@ void OLED_ColorTurn(uint8_t i) { LCD_SetInvert(i); }
 //屏幕旋转180度
 void OLED_DisplayTurn(uint8_t i)
 {
-    /* Legacy value 1 was the normal board mounting. */
+    /* 保持原接口约定：i=1 为正常安装方向，i=0 对界面旋转 180 度。 */
     LCD_SetFlip((uint8_t)(i == 0));
 }
 //画点 
