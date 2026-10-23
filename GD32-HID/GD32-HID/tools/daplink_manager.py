@@ -38,7 +38,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QProgressBar, QStatusBar, QFileDialog,
     QMessageBox, QInputDialog, QHeaderView, QFrame, QStyle,
     QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
-    QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy
+    QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy, QSpinBox
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QColor
@@ -68,6 +68,8 @@ CMD_GET_STATUS  = 0x09
 CMD_RENAME      = 0x0A
 CMD_STAGE_ALGORITHM = 0x0B
 CMD_PREPARE_DOWNLOAD = 0x0C
+CMD_GET_BURN_QUOTA = 0x0D
+CMD_SET_BURN_QUOTA = 0x0E
 
 STATUS_OK   = 0x00
 STATUS_ERR  = 0x01
@@ -82,6 +84,7 @@ class DAPLinkDevice:
         self.dev = None
         self.ep_out = None
         self.ep_in = None
+        self._command_lock = threading.Lock()
 
     def connect(self):
         # Release any previous resources first
@@ -137,9 +140,10 @@ class DAPLinkDevice:
         return '0:' + path.lstrip('/')
 
     def _send_cmd(self, cmd_data):
-        self.ep_out.write(cmd_data, timeout=TIMEOUT)
-        data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
-        return bytes(data)
+        with self._command_lock:
+            self.ep_out.write(cmd_data, timeout=TIMEOUT)
+            data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
+            return bytes(data)
 
     def list_dir(self, path="/"):
         resp = self._send_cmd(bytes([CMD_LIST_DIR]) + self._fix_path(path).encode('utf-8'))
@@ -209,6 +213,32 @@ class DAPLinkDevice:
             raise RuntimeError("Device is busy")
         if resp[0] != STATUS_OK:
             raise RuntimeError("Device rejected download preparation")
+
+    @staticmethod
+    def _decode_quota(resp):
+        if resp and resp[0] == STATUS_BUSY:
+            raise RuntimeError("设备正在传输或烧录，请完成后再设置次数。")
+        if not resp or resp[0] != STATUS_OK:
+            raise RuntimeError("设备不支持次数限制或保存失败，请更新固件后重试。")
+        if len(resp) != 8 or resp[1] != 1 or resp[2] > 1 or resp[3] > 1:
+            raise RuntimeError("设备次数响应无效。")
+        remaining = struct.unpack('<I', resp[4:8])[0]
+        if remaining > 999 or (not resp[2] and remaining):
+            raise RuntimeError("设备剩余次数无效。")
+        return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
+
+    def get_burn_quota(self):
+        return self._decode_quota(self._send_cmd(bytes([CMD_GET_BURN_QUOTA])))
+
+    def set_burn_quota(self, enabled, remaining):
+        if not isinstance(remaining, int) or not 0 <= remaining <= 999:
+            raise ValueError("烧录次数必须为 0–999。")
+        remaining = remaining if enabled else 0
+        request = bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining)
+        result = self._decode_quota(self._send_cmd(request))
+        if result['fault'] or result['enabled'] != bool(enabled) or result['remaining'] != remaining:
+            raise RuntimeError("设备次数保存校验失败。")
+        return result
 
     def pull(self, remote_path, local_path, callback=None):
         resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
@@ -312,6 +342,25 @@ class ActionWorker(QThread):
             self.finished.emit(False, str(e))
 
 
+class QuotaWorker(QThread):
+    finished = pyqtSignal(object, str)
+
+    def __init__(self, device, setting=None):
+        super().__init__()
+        self.device = device
+        self.setting = setting
+
+    def run(self):
+        try:
+            if self.setting is None:
+                result = self.device.get_burn_quota()
+            else:
+                result = self.device.set_burn_quota(*self.setting)
+            self.finished.emit(result, "")
+        except Exception as exc:
+            self.finished.emit(None, str(exc))
+
+
 class ImportWorker(QThread):
     """Upload a program batch and commit it for offline programming."""
     progress = pyqtSignal(str, int, int)  # step_name, current, total
@@ -377,6 +426,8 @@ class DAPLinkManager(QMainWindow):
         self.current_chip = None
         self.current_model = ''
         self.import_in_progress = False
+        self.quota_in_progress = False
+        self.quota_worker = None
         self._opt_widgets = {}
 
         self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
@@ -482,6 +533,7 @@ class DAPLinkManager(QMainWindow):
         chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
         chip_opt_layout.setContentsMargins(12, 12, 12, 12)
         chip_opt_layout.setSpacing(12)
+        chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
 
         # Two rows share the same input and button columns.
         chip_bar = QGridLayout()
@@ -536,6 +588,35 @@ class DAPLinkManager(QMainWindow):
         chip_opt_layout.addWidget(self.opt_scroll)
 
         layout.addWidget(self.chip_opt_frame)
+
+        # Persistent quota is saved separately; importing a program never replenishes it.
+        self.quota_frame = QGroupBox("烧录次数限制")
+        quota_layout = QGridLayout(self.quota_frame)
+        quota_layout.setContentsMargins(12, 2, 12, 4)
+        quota_layout.setHorizontalSpacing(10)
+        self.chk_quota = QCheckBox("启用次数限制")
+        self.spin_quota = QSpinBox()
+        self.spin_quota.setRange(0, 999)
+        self.spin_quota.setValue(100)
+        self.spin_quota.setSuffix(" 次")
+        self.spin_quota.setMinimumWidth(100)
+        self.btn_quota_save = QPushButton("保存到设备")
+        self.btn_quota_read = QPushButton("读取剩余次数")
+        self.lbl_quota = QLabel("剩余次数：请连接设备后读取")
+        self.lbl_quota.setWordWrap(True)
+        self.chk_quota.toggled.connect(lambda _: self._update_toolbar_state())
+        self.btn_quota_save.clicked.connect(lambda: self._start_quota(True))
+        self.btn_quota_read.clicked.connect(lambda: self._start_quota(False))
+        for control in (self.chk_quota, self.spin_quota, self.btn_quota_save, self.btn_quota_read):
+            control.setMinimumHeight(self.control_height)
+        quota_layout.addWidget(self.chk_quota, 0, 0)
+        quota_layout.addWidget(self.spin_quota, 0, 1)
+        quota_layout.addWidget(self.btn_quota_save, 0, 2)
+        quota_layout.addWidget(self.btn_quota_read, 0, 3)
+        quota_layout.addWidget(self.lbl_quota, 0, 4)
+        quota_layout.setColumnStretch(4, 1)
+        self.quota_frame.setToolTip("保存会把设备剩余次数设为输入值；失败不扣次数，烧录中断电按一次计。取消勾选并保存可不限次数。")
+        layout.addWidget(self.quota_frame)
 
         # ── Splitter: Local + Remote ──
         splitter = QSplitter(Qt.Horizontal)
@@ -741,7 +822,7 @@ class DAPLinkManager(QMainWindow):
 
     def _update_toolbar_state(self):
         connected = self.device.is_connected()
-        idle = not self.import_in_progress
+        idle = not self.import_in_progress and not self.quota_in_progress
         self.btn_connect.setEnabled(not connected and idle)
         self.btn_disconnect.setEnabled(connected and idle)
         self.btn_upload.setEnabled(connected and idle)
@@ -755,11 +836,50 @@ class DAPLinkManager(QMainWindow):
         self.btn_bind_algorithm.setEnabled(idle)
         self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
         self.chk_opt.setEnabled(idle and self.current_chip is not None)
+        self.chk_quota.setEnabled(connected and idle)
+        self.spin_quota.setEnabled(connected and idle and self.chk_quota.isChecked())
+        self.btn_quota_save.setEnabled(connected and idle)
+        self.btn_quota_read.setEnabled(connected and idle)
 
     def _set_import_state(self, active):
         self.import_in_progress = active
         self.remote_tree.setEnabled(not active)
         self.remote_path_input.setEnabled(not active)
+        self._update_toolbar_state()
+
+    def _start_quota(self, save=False):
+        if not self.device.is_connected() or self.import_in_progress or self.quota_in_progress:
+            return
+        if self.worker is not None and self.worker.isRunning():
+            self.statusBar().showMessage("请等待当前设备操作完成，再设置或读取次数。")
+            return
+        self.quota_in_progress = True
+        self.remote_tree.setEnabled(False)
+        self.remote_path_input.setEnabled(False)
+        self._update_toolbar_state()
+        setting = (self.chk_quota.isChecked(), self.spin_quota.value()) if save else None
+        self.statusBar().showMessage("正在保存烧录次数..." if save else "正在读取剩余次数...")
+        self.quota_worker = QuotaWorker(self.device, setting)
+        self.quota_worker.finished.connect(lambda result, error: self._quota_done(result, error, save))
+        self.quota_worker.start()
+
+    def _quota_done(self, result, error, saved):
+        self.quota_in_progress = False
+        self.remote_tree.setEnabled(True)
+        self.remote_path_input.setEnabled(True)
+        if error:
+            self.lbl_quota.setText("剩余次数：读取或保存失败")
+            self.statusBar().showMessage(error)
+        else:
+            self.chk_quota.setChecked(result['enabled'])
+            if result['enabled']:
+                self.spin_quota.setValue(result['remaining'])
+            if result['fault']:
+                self.lbl_quota.setText("次数记录异常：请重新设置并保存到设备")
+            else:
+                text = f"{result['remaining']:03d}次" if result['enabled'] else "不限"
+                self.lbl_quota.setText("剩余次数：" + text)
+            self.statusBar().showMessage("烧录次数已保存到设备，断电后保留。" if saved else "已读取设备剩余次数。")
         self._update_toolbar_state()
 
     def _on_connect(self):
@@ -773,7 +893,8 @@ class DAPLinkManager(QMainWindow):
         if ok:
             self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
             self.lbl_status_text.setText("已连接")
-            self.statusBar().showMessage("设备已连接")
+            self.statusBar().showMessage("设备已连接；可设置或读取烧录次数")
+            self.lbl_quota.setText("剩余次数：请点击“读取剩余次数”")
             self._navigate_remote("/")
         else:
             self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
@@ -787,12 +908,13 @@ class DAPLinkManager(QMainWindow):
         self.lbl_status_text.setText("未连接")
         self.remote_tree.clear()
         self.statusBar().showMessage("已断开")
+        self.lbl_quota.setText("剩余次数：设备未连接")
         self._update_toolbar_state()
 
     # ── Remote Navigation ──
 
     def _navigate_remote(self, path):
-        if not self.device.is_connected():
+        if self.quota_in_progress or not self.device.is_connected():
             return
         self.current_remote_path = path
         self.lbl_path.setText(f"路径: {path}")
@@ -1242,6 +1364,8 @@ class DAPLinkManager(QMainWindow):
     # ── Import Program ──
 
     def _on_import_program(self):
+        if self.quota_in_progress:
+            return
         if not self.device.is_connected():
             QMessageBox.warning(self, "Warning", "请先连接设备。")
             return
@@ -1383,6 +1507,10 @@ class DAPLinkManager(QMainWindow):
     # ── Close ──
 
     def closeEvent(self, event):
+        if self.quota_in_progress or self.import_in_progress:
+            self.statusBar().showMessage("请等待设备操作完成后关闭窗口。")
+            event.ignore()
+            return
         self.device.disconnect()
         event.accept()
 

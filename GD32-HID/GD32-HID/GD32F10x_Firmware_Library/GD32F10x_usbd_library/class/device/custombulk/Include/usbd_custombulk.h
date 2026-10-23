@@ -26,6 +26,8 @@
 #define CMD_RENAME                  0x0AU
 #define CMD_STAGE_ALGORITHM         0x0BU
 #define CMD_PREPARE_DOWNLOAD        0x0CU
+#define CMD_GET_BURN_QUOTA          0x0DU
+#define CMD_SET_BURN_QUOTA          0x0EU
 
 /* Response status codes */
 #define STATUS_OK                   0x00U
@@ -54,6 +56,7 @@ extern usb_class custombulk_class;
 
 /* Process deferred prepare requests from the application task. */
 void custombulk_prepare_service(usb_dev *udev);
+void custombulk_quota_service(usb_dev *udev);
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required);

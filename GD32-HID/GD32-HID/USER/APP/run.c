@@ -5,6 +5,7 @@
 #include "ff.h"
 #include "DAP_config.h"
 #include "usbd_custombulk.h"
+#include "burn_quota.h"
 
 
 usb_dev usb_hid;
@@ -83,6 +84,19 @@ static uint32_t auto_now_ms(void);
    repeat the failure reason after mode4 has returned */
 static char g_last_status[64] = {0};
 
+/* Quota gets a full-width 32px row. Key hints move to a separate 16px footer. */
+static void show_quota(uint16_t y)
+{
+    if(burn_quota_fault())
+        strcpy((char *)D, "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
+    else if(burn_quota_enabled())
+        sprintf((char *)D, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\x25\x30\x33\x6C\x75\xB4\xCE", (unsigned long)burn_quota_remaining());
+    else
+        strcpy((char *)D, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\xB2\xBB\xCF\xDE");
+    UI_Fill(0, y, 320, 32, 0);
+    UI_Text(8, y, (char *)D, 32, 1);
+}
+
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
                                    uint8_t opt_required)
@@ -119,6 +133,7 @@ void start_page(void)
     uint8_t ret;
     uint32_t ulReadNum;
     const char *status;
+    burn_quota_init();
     ret = f_mount(&fs, "0:", 1);
     status = "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3";
     if(ret == FR_OK)
@@ -358,6 +373,7 @@ void mode1(void)
         UI_Fill(0, 32, 320, 208, 0);
         UI_Text(8, 56, "\xCE\xC4\xBC\xFE\xB4\xAB\xCA\xE4", 32, 1);
         UI_Text(8, 112, "\xB5\xE7\xC4\xD4\xB4\xAB\xCA\xE4\xCE\xC4\xBC\xFE", 32, 1);
+        show_quota(148);
         UI_Text(8, 184, "\xD6\xD0\xBC\xFC\xBD\xF8\xC8\xEB\xC9\xD5\xC2\xBC", 32, 1);
         OLED_Refresh();
         oled.Refresh_flag = 0;
@@ -460,11 +476,12 @@ void mode2(void)
 		{
             UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
             UI_Text(8, 48, (const char *)app_data.firmware_name, 16, 1);
-            UI_Text(8, 88, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
-            UI_Text(8, 128, (const char *)app_data.bin_name, 16, 1);
+            UI_Text(8, 72, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+            UI_Text(8, 112, (const char *)app_data.bin_name, 16, 1);
             UI_Text(8, 176, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
-            UI_Text(272, app_data.head == 2 ? 176 : 8 + app_data.head * 80, "<-", 32, 1);
-            UI_Text(8, 220, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1);
+            UI_Text(272, app_data.head == 2 ? 176 : 8 + app_data.head * 64, "<-", 32, 1);
+            show_quota(136);
+            UI_Text(160, 220, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1);
 		}
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
@@ -479,10 +496,11 @@ static void show_download_progress(uint8_t percent)
 static void show_download_status(const char *status)
 {
     uint16_t size = UI_TextWidth(status, 32) <= 576 ? 32 : 16;
-    UI_Fill(0, 160, 320, 80, 0);
-    UI_TextBox(8, 160, 304, 80, status, (uint8_t)size, 1);
+    UI_Fill(0, 144, 320, 64, 0);
+    UI_TextBox(8, 144, 304, 64, status, (uint8_t)size, 1);
     strncpy(g_last_status, status, sizeof(g_last_status) - 1);
     g_last_status[sizeof(g_last_status) - 1] = '\0';
+    show_quota(208);
 }
 
 /* Native LCD error page: wrapped 32px title, complete 16px register values. */
@@ -503,6 +521,7 @@ static void show_download_error(const char *status, uint32_t diag, uint32_t step
     UI_Text(8, 144, (char *)D, 16, 1);
     sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
     UI_Text(8, 172, (char *)D, 16, 1);
+    show_quota(208);
 }
 
 /* Connect and halt the core as fast as possible.
@@ -675,15 +694,16 @@ static void auto_draw(void)
 	}
 
     UI_Text(8, 8, st, 32, 1);
-    UI_Text(8, 48, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
-    UI_Text(8, 84, (const char *)app_data.firmware_name, 16, 1);
-    UI_Text(8, 108, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
-    UI_Text(8, 144, (const char *)app_data.bin_name, 16, 1);
+    UI_Text(8, 44, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
+    UI_Text(8, 76, (const char *)app_data.firmware_name, 16, 1);
+    UI_Text(8, 96, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+    UI_Text(8, 128, (const char *)app_data.bin_name, 16, 1);
+    show_quota(148);
     if(UI_TextWidth(detail, 32) <= 304)
-        UI_Text(8, 168, detail, 32, 1);
+        UI_Text(8, 184, detail, 32, 1);
     else
-        UI_TextBox(8, 168, 304, 32, detail, 16, 1);
-    UI_Text(8, 204, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 32, 1);
+        UI_TextBox(8, 184, 304, 32, detail, 16, 1);
+    UI_Text(8, 224, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1);
 }
 
 void mode4(void)
@@ -752,6 +772,20 @@ void mode4(void)
 	g_burn_done = 1;
 	g_burn_ok = 0;
 
+    if(burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
+    {
+quota_rejected:
+        OLED_Clear();
+        UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC", 32, 1);
+        show_download_status(burn_quota_fault() ? "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3" : "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3");
+        if(g_auto_en)
+        {
+            g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms();
+            app_data.mode = 2; oled.Refresh_flag = 1;
+        }
+        return;
+    }
+
     OLED_Clear();
     UI_Text(8, 8, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
     sprintf((char *)D, "\xCB\xE3\xB7\xA8\x3A\x25\x73", app_data.firmware_name);
@@ -762,6 +796,7 @@ void mode4(void)
 
 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
+        if(burn_quota_begin() != BURN_QUOTA_OK) goto quota_rejected;
 		show_download_status("\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC");
 		/* Power-cycle target and grab SWD before programming */
 		swd_off();
@@ -1173,7 +1208,14 @@ void mode4(void)
 		}
 		else show_download_status("\x45\x52\x34\x3A\xB9\xCC\xBC\xFE\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC");
 		
-download_return:		
+download_return:
+        if(burn_quota_finish(g_burn_ok) != BURN_QUOTA_OK)
+        {
+            g_burn_ok = 0;
+            show_download_status("\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
+        }
+        else
+            show_quota(208);
 		swd_off();
 		TARGET_PWR_OFF;
 		oled.Refresh_flag = 1;
@@ -1366,6 +1408,7 @@ void run_task(void *pvParameters)
 
 		while(1)
 		{
+            custombulk_quota_service(&usb_hid);
 			custombulk_prepare_service(&usb_hid);
 			if(custombulk_take_prepare_complete(prepare_algorithm,
 			                                    prepare_program,

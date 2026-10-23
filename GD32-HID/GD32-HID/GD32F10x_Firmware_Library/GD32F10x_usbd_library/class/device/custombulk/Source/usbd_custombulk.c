@@ -3,6 +3,7 @@
 #include "usbd_transc.h"
 #include "ff.h"
 #include <string.h>
+#include "burn_quota.h"
 
 /* External FatFs objects from run.c */
 extern FATFS fs;
@@ -18,6 +19,9 @@ static uint8_t prepare_opt_required;
 static volatile uint8_t prepare_request_pending;
 static volatile uint8_t prepare_response_pending;
 static volatile uint8_t prepare_complete_pending;
+static volatile uint8_t quota_request_pending;
+static uint8_t quota_request_enabled;
+static uint32_t quota_request_remaining;
 
 /* Forward declarations */
 static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index);
@@ -55,6 +59,7 @@ static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index)
     prepare_request_pending = 0;
     prepare_response_pending = 0;
     prepare_complete_pending = 0;
+    quota_request_pending = 0;
 
     udev->class_data[CUSTOMBULK_INTERFACE] = (void *)&cb_handler;
 
@@ -82,6 +87,7 @@ static uint8_t custombulk_deinit(usb_dev *udev, uint8_t config_index)
     prepare_request_pending = 0;
     prepare_response_pending = 0;
     prepare_complete_pending = 0;
+    quota_request_pending = 0;
     memset(staged_algorithm, 0, sizeof(staged_algorithm));
     memset(prepare_algorithm, 0, sizeof(prepare_algorithm));
     memset(prepare_program, 0, sizeof(prepare_program));
@@ -544,6 +550,58 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
     return 1;
 }
 
+/* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:
+ * [status][version=1][enabled][fault][remaining LE32]. Writes run in task context. */
+static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
+{
+    uint32_t remaining = 0;
+    if(app_data.mode == 4 || cb_handler.file_opened || prepare_request_pending ||
+       prepare_response_pending || prepare_complete_pending || quota_request_pending) {
+        send_response(udev, STATUS_BUSY, NULL, 0);
+        return;
+    }
+    if((buf[0] == CMD_GET_BURN_QUOTA && len != 1) ||
+       (buf[0] == CMD_SET_BURN_QUOTA && (len != 6 || buf[1] > 1))) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+    if(buf[0] == CMD_SET_BURN_QUOTA) {
+        remaining = (uint32_t)buf[2] | ((uint32_t)buf[3] << 8) |
+                    ((uint32_t)buf[4] << 16) | ((uint32_t)buf[5] << 24);
+        if(remaining > BURN_QUOTA_MAX || (!buf[1] && remaining)) {
+            send_response(udev, STATUS_ERR, NULL, 0);
+            return;
+        }
+        quota_request_enabled = buf[1];
+        quota_request_remaining = remaining;
+    }
+    quota_request_pending = buf[0];
+}
+
+void custombulk_quota_service(usb_dev *udev)
+{
+    uint8_t cmd = quota_request_pending, result = BURN_QUOTA_OK;
+    uint8_t response[7];
+    uint32_t remaining;
+    if(!cmd) return;
+    /* OUT is rearmed only after this response completes. */
+    if(app_data.mode == 4 || cb_handler.file_opened) {
+        quota_request_pending = 0;
+        send_response(udev, STATUS_BUSY, NULL, 0);
+        return;
+    }
+    if(cmd == CMD_SET_BURN_QUOTA) {
+        result = burn_quota_set(quota_request_enabled, quota_request_remaining);
+        oled.Refresh_flag = 1;
+    }
+    remaining = burn_quota_remaining();
+    response[0] = 1; response[1] = burn_quota_enabled(); response[2] = burn_quota_fault();
+    response[3] = (uint8_t)remaining; response[4] = (uint8_t)(remaining >> 8);
+    response[5] = (uint8_t)(remaining >> 16); response[6] = (uint8_t)(remaining >> 24);
+    quota_request_pending = 0;
+    send_response(udev, result == BURN_QUOTA_OK ? STATUS_OK : STATUS_ERR, response, sizeof(response));
+}
+
 /* Command dispatcher */
 static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
@@ -587,6 +645,10 @@ static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
         break;
     case CMD_PREPARE_DOWNLOAD:
         cmd_prepare_download(udev, buf, len);
+        break;
+    case CMD_GET_BURN_QUOTA:
+    case CMD_SET_BURN_QUOTA:
+        cmd_burn_quota(udev, buf, len);
         break;
     default:
         send_response(udev, STATUS_ERR, NULL, 0);
