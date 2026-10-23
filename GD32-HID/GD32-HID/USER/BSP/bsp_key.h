@@ -12,7 +12,8 @@
 #define read_key_mid    gpio_input_bit_get(KEY_M_GPIO_Port, KEY_M_Pin)
 #define read_key_right  gpio_input_bit_get(KEY_R_GPIO_Port, KEY_R_Pin)
 
-typedef enum {key_null, key_left, key_mid, key_right, key_l_left, key_l_mid, key_l_right, key_d_mid} key_num;
+/* Long events fire once; repeat events are separate for menu-specific handling. */
+typedef enum {key_null, key_left, key_mid, key_right, key_l_left, key_l_mid, key_l_right, key_d_mid, key_rep_left, key_rep_right} key_num;
 
 #define key_dbl_th      (300 / KEY_SCAN_MS)
 

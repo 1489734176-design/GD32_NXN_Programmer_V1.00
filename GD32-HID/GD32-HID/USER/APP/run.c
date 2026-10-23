@@ -155,9 +155,13 @@ void page(void)
 		switch(key_val.key)
 		{
 			case key_left:
+			case key_l_left:
+			case key_rep_left:
 				app_data.head = (app_data.head + 1) % 2;   /* 上一个(循环, 共2项) */
 				break;
 			case key_right:
+			case key_l_right:
+			case key_rep_right:
 				app_data.head = (app_data.head + 1) % 2;   /* 下一个(循环, 共2项) */
 				break;
 			case key_mid:
@@ -338,6 +342,8 @@ void mode2(void)
 				usbd_connect(&usb_hid);
 				return;
 			case key_left:                      /* 上一个(循环) */
+			case key_l_left:
+			case key_rep_left:
 				if(g_auto_en)                   /* 自动模式下不切换焦点 */
 					break;
 				app_data.head = (app_data.head + 2) % 3;
@@ -670,7 +676,11 @@ void mode4(void)
 		switch(key_val.key)
 		{
 			case key_left:
+			case key_l_left:
+			case key_rep_left:
 			case key_right:
+			case key_l_right:
+			case key_rep_right:
 			case key_mid:
 				if(g_burn_done)             /* 结果页: 单击任一键返回选择页 */
 				{
@@ -1159,10 +1169,14 @@ void mode3(void)
 		switch(key_val.key)
 		{
 			case key_left:
+			case key_l_left:
+			case key_rep_left:
 				if(sum)
 					index = index == 0 ? sum - 1 : index - 1;
 				break;
 			case key_right:
+			case key_l_right:
+			case key_rep_right:
 				if(sum)
 					index = (index + 1) % sum;
 				break;

@@ -92,12 +92,12 @@ key_num key_scan(void)
             {
                 repeated = 1;
                 repeat_count = 0;
-                return active;
+                return active == key_left ? key_l_left : key_l_right;
             }
             if(++repeat_count >= key_repeat_th)
             {
                 repeat_count = 0;
-                return active;
+                return active == key_left ? key_rep_left : key_rep_right;
             }
         }
     }
