@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：上位机文件/次数协议：USB回调收包，次数保存和导入确认放到主任务；保持WinUSB接口号及原文件命令。 */
 #include "usbd_custombulk.h"
 #include "usbd_composite.h"
 #include "usbd_transc.h"
@@ -12,6 +13,11 @@ extern FILINFO FileInfo;
 extern DIR DirInfo;
 
 static custombulk_handler cb_handler;
+/* OUT端点收到一包后等待IN应答才重装，因此只记录长度，无需增加收包缓存。 */
+static volatile uint16_t file_request_length;
+static volatile uint8_t file_request_pending, file_cleanup_pending;
+static volatile uint8_t file_request_busy;
+
 static uint8_t staged_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_program[CB_MAX_NAME + 1];
@@ -31,6 +37,7 @@ static void custombulk_data_in(usb_dev *udev, uint8_t ep_num);
 static void custombulk_data_out(usb_dev *udev, uint8_t ep_num);
 
 static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len);
+static void send_response(usb_dev *udev, uint8_t status, uint8_t *data, uint16_t data_len);
 
 /* strnlen replacement for ARM Compiler V5 */
 static uint16_t safe_strnlen(const char *s, uint16_t max)
@@ -51,6 +58,7 @@ usb_class custombulk_class = {
 
 static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index)
 {
+    custombulk_reset(); /* 重新枚举也延后清理旧会话文件，不能在USB中断中关闭。 */
     memset(&cb_handler, 0, sizeof(cb_handler));
     memset(staged_algorithm, 0, sizeof(staged_algorithm));
     memset(prepare_algorithm, 0, sizeof(prepare_algorithm));
@@ -79,18 +87,7 @@ static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index)
 
 static uint8_t custombulk_deinit(usb_dev *udev, uint8_t config_index)
 {
-    /* Close any open file */
-    if (cb_handler.file_opened) {
-        f_close(&cb_fd);
-        cb_handler.file_opened = 0;
-    }
-    prepare_request_pending = 0;
-    prepare_response_pending = 0;
-    prepare_complete_pending = 0;
-    quota_request_pending = 0;
-    memset(staged_algorithm, 0, sizeof(staged_algorithm));
-    memset(prepare_algorithm, 0, sizeof(prepare_algorithm));
-    memset(prepare_program, 0, sizeof(prepare_program));
+    custombulk_reset(); /* 类卸载与总线复位采用同一延后清理。 */
 
     usbd_ep_deinit(udev, CUSTOMBULK_IN_EP);
     usbd_ep_deinit(udev, CUSTOMBULK_OUT_EP);
@@ -106,6 +103,7 @@ static uint8_t custombulk_req_process(usb_dev *udev, usb_req *req)
 
 static void custombulk_data_in(usb_dev *udev, uint8_t ep_num)
 {
+    cb_handler.transfer_active = 0; /* 应答结束后才允许启动下一次目标烧录。 */
     /* IN transfer complete - response sent */
     if (prepare_response_pending) {
         prepare_response_pending = 0;
@@ -122,14 +120,23 @@ static void custombulk_data_out(usb_dev *udev, uint8_t ep_num)
     /* Get received length */
     len = udev->transc_out[ep_num].xfer_count;
 
-    /* Process the received command */
-    process_command(udev, cb_handler.rx_buf, len);
+    /* 仅暂存指令，禁止USB中断直接操作文件系统；烧录期间普通文件指令立即回忙。 */
+    if(len && g_programming_active && cb_handler.rx_buf[0] != CMD_GET_STATUS)
+    {
+        send_response(udev, STATUS_BUSY, NULL, 0);
+        return;
+    }
+    file_request_length = len;
+    file_request_busy = g_programming_active;
+    file_request_pending = 1;
 }
 
 /* Send response back to host */
 static void send_response(usb_dev *udev, uint8_t status, uint8_t *data, uint16_t data_len)
 {
     uint16_t total;
+    if(file_cleanup_pending) return; /* 断线期间丢弃旧会话应答。 */
+    cb_handler.transfer_active = 1;
 
     if (data_len > CUSTOMBULK_IN_PACKET - 1)
         data_len = CUSTOMBULK_IN_PACKET - 1;
@@ -139,6 +146,46 @@ static void send_response(usb_dev *udev, uint8_t status, uint8_t *data, uint16_t
     }
     total = 1 + data_len;
     usbd_ep_send(udev, CUSTOMBULK_IN_EP, cb_handler.tx_buf, total);
+}
+
+/* USB复位中断仅使会话失效；真实f_close留给主任务，避免中断重入FatFs。
+ * 复位中断和类初始化都会调用，覆盖重插后不经过deinit的硬件路径。 */
+void custombulk_reset(void)
+{
+    if(cb_handler.file_opened == 2 || staged_algorithm[0])
+        app_data.bin_name[0] = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
+    file_cleanup_pending = 1; file_request_pending = 0;
+    cb_handler.transfer_active = 0;
+    prepare_request_pending = 0; prepare_response_pending = 0;
+    prepare_complete_pending = 0; quota_request_pending = 0;
+    staged_algorithm[0] = 0; prepare_algorithm[0] = 0; prepare_program[0] = 0;
+    oled.Refresh_flag = 1;
+}
+
+/* 在主任务依次执行文件命令和断线清理，与界面/烧录共享同一FatFs调用线程。 */
+void custombulk_file_service(usb_dev *udev)
+{
+    uint16_t length;
+    if(file_cleanup_pending)
+    {
+        if(cb_fd.obj.fs) f_close(&cb_fd);
+        cb_handler.file_opened = 0;
+        file_cleanup_pending = 0;
+        oled.Refresh_flag = 1;
+    }
+    if(!file_request_pending) return;
+    length = file_request_length;
+    file_request_pending = 0;
+    if(file_request_busy && length && cb_handler.rx_buf[0] != CMD_GET_STATUS)
+        send_response(udev, STATUS_BUSY, NULL, 0);
+    else process_command(udev, cb_handler.rx_buf, length);
+}
+/* 打开文件、待处理包、导入会话或未发完应答都暂停自动探测/按键烧录。 */
+uint8_t custombulk_is_busy(void)
+{
+    return cb_handler.file_opened || cb_handler.transfer_active || file_request_pending ||
+           file_cleanup_pending || staged_algorithm[0] || prepare_request_pending ||
+           prepare_response_pending || prepare_complete_pending || quota_request_pending;
 }
 
 /* LIST_DIR: [CMD][path] -> [STATUS][entry1\nentry2\n...] */
@@ -264,6 +311,7 @@ static void cmd_close_file(usb_dev *udev)
 
     res = f_close(&cb_fd);
     cb_handler.file_opened = 0;
+    oled.Refresh_flag = 1; /* 文件完成后重新比较列表/文件字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -345,6 +393,7 @@ static void cmd_delete_file(usb_dev *udev, uint8_t *path, uint16_t path_len)
 
 
     res = f_unlink((const TCHAR *)path);
+    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -358,6 +407,7 @@ static void cmd_mkdir(usb_dev *udev, uint8_t *path, uint16_t path_len)
 
 
     res = f_mkdir((const TCHAR *)path);
+    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -393,6 +443,7 @@ static void cmd_rename(usb_dev *udev, uint8_t *buf, uint16_t len)
     uint8_t *new_path = &buf[1 + old_len + 1];
 
     res = f_rename((const TCHAR *)old_path, (const TCHAR *)new_path);
+    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -448,6 +499,14 @@ static uint8_t make_opt_name(const uint8_t *program, uint8_t *opt_name)
 static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint16_t name_len = len - 1;
+    /* 空文件名取消未完成导入，失败后不让待机页一直暂停检测。 */
+    if(len == 1)
+    {
+        if(cb_handler.file_opened) f_close(&cb_fd); /* 取消写入失败的导入，关闭尚未完成的文件。 */
+        cb_handler.file_opened = 0; staged_algorithm[0] = 0;
+        app_data.bin_name[0] = 0; oled.Refresh_flag = 1; /* 残缺上传必须重新导入/选择后才可烧录。 */
+        send_response(udev, STATUS_OK, NULL, 0); return;
+    }
 
     if (len < 2 || !valid_file_name(&buf[1], name_len) ||
         prepare_request_pending || prepare_response_pending) {
@@ -471,7 +530,7 @@ static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
-    if (app_data.mode == 4) {
+    if (g_programming_active) {
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
     }
@@ -484,6 +543,7 @@ static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
     prepare_request_pending = 1;
 }
 
+/* 在主任务中完成文件检查和导入确认，避免USB中断中执行耗时文件操作。 */
 void custombulk_prepare_service(usb_dev *udev)
 {
     uint8_t algorithm[CB_MAX_NAME + 1];
@@ -498,7 +558,7 @@ void custombulk_prepare_service(usb_dev *udev)
     memcpy(algorithm, prepare_algorithm, sizeof(algorithm));
     memcpy(program, prepare_program, sizeof(program));
 
-    if (app_data.mode == 4) {
+    if (g_programming_active) {
         staged_algorithm[0] = '\0';
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
@@ -532,6 +592,7 @@ prepare_error:
     send_response(udev, STATUS_ERR, NULL, 0);
 }
 
+/* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required)
@@ -552,10 +613,11 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
 
 /* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:
  * [status][version=1][enabled][fault][remaining LE32]. Writes run in task context. */
+/* 验证上位机次数指令并暂存；USB中断内不写Flash，交由主任务延后执行。 */
 static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint32_t remaining = 0;
-    if(app_data.mode == 4 || cb_handler.file_opened || prepare_request_pending ||
+    if(g_programming_active || cb_handler.file_opened || prepare_request_pending ||
        prepare_response_pending || prepare_complete_pending || quota_request_pending) {
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
@@ -578,6 +640,7 @@ static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
     quota_request_pending = buf[0];
 }
 
+/* 在主任务中保存/读取次数，返回版本、开关、异常标志和剩余值；避免USB中断中擦写Flash。 */
 void custombulk_quota_service(usb_dev *udev)
 {
     uint8_t cmd = quota_request_pending, result = BURN_QUOTA_OK;
@@ -585,7 +648,7 @@ void custombulk_quota_service(usb_dev *udev)
     uint32_t remaining;
     if(!cmd) return;
     /* OUT is rearmed only after this response completes. */
-    if(app_data.mode == 4 || cb_handler.file_opened) {
+    if(g_programming_active || cb_handler.file_opened) {
         quota_request_pending = 0;
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
@@ -608,6 +671,10 @@ static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
     if (len == 0) return;
 
     uint8_t cmd = buf[0];
+    /* 两层拦截：即使请求在状态切换前已收到，也不允许烧录时访问SPI文件系统。 */
+    if(g_programming_active && cmd != CMD_GET_STATUS) {
+        send_response(udev, STATUS_BUSY, NULL, 0); return;
+    }
 
     switch (cmd) {
     case CMD_LIST_DIR:

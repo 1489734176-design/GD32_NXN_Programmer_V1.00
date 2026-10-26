@@ -38,6 +38,7 @@ OF SUCH DAMAGE.
 #include "usbd_lld_core.h"
 #include "usbd_enum.h"
 #include "main.h"
+#include "usbd_custombulk.h" /* 总线复位通知文件服务延后关闭旧会话。 */
 
 #define USB_EPTYPE_MASK           0x03U
 
@@ -200,6 +201,7 @@ static void usbd_address_set (usb_dev *udev)
 */
 static void usbd_ep_reset (usb_dev *udev)
 {
+    custombulk_reset(); /* 真实USB复位不会自动调用类deinit，必须在此标记清理。 */
     uint8_t i = 0U;
 
     usb_transc *transc = &udev->transc_in[0];

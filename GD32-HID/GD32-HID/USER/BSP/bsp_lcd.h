@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：原生屏幕布局：默认横屏320×240；LCD_BlitMono按小块直接画字，不分配整屏显存。 */
 #ifndef _BSP_LCD_H__
 #define _BSP_LCD_H__
 
@@ -49,6 +50,7 @@
 /* 初始化共用 SPI0、控制引脚与 ST7789；清为黑屏后开启显示和背光。 */
 void LCD_Init(void);
 /* Native monochrome drawing, no framebuffer; stride is measured in bytes. */
+/* 将单色点阵按整数倍率分块写入LCD；支持汉字行式点阵与ASCII/图标列式点阵，限制SPI占用长度。 */
 void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                   uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
                   uint8_t scale, uint8_t mode);

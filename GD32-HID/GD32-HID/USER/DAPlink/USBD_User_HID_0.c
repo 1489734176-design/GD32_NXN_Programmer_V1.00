@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：在线HID报告与专用缓冲区受总开关控制，默认不编译；离线与WinUSB功能不依赖它。 */
 /*------------------------------------------------------------------------------
  * MDK Middleware - Component ::USB:Device
  * Copyright (c) 2004-2017 ARM Germany GmbH. All rights reserved.
@@ -45,6 +46,7 @@
 #include "DAP.h"
 #include "main.h"
 
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 
 uint8_t  	USB_Request[DAP_PACKET_SIZE];

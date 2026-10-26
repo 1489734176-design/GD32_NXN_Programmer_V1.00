@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：Flash片选接口委托共享SPI0总线，确保LCD和Flash访问互斥。 */
 #include "bsp_spi0_bus.h"
 #ifndef _BSP_GD25QXX_H__
 #define _BSP_GD25QXX_H__
@@ -50,7 +51,9 @@ typedef struct
 extern gd25qxx_TypeDef gd25qxx;
 extern uint8_t DATA_BUFFER[4096];
 
+/* 通过共享SPI0总线执行Flash双向单字节收发，保留原驱动接口。 */
 uint8_t SPI_ReadWriteByte(uint8_t TxData);
+/* 初始化共享SPI0总线并唤醒外部Flash，读取容量型号，必要时启用四字节地址。 */
 void GD25QXX_Init(void);
 uint16_t  GD25QXX_ReadID(void);  	    		                                								//读取FLASH ID
 uint8_t GD25QXX_ReadSR(uint8_t regno);                                           					//读取状态寄存器 

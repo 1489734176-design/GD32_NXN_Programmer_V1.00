@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：该文件只在开启在线仿真时编译；共享BOS/WinUSB描述符已移到复合USB驱动，关闭HID不影响文件传输。 */
 /*!
     \file    custom_hid_core.c
     \brief   custom HID class driver
@@ -38,6 +39,7 @@ OF SUCH DAMAGE.
 #include "usbd_transc.h"
 #include "firmware_features.h"
 #include "custom_hid_core.h"
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 
 #include <string.h>

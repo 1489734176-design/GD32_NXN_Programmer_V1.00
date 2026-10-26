@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：厂商在线DAP命令受总开关控制，关闭后不占应用Flash。 */
 /*
  * Copyright (c) 2013-2017 ARM Limited. All rights reserved.
  *
@@ -28,6 +29,7 @@
 #include "DAP_config.h"
 #include "DAP.h"
 
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 
 //**************************************************************************************************

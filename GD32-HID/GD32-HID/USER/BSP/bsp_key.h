@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：按键时序：20ms扫描，左右长按500ms，中键长按1500ms，连发100ms、双击300ms；长按与连发事件分开。 */
 #ifndef _BSP_KEY_H__
 #define _BSP_KEY_H__
 
@@ -28,7 +29,9 @@ extern key_TypeDef key_val;
 
 
 
+/* 初始化三个按键为下拉输入。 */
 void key_init(void);
+/* 按键消抖及短按/长按/连发/中键双击识别；长按只发一次，长按松开不再补发短按。 */
 key_num key_scan(void);
 
 #endif

@@ -1,8 +1,10 @@
+/* 中文注释补充（2026-10-26）：外部Flash改用统一SPI0总线接口，与LCD共享硬件SPI，保留Flash读写及忙检测行为。 */
 #include "bsp_gd25qxx.h"
 #include "main.h"
 
 gd25qxx_TypeDef gd25qxx;
 
+/* 初始化共享SPI0总线并唤醒外部Flash，读取容量型号，必要时启用四字节地址。 */
 void GD25QXX_Init(void)
 {	
     uint8_t temp;
@@ -21,6 +23,7 @@ void GD25QXX_Init(void)
     }
 
 }  
+/* 通过共享SPI0总线执行Flash双向单字节收发，保留原驱动接口。 */
 uint8_t SPI_ReadWriteByte(uint8_t TxData)
 {
     return SPI0_FlashExchange(TxData);

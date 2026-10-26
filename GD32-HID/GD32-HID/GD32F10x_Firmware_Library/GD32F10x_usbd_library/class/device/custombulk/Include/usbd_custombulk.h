@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：WinUSB文件传输接口固定为1；新增0x0D读次数、0x0E设置次数，仍保留原文件传输协议。 */
 #ifndef __USBD_CUSTOMBULK_H
 #define __USBD_CUSTOMBULK_H
 
@@ -53,10 +54,18 @@ typedef struct {
 } custombulk_handler;
 
 extern usb_class custombulk_class;
+/* 文件指令及断线清理由主任务执行；忙标志用于暂停自动烧录。 */
+void custombulk_file_service(usb_dev *udev);
+/* 总线复位/类卸载只标记延后清理，不在中断执行FatFs。 */
+void custombulk_reset(void);
+uint8_t custombulk_is_busy(void);
 
 /* Process deferred prepare requests from the application task. */
+/* 在主任务中完成文件检查和导入确认，避免USB中断中执行耗时文件操作。 */
 void custombulk_prepare_service(usb_dev *udev);
+/* 在主任务中保存/读取次数，返回版本、开关、异常标志和剩余值；避免USB中断中擦写Flash。 */
 void custombulk_quota_service(usb_dev *udev);
+/* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required);

@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：此前修改说明：保留原烧录/硬件流程，下方以中文说明相关界面与兼容逻辑。 */
 #include "burn_quota.h"
 
 #define QUOTA_MAGIC 0x31545142UL /* BQT1, journal format version 1 */
@@ -11,11 +12,13 @@ static uint32_t quota_remaining;
 static uint8_t quota_enabled, quota_fault, quota_reserved;
 static uint8_t quota_page, quota_next, quota_valid;
 
+/* 计算次数日志页与记录槽的内部Flash地址。 */
 static uint32_t record_address(uint8_t page, uint8_t slot)
 {
     return BURN_QUOTA_FLASH_BASE + page * BURN_QUOTA_PAGE_SIZE + slot * QUOTA_RECORD_SIZE;
 }
 
+/* 计算次数记录CRC32，用于检测记录损坏和掉电写入不完整。 */
 static uint32_t checksum(const uint32_t *words)
 {
     uint32_t crc = 0xFFFFFFFFUL;
@@ -30,6 +33,7 @@ static uint32_t checksum(const uint32_t *words)
     return crc ^ 0xFFFFFFFFUL;
 }
 
+/* 同时验证标识、范围、补码、CRC与提交标记，防止误恢复旧次数。 */
 static uint8_t record_valid(const uint32_t *r)
 {
     return r[0] == QUOTA_MAGIC && r[2] <= 1 && r[3] <= BURN_QUOTA_MAX &&
@@ -37,6 +41,7 @@ static uint8_t record_valid(const uint32_t *r)
            r[6] == ~r[1] && r[7] == QUOTA_COMMIT;
 }
 
+/* 扫描两页次数日志，选择最新完整记录；未提交记录忽略，已提交损坏记录禁止烧录。 */
 void burn_quota_init(void)
 {
     uint32_t r[QUOTA_WORDS];
@@ -73,10 +78,14 @@ void burn_quota_init(void)
     if(any_data && !quota_valid) quota_fault = 1;
 }
 
+/* 查询是否启用次数限制。 */
 uint8_t burn_quota_enabled(void) { return quota_enabled; }
+/* 查询次数记录是否异常；异常时拒绝开始烧录。 */
 uint8_t burn_quota_fault(void) { return quota_fault; }
+/* 查询当前剩余次数，界面以三位数字补零显示。 */
 uint32_t burn_quota_remaining(void) { return quota_remaining; }
 
+/* 追加次数记录，先写数据最后提交；页满时轮换，提交前保留旧页，写入异常立即禁止烧录。 */
 static uint8_t append(uint8_t enabled, uint32_t remaining, uint8_t repair)
 {
     uint32_t r[QUOTA_WORDS], address;
@@ -105,6 +114,7 @@ storage_error:
     return BURN_QUOTA_STORAGE;
 }
 
+/* 保存上位机设置的0～999额度或不限；烧录预扣尚未结束时拒绝重设，相同设置不重复擦写。 */
 uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
 {
     if(quota_reserved) return BURN_QUOTA_BUSY;
@@ -115,6 +125,7 @@ uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
     return append(enabled, remaining, quota_fault);
 }
 
+/* 目标芯片上电/烧录前持久化预扣一次；额度为零或存储异常时拒绝开始。 */
 uint8_t burn_quota_begin(void)
 {
     uint8_t result;
@@ -127,6 +138,7 @@ uint8_t burn_quota_begin(void)
     return result;
 }
 
+/* 结束本次预扣：成功不再写Flash，普通失败退回一次；掉电未执行本函数时保留扣减。 */
 uint8_t burn_quota_finish(uint8_t success)
 {
     if(!quota_reserved) return BURN_QUOTA_OK;

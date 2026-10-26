@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：LCD与外部Flash共享SPI0的事务接口；禁止两者同时选中，LCD分块发送后释放总线。 */
 #ifndef BSP_SPI0_BUS_H
 #define BSP_SPI0_BUS_H
 

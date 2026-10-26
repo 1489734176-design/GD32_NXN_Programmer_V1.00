@@ -1,3 +1,4 @@
+# 中文注释补充（2026-10-26）：新增烧录次数设置/读取界面及USB命令；额度保存到设备，重新导入程序不会自动恢复次数。
 #!/usr/bin/env python3
 """
 CMSIS-DAPLINK File Manager
@@ -139,6 +140,7 @@ class DAPLinkDevice:
             return path
         return '0:' + path.lstrip('/')
 
+    # 锁住单条USB发送/接收，确保同一指令与其响应配对。
     def _send_cmd(self, cmd_data):
         with self._command_lock:
             self.ep_out.write(cmd_data, timeout=TIMEOUT)
@@ -196,7 +198,7 @@ class DAPLinkDevice:
         return True
 
     def stage_algorithm(self, algorithm_name):
-        if not algorithm_name or len(algorithm_name.encode('ascii')) > 31:
+        if len(algorithm_name.encode('ascii')) > 31:  # 空名称用于取消失败的导入会话。
             raise ValueError("Algorithm filename must be 1-31 ASCII characters")
         resp = self._send_cmd(bytes([CMD_STAGE_ALGORITHM]) + algorithm_name.encode('ascii'))
         if not resp or resp[0] != STATUS_OK:
@@ -215,6 +217,7 @@ class DAPLinkDevice:
             raise RuntimeError("Device rejected download preparation")
 
     @staticmethod
+    # 验证设备次数响应的状态、版本、长度与范围，返回启用/异常/剩余次数字段。
     def _decode_quota(resp):
         if resp and resp[0] == STATUS_BUSY:
             raise RuntimeError("设备正在传输或烧录，请完成后再设置次数。")
@@ -227,9 +230,11 @@ class DAPLinkDevice:
             raise RuntimeError("设备剩余次数无效。")
         return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
 
+    # 发送0x0D指令读取设备剩余次数。
     def get_burn_quota(self):
         return self._decode_quota(self._send_cmd(bytes([CMD_GET_BURN_QUOTA])))
 
+    # 发送0x0E指令设置次数并检查设备回传，取消限制时额度归零但恢复不限。
     def set_burn_quota(self, enabled, remaining):
         if not isinstance(remaining, int) or not 0 <= remaining <= 999:
             raise ValueError("烧录次数必须为 0–999。")
@@ -279,6 +284,7 @@ class ConnectWorker(QThread):
     def __init__(self, device):
         super().__init__()
         self.device = device
+    # 后台连接设备，将成功或错误通知主界面。
     def run(self):
         try:
             self.device.connect()
@@ -293,6 +299,7 @@ class ListDirWorker(QThread):
         super().__init__()
         self.device = device
         self.path = path
+    # 后台读取设备目录，返回文件列表或错误。
     def run(self):
         try:
             entries = self.device.list_dir(self.path)
@@ -310,6 +317,7 @@ class TransferWorker(QThread):
         self.mode = mode  # 'push' or 'pull'
         self.src = src
         self.dst = dst
+    # 后台上传/下载文件并报告进度，完成后返回传输字节数。
     def run(self):
         try:
             def cb(cur, total):
@@ -331,6 +339,7 @@ class ActionWorker(QThread):
         self.action = action
         self.path = path
         self.path2 = path2
+    # 后台执行设备目录创建或文件删除操作。
     def run(self):
         try:
             if self.action == 'mkdir':
@@ -350,6 +359,7 @@ class QuotaWorker(QThread):
         self.device = device
         self.setting = setting
 
+    # 后台保存或读取烧录次数，将设备回传额度交给主界面。
     def run(self):
         try:
             if self.setting is None:
@@ -374,6 +384,7 @@ class ImportWorker(QThread):
         self.algorithm_name = algorithm_name
         self.opt_path = opt_path
 
+    # 后台导入固件、算法和可选OPT文件，确认准备完成后设备转入离线烧录。
     def run(self):
         try:
             try:
@@ -381,6 +392,8 @@ class ImportWorker(QThread):
             except Exception:
                 pass
 
+            # 先暂存算法名锁住整个导入过程，防止固件与OPT两次上传间隙自动开始。
+            self.device.stage_algorithm(self.algorithm_name)
             prog_name = os.path.basename(self.program_path)
             self.log.emit("Uploading program: " + prog_name)
             written = self.device.push(
@@ -406,6 +419,11 @@ class ImportWorker(QThread):
             self.device.prepare_download(prog_name, opt_required)
             self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
+            # 导入失败取消暂存，恢复设备待机；断线时取消失败交由设备断线清理。
+            try:
+                self.device.stage_algorithm("")
+            except Exception:
+                pass
             self.finished.emit(False, str(e))
 
     def _cb(self, cur, total):
@@ -847,6 +865,7 @@ class DAPLinkManager(QMainWindow):
         self.remote_path_input.setEnabled(not active)
         self._update_toolbar_state()
 
+    # 启动后台保存/读取次数，暂时锁住其他USB操作，避免响应或文件传输互相干扰。
     def _start_quota(self, save=False):
         if not self.device.is_connected() or self.import_in_progress or self.quota_in_progress:
             return
@@ -863,6 +882,7 @@ class DAPLinkManager(QMainWindow):
         self.quota_worker.finished.connect(lambda result, error: self._quota_done(result, error, save))
         self.quota_worker.start()
 
+    # 恢复控件状态，显示三位剩余次数或错误；保存的新额度独立于导入程序。
     def _quota_done(self, result, error, saved):
         self.quota_in_progress = False
         self.remote_tree.setEnabled(True)
@@ -1489,16 +1509,12 @@ class DAPLinkManager(QMainWindow):
     def _import_done(self, ok, msg):
         self.progress.setVisible(False)
         if ok:
-            # Device switches to offline mode and drops USB on purpose.
-            self.device.disconnect()
-            self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
-            self.lbl_status_text.setText("Disconnected")
-            self.remote_tree.clear()
-            self.statusBar().showMessage("导入完成，设备已准备离线烧录。再次导入前请让设备回到在线模式。")
+            # 新固件留在烧录页继续USB通信，导入完成后保持连接状态和远端列表。
+            self.statusBar().showMessage("导入完成，设备已准备烧录，USB保持连接。")
             QMessageBox.information(self, "导入完成",
-                                    "程序与算法已导入，设备已切换到离线烧录选择页，光标停在“开始烧录”。\n"
-                                    "在设备上按一下中键即可烧录。\n\n"
-                                    "设备已按预期断开 USB。再次导入前请让它回到在线模式。")
+                                    "程序与算法已导入，设备已进入烧录界面。\n"
+                                    "自动模式检测到芯片后开始烧录；手动模式按中键开始。\n"
+                                    "上位机仍保持连接，可继续设置次数和传输文件。")
         else:
             self.statusBar().showMessage(f"导入失败: {msg}")
             QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")

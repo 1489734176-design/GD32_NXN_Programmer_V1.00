@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：复合USB接口布局受在线仿真宏控制，关闭HID时仍保留接口号兼容上位机。 */
 #ifndef __USBD_COMPOSITE_H_
 #define __USBD_COMPOSITE_H_
 
@@ -11,6 +12,7 @@
 typedef struct
 {
     usb_desc_config         				 config;
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 		usb_desc_iad										 hid_iad;
 		usb_desc_itf            				 hid_itf;

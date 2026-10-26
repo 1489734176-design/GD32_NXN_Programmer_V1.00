@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：此前修改说明：保留原烧录/硬件流程，下方以中文说明相关界面与兼容逻辑。 */
 #ifndef __OLEDFONT_H
 #define __OLEDFONT_H
 const unsigned char asc2_0806[][6] =

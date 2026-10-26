@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：在线CMSIS-DAP命令解析受总开关控制；离线烧录依赖的DAP_Setup和SWD底层仍保留。 */
 /*
  * Copyright (c) 2013-2017 ARM Limited. All rights reserved.
  *
@@ -54,6 +55,7 @@
 
 
          DAP_Data_t DAP_Data;           // DAP Data
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 volatile uint8_t    DAP_TransferAbort;  // Transfer Abort Flag
 

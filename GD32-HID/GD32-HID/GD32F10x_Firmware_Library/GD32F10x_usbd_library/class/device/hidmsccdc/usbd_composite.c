@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：复合USB精简：关闭在线HID后保留空接口0，文件传输仍为接口1，CDC仍为接口2/3；BOS/WinUSB描述符保留。 */
 /*!
     \file    custom_hid_core.c
     \brief   custom HID class driver
@@ -123,6 +124,7 @@ const Composite_desc_config Composite_config_desc =
         .bmAttributes         = 0x80U,
         .bMaxPower            = 0xFAU
     },
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 		.hid_iad =
 		{
@@ -407,6 +409,7 @@ const static usb_desc_str product_string =
 {
     .header =
      {
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
          .bLength         = USB_STRING_LEN(14U),
 #else
@@ -414,6 +417,7 @@ const static usb_desc_str product_string =
 #endif
          .bDescriptorType = USB_DESCTYPE_STR,
      },
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
     .unicode_string = {'C', 'M', 'S', 'I', 'S', '-', 'D', 'A', 'P', ' ','v','2','.','1'}
 #else
@@ -565,6 +569,7 @@ usb_class Composite_class = {
 
 static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 {
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 		custom_hid_class.init(udev, config_index);
 #endif
@@ -582,6 +587,7 @@ static uint8_t Composite_init (usb_dev *udev, uint8_t config_index)
 */
 static uint8_t Composite_deinit (usb_dev *udev, uint8_t config_index)
 {
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 		custom_hid_class.deinit(udev, config_index);
 #endif
@@ -616,6 +622,7 @@ static uint8_t Composite_req_handler (usb_dev *udev, usb_req *req)
 
 		switch(req->wIndex & 0xFF)
 		{
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 			case CUSTOM_HID_INTERFACE : status = custom_hid_class.req_process(udev, req); break;
 #endif
@@ -631,6 +638,7 @@ static void Composite_data_in (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 			case (CUSTOMHID_IN_EP & 0x7FU): custom_hid_class.data_in(udev, ep_num); break;
 #endif
@@ -650,6 +658,7 @@ static void Composite_data_out (usb_dev *udev, uint8_t ep_num)
 {
 		switch(ep_num)
 		{
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 			case (CUSTOMHID_OUT_EP & 0x7FU): custom_hid_class.data_out(udev, ep_num); break;
 #endif

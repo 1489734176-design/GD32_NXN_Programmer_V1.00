@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：共享SPI0总线：LCD使用PB3/PB5重映射单向发送，Flash使用PA4～PA7双向收发；切换片选和映射时保护临界区。 */
 #include "bsp_spi0_bus.h"
 
 /* SPI0 共享总线移植：Flash 使用 PA4/PA5/PA6/PA7，

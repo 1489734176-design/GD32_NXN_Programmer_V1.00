@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：LCD由应用与启动程序共用；硬件SPI及既有引脚保持，字模绘制以原生像素坐标进行。 */
 /* ST7789 液晶驱动：通过共享硬件 SPI0 输出像素，保留原 OLED 界面接口。 */
 #include "main.h"
 #include "bsp_lcd.h"
@@ -23,6 +24,7 @@ static uint8_t ui_flip; /* OLED 兼容界面旋转 180 度标志 */
 /* 在已选中的 LCD 事务内发送命令；切换 DC 前后都等待发送完成，
  * 避免前一字节或命令字节被误判为另一种类型，结束后 DC 恢复为数据模式。
  */
+/* 向LCD发送一条命令，调用方负责持有SPI总线并控制片选。 */
 static void command(uint8_t value)
 {
     SPI0_BusWait();
@@ -33,6 +35,7 @@ static void command(uint8_t value)
 }
 
 /* 发送 16 位地址或 RGB565 像素，高字节在前、低字节在后。 */
+/* 向LCD发送RGB565像素的两个字节。 */
 static void data16(uint16_t value)
 {
     SPI0_LCDWrite((uint8_t)(value >> 8));
@@ -42,6 +45,7 @@ static void data16(uint16_t value)
 /* 设置单行窗口：从 (x,y) 开始连续写 count 个像素，然后启动显存写入。
  * 调用方负责片选及坐标范围，count 必须大于 0。
  */
+/* 设置LCD连续像素写入窗口，配合分块发送减少共享SPI总线占用时间。 */
 static void window(uint16_t x, uint16_t y, uint16_t count)
 {
     command(0x2A); /* 列地址：起点 x，终点 x+count-1 */
@@ -52,6 +56,7 @@ static void window(uint16_t x, uint16_t y, uint16_t count)
 }
 
 /* 独立发送无参数命令；释放时恢复 Flash 的 SPI0 配置及原中断状态。 */
+/* 独占共享SPI总线发送LCD控制命令，完成后释放总线。 */
 static void send_command(uint8_t value)
 {
     SPI0_LCDSelect();
@@ -272,6 +277,7 @@ void LCD_ShowNum(uint16_t x, uint16_t y, uint32_t number, uint8_t length, uint16
 /* Write monochrome bitmaps directly into native LCD pixel coordinates.
  * row-major: MSB at left; column-page: LSB at top of each eight-row page.
  * No temporary pixel array. Each SPI transaction remains <= 128 pixels. */
+/* 将单色点阵按整数倍率分块写入LCD；支持汉字行式点阵与ASCII/图标列式点阵，限制SPI占用长度。 */
 void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                   uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
                   uint8_t scale, uint8_t mode)

@@ -1,3 +1,4 @@
+/* 中文注释补充（2026-10-26）：内存精简：在线仿真开启时RTOS堆8KB，关闭时6KB，同时关闭仅HID使用的软件定时器任务。 */
 /*
     FreeRTOS V9.0.0 - Copyright (C) 2016 Real Time Engineers Ltd.
     All rights reserved
@@ -119,6 +120,7 @@
 /*                                FreeRTOS与内存申请有关配置选项                                                */
 /***************************************************************************************************************/
 #define configSUPPORT_DYNAMIC_ALLOCATION        1                       //支持动态内存申请
+/* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 #define configTOTAL_HEAP_SIZE										((size_t)(8*1024))     //系统所有总的堆大小
 #else
