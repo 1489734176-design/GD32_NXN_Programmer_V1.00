@@ -106,7 +106,7 @@ static void invalidate_program_checksum(void)
     oled.Refresh_flag = 1;
 }
 
-/* 显示剩余次数：三位数字补零或“不限”，整行占满32像素高度。
+/* 显示剩余次数：三位数字补零或“不限”，使用16像素文字行。
  * 独立栈缓冲区保护文件路径D，避免OPT校验时打开错误文件。
  * y     - 该行在320×240原生屏上的起始纵坐标（像素）
  * 返回  - 无 */
@@ -138,7 +138,8 @@ static void show_checksum(uint16_t y)
     UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
 }
 
-/* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接；不重置次数。
+/* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接。
+ * 新上位机在提交前已通过次数指令重新加载额度；这里保留已确认额度，不重复写入。
  * algorithm_name - 算法文件名（不含路径），长度不超过app_data.firmware_name容量
  * program_name   - 主固件文件名（不含路径），长度不超过app_data.bin_name容量
  * opt_required   - 上位机是否要求编程OPT，1=需要，0=跳过
@@ -160,7 +161,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     app_data.mode = 2;
     app_data.head = 2;
     key_val.mesg = 0;
-    /* 导入完成只更新文件字段；USB保留连接，次数不重置，重新开始芯片检测。 */
+    /* 导入完成只更新文件字段；保留上位机刚加载的次数和USB连接，重新开始芯片检测。 */
     g_auto_st = AUTO_ST_WAIT; g_present_seen = 0; g_absent_seen = 0;
     g_auto_tprobe = auto_now_ms();
     oled.Refresh_flag = 1;
