@@ -11,6 +11,8 @@ typedef struct
 
 extern time_TypeDef time;
 
+/* 配置TIMER0为1ms更新中断，用于CDC串口发送节流（初始化后定时器保持关闭）。
+ * 返回 - 无 */
 void time_init(void);
 
 

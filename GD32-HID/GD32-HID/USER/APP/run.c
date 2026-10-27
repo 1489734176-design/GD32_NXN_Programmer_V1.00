@@ -54,31 +54,30 @@ void mode4(void);
 void show_top(uint8_t status);
 uint8_t D[64] = {0};
 
-/* ---- automatic burning (auto mode) ----
-   WAIT   : probe the socket until a chip answers SWD
-   BURN   : mode4() runs the normal burn sequence
-   RESULT : show OK / FAIL for a while
-   HOLD   : keep the result on screen until the chip is taken out
-   The chip is detected by powering the socket and looking for an SWD
-   answer - the same thing the burn path does, so a chip that can be
-   burned can also be detected. */
-#define AUTO_PROBE_MS       200     /* min interval between two probes */
-#define AUTO_PRESENT_CNT    2       /* consecutive hits before we burn */
-#define AUTO_ABSENT_CNT     2       /* consecutive misses before "removed" */
-#define AUTO_HOLD_MIN_MS    600     /* stay in HOLD at least this long */
-#define AUTO_OK_MS          1500    /* result dwell on success */
-#define AUTO_FAIL_MS        3000    /* result dwell on failure */
+/* ---- 自动烧录（自动模式）----
+   WAIT   : 轮询检测座子，直到有芯片响应SWD
+   BURN   : 由mode4()执行正常烧录流程
+   RESULT : 显示OK / FAIL一段时间
+   HOLD   : 结果留在屏幕上，直到芯片被取出
+   芯片检测方式是给座子上电并等待SWD应答，与烧录流程完全一致，
+   因此能烧录的芯片一定能被检测到。 */
+#define AUTO_PROBE_MS       200     /* 两次检测之间的最小间隔 */
+#define AUTO_PRESENT_CNT    2       /* 连续检测到几次才判定芯片在位 */
+#define AUTO_ABSENT_CNT     2       /* 连续丢失几次才判定芯片已取出 */
+#define AUTO_HOLD_MIN_MS    600     /* HOLD状态至少停留这么久 */
+#define AUTO_OK_MS          1500    /* 成功时结果停留时间 */
+#define AUTO_FAIL_MS        3000    /* 失败时结果停留时间 */
 
 enum { AUTO_ST_WAIT = 0, AUTO_ST_BURN, AUTO_ST_RESULT, AUTO_ST_HOLD };
 
-static uint8_t  g_auto_en      = 1;             /* 0 = manual, 1 = automatic */
+static uint8_t  g_auto_en      = 1;             /* 0=手动模式，1=自动模式 */
 static uint8_t  g_auto_st      = AUTO_ST_WAIT;
-static uint8_t  g_absent_seen  = 0;             /* consecutive probes without a chip */
-static uint8_t  g_present_seen = 0;             /* consecutive probes with a chip */
-static uint8_t  g_burn_done    = 0;             /* mode4: this chip was already handled */
-static uint8_t  g_burn_ok      = 0;             /* result of the last burn */
-static uint32_t g_auto_t0      = 0;             /* tick when the state was entered */
-static uint32_t g_auto_tprobe  = 0;             /* tick of the last probe */
+static uint8_t  g_absent_seen  = 0;             /* 连续检测不到芯片的次数 */
+static uint8_t  g_present_seen = 0;             /* 连续检测到芯片的次数 */
+static uint8_t  g_burn_done    = 0;             /* mode4：本颗芯片已处理过 */
+static uint8_t  g_burn_ok      = 0;             /* 上一次烧录的结果 */
+static uint32_t g_auto_t0      = 0;             /* 进入当前状态时的系统节拍 */
+static uint32_t g_auto_tprobe  = 0;             /* 上一次检测时的系统节拍 */
 
 /* 自动检测芯片：连续检测到芯片后烧录，显示结果后等待芯片取出，避免同一颗芯片重复烧录。 */
 static void auto_standby_tick(void);
@@ -91,23 +90,26 @@ static uint8_t auto_has_files(void);
 /* 将FreeRTOS系统节拍转换为毫秒，用于自动检测和结果停留计时。 */
 static uint32_t auto_now_ms(void);
 
-/* last text pushed to the OLED status row, kept so the standby page can
-   repeat the failure reason after mode4 has returned */
+/* 最后一次写入OLED状态行的文字；保留它，使mode4返回后待机页
+   仍能重复显示失败原因 */
 static char g_last_status[64] = {0};
 
 /* 当前成功导入的主固件SUM32；有效标记独立保存，校验值00000000也有效。 */
 static uint32_t g_program_checksum;
 static uint8_t g_program_checksum_valid;
 
-/* 固件被改写、取消或更换后清除旧校验值；下次只刷新Checksum文字行。 */
+/* 固件被改写、取消或更换后清除旧校验值；下次只刷新Checksum文字行。
+ * 返回 - 无 */
 static void invalidate_program_checksum(void)
 {
     g_program_checksum_valid = 0;
     oled.Refresh_flag = 1;
 }
 
-/* Quota gets a full-width 32px row. Key hints move to a separate 16px footer. */
-/* 显示剩余次数：三位数字补零或“不限”。独立栈缓冲区保护文件路径D，避免OPT校验打开错误文件。 */
+/* 显示剩余次数：三位数字补零或“不限”，整行占满32像素高度。
+ * 独立栈缓冲区保护文件路径D，避免OPT校验时打开错误文件。
+ * y     - 该行在320×240原生屏上的起始纵坐标（像素）
+ * 返回  - 无 */
 static void show_quota(uint16_t y)
 {
     /* 次数文字使用独立栈缓冲区；D还保存OPT路径/诊断文本，刷新界面不能覆盖它。 */
@@ -121,9 +123,11 @@ static void show_quota(uint16_t y)
     UI_Field(5, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
 }
 
-/* 显示文字：Checksum: 01234567。SUM32为最终BIN所有字节累加的32位值，
- * 固件未成功导入或已更换时显示Checksum: --------；字号16像素，数字前补0。
- * 独立栈缓冲保护OPT文件路径D；复用空闲字段13，只绘制变化字符。 */
+/* 显示主固件SUM32：Checksum: 01234567；固件未导入或已更换时显示 --------。
+ * SUM32为最终BIN所有字节累加的32位值；字号16像素，数字前补0。
+ * 复用空闲字段13，只重绘变化字符。
+ * y     - 该行在320×240原生屏上的起始纵坐标（像素）
+ * 返回  - 无 */
 static void show_checksum(uint16_t y)
 {
     char checksum_text[24];
@@ -134,7 +138,11 @@ static void show_checksum(uint16_t y)
     UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
 }
 
-/* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接；不重置次数。 */
+/* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接；不重置次数。
+ * algorithm_name - 算法文件名（不含路径），长度不超过app_data.firmware_name容量
+ * program_name   - 主固件文件名（不含路径），长度不超过app_data.bin_name容量
+ * opt_required   - 上位机是否要求编程OPT，1=需要，0=跳过
+ * 返回           - 无 */
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
                                    uint8_t opt_required)
@@ -158,18 +166,22 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     oled.Refresh_flag = 1;
 }
 
-//�ر������ж�
+/* 关闭所有中断（PRIMASK置1），用于保护不可被打断的短临界区。
+ * 返回 - 无（须与INTX_ENABLE成对使用） */
 void INTX_DISABLE(void)
 {		  
 	__ASM volatile("cpsid i");
 }
-//���������ж�
+
+/* 开启所有中断（PRIMASK清0），与INTX_DISABLE配对恢复中断。
+ * 返回 - 无 */
 void INTX_ENABLE(void)
 {
 	__ASM volatile("cpsie i");		  
 }
 
-/* 启动界面：先恢复掉电保存的次数，再挂载文件系统和加载开机图标。 */
+/* 启动界面：先恢复掉电保存的次数，再挂载文件系统和加载开机图标。
+ * 返回 - 无 */
 void start_page(void)
 {
     uint8_t ret;
@@ -183,7 +195,7 @@ void start_page(void)
         status = "\xCD\xBC\xB1\xEA\xBC\xD3\xD4\xD8\xCA\xA7\xB0\xDC"; /* 显示文字：图标加载失败 */
         if(f_open(&fd, "0:/system/logo.bin", FA_READ) == FR_OK)
         {
-            /* Reuse the existing 4096-byte flash workspace, no logo framebuffer. */
+            /* 复用已有的4096字节Flash工作区，不额外分配logo帧缓存。 */
             ret = f_read(&fd, DATA_BUFFER, 1024, &ulReadNum);
             if(ret == FR_OK && ulReadNum == 1024)
             {
@@ -197,8 +209,11 @@ void start_page(void)
     vTaskDelay(1000);
     OLED_Clear();
 }
+
 /* 原模式菜单和文件传输页面已移除；文件传输保留为烧录页的USB后台服务。 */
-/* 长按中键关机：保留原充电指示，避免移除一级菜单后无法关机。 */
+/* 长按中键关机：保留原充电指示，避免移除一级菜单后无法关机。
+ * 关屏、Flash掉电、断开USB后进入死循环；插入充电时循环点亮三色灯。
+ * 返回 - 不返回（函数内死循环，直到重新上电） */
 static void power_down(void)
 {
     uint8_t step = 0;
@@ -220,11 +235,12 @@ static void power_down(void)
 }
 
 /* mode2: 离线下载选择页 (算法 / 文件 / 开始烧录), 只负责选择, 烧录在 mode4 */
-/* 离线选择页：选择算法/固件/开始烧录；长按右键切换自动与手动，实际烧录统一进入mode4。 */
+/* 离线选择页：选择算法/固件/开始烧录；长按右键切换自动与手动，实际烧录统一进入mode4。
+ * 返回 - 无 */
 void mode2(void)
 {
-	/* auto mode always burns the pair that is already loaded; file selection
-	   is done in manual mode (long press right to switch) */
+	/* 自动模式始终烧录已加载的算法/固件组合；选文件在手动模式下进行
+	   （长按右键切换自动/手动） */
 	if(g_auto_en)
 		app_data.head = 2;
 
@@ -291,7 +307,7 @@ void mode2(void)
 		key_val.mesg = 0;
 	}
 
-	/* auto mode: watch the socket, start a burn as soon as a chip shows up */
+	/* 自动模式：监视座子，一检测到芯片就开始烧录 */
 	if(g_auto_en && !custombulk_is_busy())
 	{
 		auto_standby_tick();
@@ -328,13 +344,17 @@ void mode2(void)
     show_top(0);
 }
 
-/* 显示烧录进度条，percent为0～100，使用320×240原生像素坐标。 */
+/* 显示烧录进度条，使用320×240原生像素坐标。
+ * percent - 进度百分比，0~100
+ * 返回    - 无 */
 static void show_download_progress(uint8_t percent)
 {
     UI_Progress(112, percent);
 }
 
-/* 显示并保存烧录状态；长文字自动换行，下方同步显示剩余次数，供自动结果页复用。 */
+/* 显示并保存烧录状态；长文字自动换行，下方同步显示剩余次数与校验值，供自动结果页复用。
+ * status - 要显示的状态文字（UTF-8中文，最长不超过界面缓冲区）
+ * 返回   - 无 */
 static void show_download_status(const char *status)
 {
     uint16_t size = UI_TextWidth(status, 32) <= 576 ? 32 : 16;
@@ -345,8 +365,13 @@ static void show_download_status(const char *status)
     show_checksum(224); /* 烧录及结果页底行显示主固件校验值，避免与两行状态重叠。 */
 }
 
-/* Native LCD error page: wrapped 32px title, complete 16px register values. */
-/* 显示烧录失败原因、步骤、地址和SWD诊断寄存器，底部显示剩余次数。 */
+/* 显示烧录失败原因、步骤、地址和SWD诊断寄存器，底部显示剩余次数。
+ * 原生LCD错误页：32像素标题自动换行，16像素完整显示寄存器值。
+ * status - 失败原因文字，形如“ER2a:复位暂停失败”
+ * diag   - 诊断值：失败步骤读回的R0或DP/DHCSR快照
+ * step   - 失败步骤编号，0xFFFF表示未执行到算法阶段
+ * addr   - 失败时的目标地址，为0时不显示地址行
+ * 返回   - 无 */
 static void show_download_error(const char *status, uint32_t diag, uint32_t step, uint32_t addr)
 {
     OLED_Clear();
@@ -368,8 +393,8 @@ static void show_download_error(const char *status, uint32_t diag, uint32_t step
     show_checksum(224); /* 诊断页保留主固件Checksum，独立于OPT与诊断寄存器。 */
 }
 
-/* Connect and halt the core as fast as possible.
-   0 = no DP response, 1 = halted, 2 = DP answered but CPU would not stop */
+/* 尽快连接并暂停内核：最多重试50次，抢在目标程序关闭调试口之前停下CPU。
+ * 返回 - 0=DP无响应，1=已暂停，2=DP有响应但CPU停不下来 */
 static uint8_t target_connect_halt(void)
 {
 	uint8_t seen = 0;
@@ -390,22 +415,25 @@ static uint8_t target_connect_halt(void)
 	return seen ? 2 : 0;
 }
 
-/* ================= automatic burning ================= */
+/* ================= 自动烧录 ================= */
 
-/* 将FreeRTOS系统节拍转换为毫秒，用于自动检测和结果停留计时。 */
+/* 将FreeRTOS系统节拍转换为毫秒，用于自动检测和结果停留计时。
+ * 返回 - 上电以来的毫秒数（32位，约49天回绕） */
 static uint32_t auto_now_ms(void)
 {
 	return (uint32_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
-/* 检查算法和固件是否都已选择；缺少任一文件时禁止自动开始。 */
+/* 检查算法和固件是否都已选择；缺少任一文件时禁止自动开始。
+ * 返回 - 1=两个文件都已加载，0=缺文件 */
 static uint8_t auto_has_files(void)
 {
 	return (app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0');
 }
 
-/* 1 = a chip answered on SWD, 0 = nothing in the socket */
-/* 短暂上电并尝试SWD连接以检测芯片；立即探测以抢在目标程序关闭调试口之前连接。 */
+/* 短暂上电并尝试SWD连接以检测芯片；上电瞬间立即探测，
+ * 以抢在目标程序关闭调试口之前连接。
+ * 返回 - 1=SWD有芯片应答，0=座子为空 */
 static uint8_t auto_probe(void)
 {
 	uint8_t ok = 0;
@@ -413,8 +441,8 @@ static uint8_t auto_probe(void)
 
 	swd_off();
 	TARGET_PWR_ON;
-	/* same timing as the burn path: start looking right at power-on,
-	   because the target application may disable SWD within a few ms */
+	/* 时序与烧录流程一致：上电瞬间就开始探测，
+	   因为目标程序可能在几毫秒内关闭SWD */
 	for(i = 0; i < 50; i++)
 	{
 		if(swd_init_debug())
@@ -429,7 +457,8 @@ static uint8_t auto_probe(void)
 	return ok;
 }
 
-/* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。 */
+/* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。
+ * 返回 - 无 */
 static void auto_start_burn(void)
 {
 	g_burn_done = 0;
@@ -442,9 +471,9 @@ static void auto_start_burn(void)
 	key_val.mesg = 0;
 }
 
-/* Called from mode2() only. Returns with app_data.mode changed to 4 when a
-   burn has to start. */
-/* 自动检测芯片：连续检测到芯片后烧录，显示结果后等待芯片取出，避免同一颗芯片重复烧录。 */
+/* 自动检测芯片：连续检测到芯片后烧录，显示结果后等待芯片取出，
+ * 避免同一颗芯片重复烧录。只由mode2()调用，需要开始烧录时把app_data.mode改成4。
+ * 返回 - 无 */
 static void auto_standby_tick(void)
 {
 	uint32_t now = auto_now_ms();
@@ -471,7 +500,7 @@ static void auto_standby_tick(void)
 			break;
 
 		case AUTO_ST_BURN:
-			/* mode4 returned without reporting (key pressed during the burn) */
+			/* mode4未上报结果就返回了（烧录过程中按了按键） */
 			g_burn_ok = 0;
 			g_auto_st = AUTO_ST_RESULT;
 			g_auto_t0 = now;
@@ -488,7 +517,7 @@ static void auto_standby_tick(void)
 			}
 			break;
 
-		default:	/* AUTO_ST_HOLD: wait for the chip to be taken out */
+		default:	/* AUTO_ST_HOLD：等待芯片被取出 */
 			if(now - g_auto_t0 < AUTO_HOLD_MIN_MS)
 				return;
 			if(now - g_auto_tprobe < AUTO_PROBE_MS)
@@ -509,9 +538,9 @@ static void auto_standby_tick(void)
 	}
 }
 
-/* Full 320x240 auto screen. File names have separate 16px lines; normal
-   Chinese text uses the same thin 32px glyphs as the manual menu. */
-/* 绘制自动烧录待机/烧录/结果页；中文32像素，算法名与固件名16像素，次数独占一行。 */
+/* 绘制整屏320×240的自动烧录页：算法名/固件名各占一行16像素，
+ * 其余中文与手动菜单一致使用细32像素字模。
+ * 返回 - 无 */
 static void auto_draw(void)
 {
 	const char *st, *detail;
@@ -553,7 +582,9 @@ static void auto_draw(void)
     UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1); /* 显示文字：长按右键:手动 */
 }
 
-/* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；成功扣一次，正常失败退回一次。 */
+/* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；
+ * 成功扣一次，正常失败退回一次。
+ * 返回 - 无 */
 void mode4(void)
 {
 	uint8_t err_flag = 0, is_ext_algo = 0;
@@ -566,7 +597,7 @@ void mode4(void)
 	uint32_t init_diag = 0;
 	uint32_t init_step = 0xFFFF;
 
-	/* auto mode: mode4() runs once per chip, so start from a clean slate */
+	/* 自动模式：mode4()每颗芯片只跑一次，因此从干净状态开始 */
 	if(g_auto_en)
 		g_burn_done = 0;
 
@@ -640,12 +671,12 @@ quota_rejected:
 	{
         if(burn_quota_begin() != BURN_QUOTA_OK) goto quota_rejected;
 		show_download_status("\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC"); /* 显示文字：正在连接芯片 */
-		/* Power-cycle target and grab SWD before programming */
+		/* 烧录前先给目标重新上电并抢占SWD */
 		swd_off();
 		TARGET_PWR_OFF;
 		delaymS(200);
 		TARGET_PWR_ON;
-		/* Retry SWD: grab CPU before firmware disables SWD */
+		/* 重试SWD：赶在固件关闭SWD之前抓住CPU */
 		{
 			uint8_t c = target_connect_halt();
 			if (c != 1) {
@@ -659,22 +690,22 @@ quota_rejected:
 		err_flag = 0;
 		sprintf((char *)D, "0:/download/firmware/%s\0", app_data.firmware_name);
 		ret = f_open(&fd, (TCHAR *)D, FA_READ);
-		if(ret == FR_OK)								// read firmware algo OK
+		if(ret == FR_OK)								// 算法文件读取成功
 		{
 			uint32_t fw_size = f_size(&fd);
 			ret = f_read(&fd, DATA_BUFFER, 2048, &ulReadNum);
 			if(ret == FR_OK && ulReadNum != 0)
 			{
 				err_flag = 1;
-				/* Detect extended format with OPT support */
+				/* 检测是否为带OPT支持的扩展格式 */
 				if(fw_size == ((program_target_t *)DATA_BUFFER)->algo_size + PROG_TARGET_EXT_HDR_SIZE)
 				{
 					is_ext_algo = 1;
-					/* Save OPT fields before shifting algo_blob to align with program_target_t */
+					/* 先保存OPT字段，再移动algo_blob以对齐program_target_t */
 					opt_prog_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_program;
 					opt_base_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_addr;
 					opt_byte_size = ((program_target_ext_t *)DATA_BUFFER)->opt_size;
-					/* Shift algo_blob from offset 68 to 56 so program_target_t cast works */
+					/* algo_blob从偏移68移到56，使program_target_t强制转换成立 */
 					memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, ((program_target_t *)DATA_BUFFER)->algo_size);
 				}
 			}
@@ -689,7 +720,7 @@ quota_rejected:
 		{
 			show_download_status("\xD5\xFD\xD4\xDA\xBC\xD3\xD4\xD8\xCB\xE3\xB7\xA8"); /* 显示文字：正在加载算法 */
 			OLED_Refresh();
-			/* reset diag so a stale value from a previous attempt can't mislead */
+			/* 清空诊断值，避免上次尝试的残留值误导判断 */
 			g_last_syscall_r0 = 0;
 			g_diag_ctrl_stat = 0xFFFFFFFF;
 			g_diag_hcsr = 0xFFFFFFFF;
@@ -700,7 +731,7 @@ quota_rejected:
 				err_flag = 2;
 			else
 			{
-				/* keep the diag before uninit overwrites it */
+				/* 在uninit覆盖之前先把诊断值保存下来 */
 				init_diag = g_last_syscall_r0;
 				init_step = g_diag_step;
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
@@ -718,10 +749,9 @@ quota_rejected:
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
 			{
 				err_flag = 3;
-				/* Mass erase also drops the read protection, but that only
-				   takes effect after the target restarts. Programming before
-				   the restart is rejected (ER6), so power-cycle and re-init
-				   the algorithm before writing. */
+				/* 全片擦除同时会解除读保护，但该动作要等目标重新上电才生效。
+				   未重新上电就编程会被拒绝（ER6），因此写之前先断电重上电
+				   并重新初始化算法。 */
 				show_download_status("\xD5\xFD\xD4\xDA\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF"); /* 显示文字：正在重新初始化 */
 				OLED_Refresh();
 				swd_off();
@@ -820,7 +850,7 @@ quota_rejected:
 				}
 			}
 
-						/* Verify firmware after programming */
+						/* 编程完成后校验固件 */
 			if(i == bin_size)
 			{
 				show_download_status("\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE"); /* 显示文字：正在校验固件 */
@@ -853,7 +883,7 @@ quota_rejected:
 				f_close(&fd);
 			}
 
-/* OPT programming for extended algorithm */
+/* 扩展算法的OPT编程 */
 			if(is_ext_algo && app_data.opt_enable && i == bin_size)
 			{
 				FIL fd_opt;
@@ -887,7 +917,7 @@ quota_rejected:
 					f_close(&fd_opt);
 					if(ret == FR_OK && opt_read > 0)
 					{
-						/* Use saved OPT fields (algo_blob was shifted by memmove) */
+						/* 使用之前保存的OPT字段（algo_blob已被memmove移动过） */
 						{
 							program_target_ext_t algo_ext;
 							algo_ext.sys_call_s = ((program_target_t *)DATA_BUFFER)->sys_call_s;
@@ -919,7 +949,7 @@ quota_rejected:
 								show_download_status("\x4F\x50\x54\xD0\xB4\xC8\xEB\xCA\xA7\xB0\xDC"); /* 显示文字：OPT写入失败 */
 								opt_failed = 1;
 							}
-						} /* end of algo_ext scope */
+						} /* algo_ext 作用域结束 */
 					}
 					else
 					{
@@ -935,7 +965,7 @@ quota_rejected:
 				OLED_Refresh();
 			}
 
-			/* Verify OPT bytes - stage by stage */
+			/* 逐段校验OPT字节 */
 			if(is_ext_algo && app_data.opt_enable && i == bin_size && opt_prog_addr && !opt_failed)
 			{
 				show_download_status("\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\x4F\x50\x54"); /* 显示文字：正在校验OPT */
@@ -1037,7 +1067,7 @@ quota_rejected:
 				else
 					show_download_status("\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6");	/* 不加密 */ /* 显示文字：烧录成功 */
 
-				/* only a clean run counts as a success for auto mode */
+				/* 只有全程无错才算自动模式烧录成功 */
 				if(!opt_failed && opt_state != 2)
 					g_burn_ok = 1;
 
@@ -1063,8 +1093,8 @@ download_return:
 		oled.Refresh_flag = 1;
 		if(g_auto_en)
 		{
-			/* hand the result back to the standby page; it decides when the
-			   chip has been taken out and the next one can be burned */
+			/* 把结果交回待机页；由它判断芯片何时被取出、
+			   何时可以烧录下一颗 */
 			g_auto_st = AUTO_ST_RESULT;
 			g_auto_t0 = auto_now_ms();
 			app_data.mode = 2;
@@ -1076,7 +1106,9 @@ download_return:
 		OLED_Refresh();
 	}
 }
-/* 文件选择页：每页五项，文件名16像素完整显示，左右键循环选取。 */
+
+/* 文件选择页：每页五项，文件名16像素完整显示，左右键循环选取。
+ * 返回 - 无 */
 void mode3(void)
 {
 	static uint32_t index = 0;
@@ -1159,15 +1191,15 @@ void mode3(void)
 								invalidate_program_checksum();
 							memset(app_data.bin_name, '\0', 32);
 							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
-							/* manual pick on device: program OPT if the file exists (old behaviour) */
+							/* 设备上手动选文件：OPT文件存在就编程OPT（保持旧行为） */
 							app_data.opt_enable = 1;
 						}
-						/* Full filename drawn below. */   					//������ʾ����			
-                        UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 0); /* 选中行反白。 */  //���Դ����ͷ�����ļ�����ʾ����?
+						/* 完整文件名在下面绘制。 */
+                        UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 0); /* 选中行反白显示。 */
 					}
 					else
 					{
-						/* Full filename drawn below. */   					//������ʾ����	
+						/* 完整文件名在下面绘制。 */
 						UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 1); /* 普通行只画变化文件名。 */
 					}		
 					i++;
@@ -1191,7 +1223,9 @@ void mode3(void)
     show_top(0); /* 温度、连接和电量各自刷新，不重画文件列表。 */
 }
 
-/* 初始化硬件并创建任务；循环先处理上位机延后请求，再运行当前界面/烧录状态机。 */
+/* 初始化硬件并创建任务；循环先处理上位机延后请求，再运行当前界面/烧录状态机。
+ * pvParameters - FreeRTOS任务入参，本任务不使用（创建时传NULL）
+ * 返回         - 不返回（FreeRTOS任务，内部死循环） */
 void run_task(void *pvParameters)
 {
 		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
@@ -1289,6 +1323,9 @@ void run_task(void *pvParameters)
 
 /* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
+/* 在线仿真任务：循环调用DAP_Thread处理CMSIS-DAP主机请求，仅在DAP_ONLINE_ENABLE=1时编译。
+ * pvParameters - FreeRTOS任务入参，本任务不使用（创建时传NULL）
+ * 返回         - 不返回（FreeRTOS任务，内部死循环） */
 void usb_task(void *pvParameters)
 {
 	while(1)
@@ -1298,6 +1335,11 @@ void usb_task(void *pvParameters)
 }
 
 #endif /* DAP_ONLINE_ENABLE */
+
+/* LED指示任务：按当前界面与连接状态驱动HID/MSC/CDC三色灯；
+ * CDC_LED_SELFTEST=1时先闪3下自检。
+ * pvParameters - FreeRTOS任务入参，本任务不使用（创建时传NULL）
+ * 返回         - 不返回（FreeRTOS任务，内部死循环） */
 void led_task(void *pvParameters)
 {
 #if CDC_LED_SELFTEST
@@ -1331,7 +1373,9 @@ void led_task(void *pvParameters)
 	}
 }
 
-/* 按固定周期扫描按键；上一事件尚未消费时保留它，避免长按事件被下一次扫描覆盖。 */
+/* 按固定周期扫描按键；上一事件尚未消费时保留它，避免长按事件被下一次扫描覆盖。
+ * pvParameters - FreeRTOS任务入参，本任务不使用（创建时传NULL）
+ * 返回         - 不返回（FreeRTOS任务，内部死循环） */
 void key_task(void *pvParameters)
 {
 	while(1)
@@ -1348,8 +1392,10 @@ void key_task(void *pvParameters)
 
 
 
-/* 底部连接、温度、电量独立更新；每秒采样一次，不再触发菜单整体重画。
- * 图2的主要布局保持不变：左侧按键提示，右侧三个16像素信息字段。 */
+/* 底部连接、温度、电量独立更新；每秒采样一次，不触发菜单整体重画。
+ * 布局保持左侧按键提示、右侧三个16像素信息字段。
+ * force - 1=强制立即重新采样（页面切换时用），0=按1秒周期限频
+ * 返回  - 无 */
 void show_top(uint8_t force)
 {
     static uint32_t sampled;

@@ -1,6 +1,6 @@
 /*!
     \file    gd32f10x_it.h
-    \brief   the header file of the ISR
+    \brief   中断服务程序头文件
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -37,24 +37,24 @@ OF SUCH DAMAGE.
 
 #include "gd32f10x.h"
 
-/* function declarations */
-/* this function handles NMI exception */
+/* 函数声明 */
+/* NMI异常处理函数 */
 void NMI_Handler(void);
-/* this function handles HardFault exception */
+/* HardFault异常处理函数 */
 void HardFault_Handler(void);
-/* this function handles MemManage exception */
+/* MemManage异常处理函数 */
 void MemManage_Handler(void);
-/* this function handles BusFault exception */
+/* BusFault异常处理函数 */
 void BusFault_Handler(void);
-/* this function handles UsageFault exception */
+/* UsageFault异常处理函数 */
 void UsageFault_Handler(void);
-/* this function handles SVC exception */
+/* SVC异常处理函数 */
 void SVC_Handler(void);
-/* this function handles DebugMon exception */
+/* DebugMon异常处理函数 */
 void DebugMon_Handler(void);
-/* this function handles PendSV exception */
+/* PendSV异常处理函数 */
 void PendSV_Handler(void);
-/* this function handles SysTick exception */
+/* SysTick异常处理函数 */
 void SysTick_Handler(void);
 
 #endif /* GD32F10X_IT_H */

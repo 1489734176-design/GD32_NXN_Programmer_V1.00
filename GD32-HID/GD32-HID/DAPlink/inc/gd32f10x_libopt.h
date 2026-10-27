@@ -1,6 +1,6 @@
 /*!
     \file    gd32f10x_libopt.h
-    \brief   library optional for gd32f10x
+    \brief   GD32F10x标准外设库可选配置
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */

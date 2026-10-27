@@ -6,6 +6,9 @@ time_TypeDef time =
 	.time_start_flag = 0
 };
 
+/* 配置TIMER0为1ms更新中断（96分频、1000计数），用于CDC串口发送节流。
+ * 初始化后先关闭定时器，由串口接收中断按需启动。
+ * 返回 - 无 */
 void time_init(void)
 {
 	timer_parameter_struct timer_initpara;
@@ -26,6 +29,11 @@ void time_init(void)
 	
 }
 
+/* 用指定字节填充缓冲区（长度参数为8位，仅适用于不超过255字节的块）。
+ * d   - 目标缓冲区
+ * c   - 填充字节
+ * len - 填充长度，0~255
+ * 返回 - 无 */
 void memset_s(uint8_t *d, uint8_t c, uint8_t len)
 {
 	uint8_t i;
@@ -35,6 +43,9 @@ void memset_s(uint8_t *d, uint8_t c, uint8_t len)
 	}
 }
 
+/* TIMER0更新中断：每次中断向CDC IN端点推送一个缓冲块，
+ * 队列取空后关闭定时器，避免空转占用USB带宽。
+ * 返回 - 无 */
 void TIMER0_UP_IRQHandler(void)
 {
 	if(RESET != timer_interrupt_flag_get(TIMER0, TIMER_INT_FLAG_UP))

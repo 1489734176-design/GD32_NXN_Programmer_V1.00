@@ -1,4 +1,4 @@
-/* ÖÐÎÄ×¢ÊÍ²¹³ä£¨2026-10-26£©£ºÔÚÏßCMSIS-DAPÃüÁî½âÎöÊÜ×Ü¿ª¹Ø¿ØÖÆ£»ÀëÏßÉÕÂ¼ÒÀÀµµÄDAP_SetupºÍSWDµ×²ãÈÔ±£Áô¡£ */
+/* ä¸­æ–‡æ³¨é‡Šè¡¥å……ï¼ˆ2026-10-26ï¼‰ï¼šåœ¨çº¿CMSIS-DAPå‘½ä»¤è§£æžå—æ€»å¼€å…³æŽ§åˆ¶ï¼›ç¦»çº¿çƒ§å½•ä¾èµ–çš„DAP_Setupå’ŒSWDåº•å±‚ä»ä¿ç•™ã€‚ */
 /*
  * Copyright (c) 2013-2017 ARM Limited. All rights reserved.
  *
@@ -55,7 +55,7 @@
 
 
          DAP_Data_t DAP_Data;           // DAP Data
-/* ÔÚÏß·ÂÕæ×¨ÓÃ²¿·Ö£ººêÎª0Ê±²»±àÒë£»ÀëÏßSWD/OPT¼°WinUSB´«Êä¼ÌÐø±£Áô¡£ */
+/* åœ¨çº¿ä»¿çœŸä¸“ç”¨éƒ¨åˆ†ï¼šå®ä¸º0æ—¶ä¸ç¼–è¯‘ï¼›ç¦»çº¿SWD/OPTåŠWinUSBä¼ è¾“ç»§ç»­ä¿ç•™ã€‚ */
 #if DAP_ONLINE_ENABLE
 volatile uint8_t    DAP_TransferAbort;  // Transfer Abort Flag
 

@@ -1,6 +1,6 @@
 /**
  * @file    error.c
- * @brief   collection of known errors and accessor for the friendly string
+ * @brief   错误码表，以及错误描述、错误类型的查询接口
  */
 
 #include "error.h"
@@ -8,7 +8,7 @@
 static const char *const error_message[] =
 {
 
-    /* Shared errors */
+    /* 通用错误 */
 
     // ERROR_SUCCESS
     "Operation was successful",
@@ -18,7 +18,7 @@ static const char *const error_message[] =
     "An internal error has occurred",
 
 
-    /* Target flash errors */
+    /* 目标Flash相关错误 */
 
     // ERROR_RESET
     "The interface firmware FAILED to reset/halt the target MCU",
@@ -43,7 +43,7 @@ static const char *const error_message[] =
 static error_type_t error_type[] =
 {
 
-    /* These should always stay the same for each error type. */
+    /* 各错误码的类型固定不变，请勿随意调整顺序。 */
 
     // ERROR_SUCCESS
     0,
@@ -53,7 +53,7 @@ static error_type_t error_type[] =
     ERROR_TYPE_INTERNAL,
 
 
-    /* Target flash errors */
+    /* 目标Flash相关错误 */
 
     // ERROR_RESET
     ERROR_TYPE_TARGET,
@@ -75,6 +75,10 @@ static error_type_t error_type[] =
     ERROR_TYPE_TARGET,
 };
 
+/* 按错误码取出可读的错误描述字符串。
+ * 表中的英文原文直接沿用DAPLink协议，上位机与调试器依赖这些文本，不做汉化。
+ * error - 错误码，取值0 ~ ERROR_COUNT-1
+ * 返回  - 指向静态字符串常量的指针；错误码越界时返回NULL */
 const char *error_get_string(error_t error)
 {
     const char *msg = 0;
@@ -87,6 +91,9 @@ const char *error_get_string(error_t error)
     return msg;
 }
 
+/* 按错误码取出错误类型，供上层区分是内部错误、目标错误还是用户操作错误。
+ * error - 错误码，取值0 ~ ERROR_COUNT-1
+ * 返回  - 对应错误类型；错误码越界时按ERROR_TYPE_INTERNAL处理 */
 error_type_t error_get_type(error_t error)
 {
     error_type_t type = ERROR_TYPE_INTERNAL;

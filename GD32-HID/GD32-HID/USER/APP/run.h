@@ -11,9 +11,9 @@ typedef struct
 	uint8_t mode; //状态2:烧录选择页（USB后台通信），3:文件列表，4:烧录/结果页；0/1不再使用
 	uint8_t head;
 	
-	uint8_t bin_name[32];					//������¼bin�ļ�
-	uint8_t firmware_name[32];		//������¼�㷨
-	uint8_t opt_enable;						/* 1: OPT file uploaded, program OPT; 0: skip OPT */
+	uint8_t bin_name[32];					//用于记录bin文件名
+	uint8_t firmware_name[32];		//用于记录算法文件名
+	uint8_t opt_enable;						/* 1: 上位机已导入OPT文件，需要编程OPT；0: 跳过OPT */
 	
 /* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE

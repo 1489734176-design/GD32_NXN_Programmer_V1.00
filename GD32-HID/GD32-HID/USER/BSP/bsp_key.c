@@ -1,4 +1,4 @@
-/* ����ע�Ͳ��䣨2026-10-26������ǰ�޸�˵��������ԭ��¼/Ӳ�����̣��·�������˵����ؽ���������߼��� */
+/* 中文注释补充（2026-10-26）：此前修改说明：保留原烧录/硬件流程，下方以中文说明相关界面与兼容逻辑。 */
 #include "bsp_key.h"
 #include "main.h"
 
@@ -8,7 +8,8 @@ key_TypeDef key_val =
 	.mesg = 0,
 };
 
-/* ��ʼ����������Ϊ�������롣 */
+/* 初始化三个按键为下拉输入。
+ * 返回 - 无 */
 void key_init(void)
 {
 		rcu_periph_clock_enable(RCU_GPIOA);
@@ -17,7 +18,9 @@ void key_init(void)
 		gpio_init(KEY_R_GPIO_Port, GPIO_MODE_IPD, GPIO_OSPEED_50MHZ, KEY_R_Pin);
 }
 
-/* �����������̰�/����/����/�м�˫��ʶ�𣻳���ֻ��һ�Σ������ɿ����ٲ����̰��� */
+/* 按键消抖及短按/长按/连发/中键双击识别；长按只发一次，长按松开不再补发短按。
+ * 需要在固定周期（KEY_SCAN_MS）下调用，内部按调用次数计时。
+ * 返回 - 本次识别到的按键事件；无事件时返回key_null */
 key_num key_scan(void)
 {
     static key_num active;

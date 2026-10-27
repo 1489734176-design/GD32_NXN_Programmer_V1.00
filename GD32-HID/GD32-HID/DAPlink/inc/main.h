@@ -100,7 +100,7 @@ extern "C" {
 #define BAT_FULL_Pin GPIO_PIN_1
 #define BAT_FULL_GPIO_Port GPIOB
 
-/* Target power control (PA15, P-MOSFET gate) */
+/* 目标供电控制（PA15，P沟道MOS管栅极） */
 #define TARGET_PWR_Pin        GPIO_PIN_15
 #define TARGET_PWR_GPIO_Port  GPIOA
 #define TARGET_PWR_ON         gpio_bit_reset(TARGET_PWR_GPIO_Port, TARGET_PWR_Pin)

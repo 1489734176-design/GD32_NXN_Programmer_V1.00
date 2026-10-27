@@ -1,20 +1,30 @@
-/* ����ע�Ͳ��䣨2026-10-26����������Ⱦ���ַ�������GBK�ֽ�ת�壻���ļ��������ģ�������Ŵ󡢻�������Ļ�߽��顣 */
+/* 中文注释补充（2026-10-26）：中文渲染：字符串仍用GBK字节转义；本文件负责查字模、整数放大、换行与屏幕边界检查。 */
 #include "bsp_oled.h"
 #include "bsp_lcd.h"
 #include "font.h"
 #include "ui_chinese_font.h"
 #include <string.h>
 
-/* Native pixel coordinates, no MCU framebuffer. LCD owns the displayed pixels.
- * Chinese: the same thin SimSun 16x16 bitmap at 1x or integer 2x scale.
- * Text size is its pixel height; x is the column, y is the row. */
+/* 直接使用原生像素坐标，MCU侧不分配帧缓存，显示像素由LCD掌管。
+ * 中文使用同一套细宋体16×16点阵，按1倍或整数2倍放大。
+ * 字号即像素高度；x为列坐标，y为行坐标。 */
 oled_TypeDef oled = {0x79, 0x78, 0};
 
+/* 初始化显示：直接转调LCD_Init，保留原OLED接口名。
+ * 返回 - 无 */
 void OLED_Init(void) { LCD_Init(); }
+/* 兼容旧OLED写字节接口；改用原生像素直绘后本函数为空实现。
+ * dat  - 原OLED要写入的数据字节（已忽略）
+ * mode - 原OLED命令/数据选择（已忽略）
+ * 返回 - 无 */
 void OLED_WR_Byte(uint8_t dat, uint8_t mode) { (void)dat; (void)mode; }
+/* 开显示：转调LCD_DisplayOn，保留原OLED接口名。
+ * 返回 - 无 */
 void OLED_DisPlay_On(void) { LCD_DisplayOn(); }
+/* 关显示：转调LCD_DisplayOff，保留原OLED接口名。
+ * 返回 - 无 */
 void OLED_DisPlay_Off(void) { LCD_DisplayOff(); }
-/* С���ֶλ���ֻ�������֣�������320��240֡���塣�����󻺴漰���ȱ߿�ʧЧ�� */
+/* 小型字段缓存只保存文字，不分配320×240帧缓冲。清屏后缓存及进度边框失效。 */
 typedef struct {
     char text[64];
     uint16_t x, y, width, height;
@@ -23,6 +33,8 @@ typedef struct {
 static ui_field_t ui_fields[16];
 static uint8_t ui_page = 255, progress_valid, progress_percent;
 static uint16_t progress_y;
+/* 全屏清黑，并使所有字段缓存与进度条状态失效，下次绘制全部重画。
+ * 返回 - 无 */
 void OLED_Clear(void)
 {
     uint8_t i;
@@ -31,19 +43,32 @@ void OLED_Clear(void)
     ui_page = 255;
     LCD_Clear(LCD_BLACK);
 }
-/* ֻ��ҳ�沼�ָı��������ͬҳ��ˢ�±�־������ȫ�������� */
+
+/* 切换页面：只有页面号变化才清屏，同页刷新不触发全屏擦除。
+ * page - 页面编号，0~254；255为清屏后保留的初始值
+ * 返回 - 无 */
 void UI_EnterPage(uint8_t page)
 {
     if(ui_page == page) return;
     OLED_Clear();
     ui_page = page;
 }
-/* ԭ��LCDֱ�ӻ�ͼ����������ʱ��������ɣ������ɽӿڼ��ݵ��á� */
-void OLED_Refresh(void) { /* Direct drawing is complete on return. */ }
+
+/* 兼容旧OLED刷新接口；改为原生像素直绘后本函数为空实现。
+ * 返回 - 无（绘制在调用时已同步完成） */
+void OLED_Refresh(void) { /* 直接绘制，函数返回时已完成。 */ }
+/* 兼容旧OLED反显接口，转调LCD_SetInvert。
+ * i    - 1=反显，0=正常
+ * 返回 - 无 */
 void OLED_ColorTurn(uint8_t i) { LCD_SetInvert(i); }
+/* 兼容旧OLED旋转接口，转调LCD_SetFlip；注意入参极性与LCD_SetFlip相反。
+ * i    - 0=旋转180度，非0=恢复原方向
+ * 返回 - 无 */
 void OLED_DisplayTurn(uint8_t i) { LCD_SetFlip((uint8_t)(i == 0)); }
 
-/* ��GBK������ֲ���16��16���ֵ��󣻲鲻��ʱ�ɻ��ƺ�����ʾ�ʺš� */
+/* 按GBK编码二分查找16×16汉字点阵。
+ * code - GBK内码，高字节在前
+ * 返回 - 指向点阵数据的指针；查不到时返回NULL（绘制函数改显示问号） */
 static const uint8_t *find_chinese(uint16_t code)
 {
     uint16_t lo = 0, hi = sizeof(ui_glyph16) / sizeof(ui_glyph16[0]);
@@ -57,7 +82,9 @@ static const uint8_t *find_chinese(uint16_t code)
     return NULL;
 }
 
-/* �жϵ�ǰ�����ֽ��Ƿ�Ϊ�Ϸ�GBK���֣���֤����/�ü������һ�����֡� */
+/* 判断当前位置的两个字节是否为合法GBK汉字，保证换行/裁剪不会拆开一个汉字。
+ * s    - 指向待判断字节的字符串指针，须至少有2字节可读
+ * 返回 - 1=是合法GBK汉字，0=不是（按单字节ASCII处理） */
 static uint8_t gbk(const char *s)
 {
     uint8_t first = (uint8_t)s[0], next;
@@ -66,7 +93,10 @@ static uint8_t gbk(const char *s)
     return next >= 0x40 && next <= 0xFE && next != 0x7F;
 }
 
-/* �����Ϻ���/ASCII�ı����ȣ�����ռsize���أ�ASCIIռsize/2���ء� */
+/* 计算混合汉字/ASCII文本的显示宽度。
+ * s    - 以空字符结尾的字符串，GBK编码
+ * size - 字号（像素高度），只接受16或32；汉字占size像素，ASCII占size/2像素
+ * 返回 - 文本总宽度（像素）；参数非法时返回0 */
 uint16_t UI_TextWidth(const char *s, uint8_t size)
 {
     uint16_t width = 0;
@@ -79,8 +109,14 @@ uint16_t UI_TextWidth(const char *s, uint8_t size)
     return width;
 }
 
-/* Return the first undisplayed character, always at a complete GBK boundary. */
-/* ��һ���޶���������ʾ�ı������ص�һ��δ��ʾ�ַ���16����ģ�������Ŵ�Ϊ32�㡣 */
+/* 在一行限定宽度内显示文本，超宽即停止，不自动换行。
+ * x     - 起始列坐标（原生像素）
+ * y     - 起始行坐标（原生像素）
+ * width - 本行可用宽度（像素），超出右边界时自动裁剪
+ * s     - 以空字符结尾的字符串，GBK编码
+ * size  - 字号（像素高度），只接受16或32；32为16点阵整数放大
+ * mode  - 1=白字黑底，0=黑字白底
+ * 返回  - 指向第一个未显示字符的指针；全部显示完时指向字符串结尾 */
 const char *UI_TextLine(uint16_t x, uint16_t y, uint16_t width,
                         const char *s, uint8_t size, uint8_t mode)
 {
@@ -113,20 +149,34 @@ const char *UI_TextLine(uint16_t x, uint16_t y, uint16_t width,
     return s;
 }
 
-/* ��ʾ�����ı���xΪ�����ꡢyΪ�����꣬sizeΪ16��32���أ�mode=1����/0���֡� */
+/* 显示单行文本，不换行，超出右边界自动截断。
+ * x    - 起始列坐标（原生像素）
+ * y    - 起始行坐标（原生像素）
+ * s    - 以空字符结尾的字符串，GBK编码
+ * size - 字号（像素高度），16或32
+ * mode - 1=白字黑底，0=黑字白底
+ * 返回 - 无 */
 void UI_Text(uint16_t x, uint16_t y, const char *s, uint8_t size, uint8_t mode)
 {
     UI_TextLine(x, y, LCD_WIDTH, s, size, mode);
 }
 
-/* ��ָ�����λ�����ʾ���֣���������ַ����У������߶Ⱥ�ֹͣ�������������ֱ����� */
+/* 在指定矩形内换行显示文字，按完整字符换行，超出高度后停止。
+ * x      - 左上角列坐标（原生像素）
+ * y      - 左上角行坐标（原生像素）
+ * width  - 文本框宽度（像素）
+ * height - 文本框高度（像素），决定最多显示几行
+ * s      - 以空字符结尾的字符串，GBK编码
+ * size   - 字号（像素高度），16或32
+ * mode   - 1=白字黑底，0=黑字白底
+ * 返回   - 无（进入时先按背景色清理整个矩形） */
 void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                 const char *s, uint8_t size, uint8_t mode)
 {
     const char *next;
     if(!s || y >= LCD_HEIGHT) return;
     if(height > LCD_HEIGHT - y) height = LCD_HEIGHT - y;
-    UI_Fill(x, y, width, height, (uint8_t)(!mode)); /* �ı���ֻ��һ�α����� */
+    UI_Fill(x, y, width, height, (uint8_t)(!mode)); /* 文本框只清一次背景。 */
     while(*s && height >= size)
     {
         next = UI_TextLine(x, y, width, s, size, mode);
@@ -137,13 +187,23 @@ void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
     }
 }
 
-/* ����Ļ���������Σ�on=1��ɫ��on=0��ɫ�������������Դ档 */
+/* 按屏幕像素填充矩形，不申请整屏显存。
+ * x      - 左上角列坐标
+ * y      - 左上角行坐标
+ * width  - 宽度（像素）
+ * height - 高度（像素）
+ * on     - 1=填白色，0=填黑色
+ * 返回   - 无 */
 void UI_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t on)
 {
     LCD_Fill(x, y, width, height, on ? LCD_WHITE : LCD_BLACK);
 }
 
-/* ��ʾ״̬Сͼ�ꣻ�������򾫼����ʱ��ʹ��Ӧ��ͼ����� */
+/* 显示状态小图标（18×8点阵放大两倍）。
+ * x     - 左上角列坐标
+ * y     - 左上角行坐标
+ * index - 图标序号，对应font.h中的logo表；越界时不绘制
+ * 返回  - 无（LCD_BAREMETAL编译时为空实现） */
 void UI_Logo(uint16_t x, uint16_t y, uint8_t index)
 {
 #ifndef LCD_BAREMETAL
@@ -154,13 +214,18 @@ void UI_Logo(uint16_t x, uint16_t y, uint8_t index)
 #endif
 }
 
-/* ��128��64��ɫ����ͼ��Ŵ�������ʾ��320��240��Ļ�� */
+/* 将128×64单色开机图标放大两倍显示在320×240屏幕中央偏上位置。
+ * data - 128×64点阵数据，按列页式存储（每行128字节、共8页）
+ * 返回 - 无 */
 void UI_BootLogo(const uint8_t *data)
 {
     LCD_BlitMono(32, 40, 128, 64, 128, data, 1, 2, 1);
 }
 
-/* ͬһҳֻ��һ�α߿򣻰ٷֱȲ��䲻дLCD���仯ʱ���������/���ٵ����Ρ� */
+/* 绘制进度条：同页只画一次边框，百分比不变不写屏，变化时只补差量。
+ * y       - 进度条顶部的行坐标（原生像素）
+ * percent - 进度百分比，0~100；超过100按100处理
+ * 返回    - 无 */
 void UI_Progress(uint16_t y, uint8_t percent)
 {
     char text[5];
@@ -185,8 +250,16 @@ void UI_Progress(uint16_t y, uint8_t percent)
     progress_y = y; progress_percent = percent; progress_valid = 1;
 }
 
-/* ������GBK�ַ��Ƚ��¾����ݣ�δ���ֲ������仯�ִ��������ǣ����ı�ֻ��β����
- * id�ڵ�ǰҳ��Ψһ���߶�֧���Զ����С�����64�ֽڣ��ļ���/������ʾ���ڴ˷�Χ�ڡ� */
+/* 带缓存的文字字段刷新：逐字比较新旧内容，只重绘变化字符，短文本只擦尾部。
+ * id     - 字段编号0~15，须在当前页内唯一（16个缓存槽）
+ * x      - 左上角列坐标（原生像素）
+ * y      - 左上角行坐标（原生像素）
+ * width  - 字段宽度（像素），超出部分截断
+ * height - 字段高度（像素），按size逐行换行
+ * text   - 要显示的文字，GBK编码，最长63字节
+ * size   - 字号（像素高度），16或32
+ * mode   - 1=白字黑底，0=黑字白底
+ * 返回   - 无 */
 void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
               const char *text, uint8_t size, uint8_t mode)
 {
@@ -212,7 +285,7 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
     redraw = !field->valid || field->x != x || field->y != y || field->width != width ||
              field->height != height || field->size != size || field->mode != mode;
     if(!redraw && !strcmp(field->text, current)) return;
-    /* �ֶ���С/�ƶ�ʱ����ɷ�Χ������32���ؿ�Ŀ¼��ʾ����28�����к����±�Ե�� */
+    /* 字段缩小/移动时先清旧范围，避免32像素空目录提示缩成28像素行后留下边缘。 */
     if(field->valid && (field->x != x || field->y != y || field->width != width || field->height != height))
         UI_Fill(field->x, field->y, field->width, field->height, 0);
     if(redraw && (field->valid || !mode)) UI_Fill(x, y, width, height, (uint8_t)!mode);
@@ -226,7 +299,7 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
             if(advance > width - col) break;
             old_bytes = *old ? (gbk(old) ? 2 : 1) : 0;
             old_advance = old_bytes == 2 ? size : size / 2;
-            /* �ֿ������仯�󣬱�������λ�����¸��ǣ�������Ӣ�Ľ������²�Ӱ�� */
+            /* 字宽发生变化后，本行余下位置重新覆盖，避免中英文交替留下残影。 */
             if(old_bytes && old_advance != advance)
             {
                 const char *next = UI_TextLine(x + col, y + row, width - col, now, size, mode);
@@ -263,13 +336,23 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
     field->size = size; field->mode = mode; field->valid = 1;
 }
 
-/* Legacy optional online traffic graphs retain their row/column API.
- * The default offline UI uses UI_* exclusively. */
+/* 兼容旧OLED行列坐标接口：在128×64虚拟坐标系中画一个点，放大两倍显示。
+ * row  - 虚拟行坐标，0~63；越界不绘制
+ * col  - 虚拟列坐标，0~127；越界不绘制
+ * on   - 1=白点，0=黑点
+ * 返回 - 无 */
 void OLED_DrawPoint(uint8_t row, uint8_t col, uint8_t on)
 {
     if(row < 64 && col < 128) UI_Fill(8 + col * 2, 32 + row * 2, 2, 2, on);
 }
 
+/* 兼容旧OLED接口：在128×64虚拟坐标系中用Bresenham算法画直线。
+ * r1   - 起点行坐标，0~63
+ * c1   - 起点列坐标，0~127
+ * r2   - 终点行坐标，0~63
+ * c2   - 终点列坐标，0~127
+ * on   - 1=白线，0=黑线
+ * 返回 - 无 */
 void OLED_DrawLine(uint8_t r1, uint8_t c1, uint8_t r2, uint8_t c2, uint8_t on)
 {
     int r = r1, c = c1, dr = r2 - r1, dc = c2 - c1;
@@ -287,7 +370,13 @@ void OLED_DrawLine(uint8_t r1, uint8_t c1, uint8_t r2, uint8_t c2, uint8_t on)
     }
 }
 
-/* ���ݾ�����ͼ������������ӿڣ��µ����߽���ʹ��UI_Textԭ�����ؽӿڡ� */
+/* 兼容旧在线图表的行列坐标接口，内部换算成原生像素后转调UI_Text。
+ * row  - 虚拟行坐标，换算为y = 32 + row*2
+ * col  - 虚拟列坐标，换算为x = 8 + col*2
+ * s    - 以空字符结尾的字符串，GBK编码
+ * size - 旧接口字号：16按32像素显示，其它值按16像素显示
+ * mode - 1=白字黑底，0=黑字白底
+ * 返回 - 无 */
 void OLED_ShowString(uint8_t row, uint8_t col, uint8_t *s, uint8_t size, uint8_t mode)
 {
     UI_Text(8 + col * 2, 32 + row * 2, (const char *)s, size == 16 ? 32 : 16, mode);

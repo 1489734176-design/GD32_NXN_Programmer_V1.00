@@ -19,6 +19,8 @@
 #define HID_LED_OFF     gpio_bit_set(HID_LED_GPIO_Port, HID_LED_Pin)
 #define HID_LED_TOG     
 
+/* 初始化HID/MSC/CDC三个指示灯的GPIO为推挽输出并全部熄灭。
+ * 返回 - 无 */
 void led_init(void);
 
 

@@ -40,7 +40,7 @@ typedef struct {
     const uint32_t size;
 } sector_info_t;
 
-/* Extended programming target with OPT byte support (17 header fields) */
+/* 带OPT字节支持的扩展编程目标结构（17个头部字段） */
 typedef struct {
     uint32_t  init;
     uint32_t  uninit;
@@ -54,12 +54,12 @@ typedef struct {
     uint32_t  flash_addr;
     uint32_t  flash_size;
     uint32_t  algo_size;
-    uint32_t  opt_program;    /* ProgramOpt function address */
-    uint32_t  opt_addr;       /* OPT base address */
-    uint32_t  opt_size;       /* OPT size in bytes */
+    uint32_t  opt_program;    /* ProgramOpt函数地址 */
+    uint32_t  opt_addr;       /* OPT基地址 */
+    uint32_t  opt_size;       /* OPT字节数 */
 } program_target_ext_t;
 
-#define PROG_TARGET_EXT_HDR_SIZE  68   /* 17 fields * 4 bytes */
+#define PROG_TARGET_EXT_HDR_SIZE  68   /* 17个字段 × 4字节 */
 
 typedef struct {
 

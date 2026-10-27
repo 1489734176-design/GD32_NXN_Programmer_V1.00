@@ -1,6 +1,9 @@
 #include "bsp_led.h"
 #include "main.h"
 
+/* 初始化HID/MSC/CDC三个指示灯的GPIO为推挽输出，并全部熄灭。
+ * CDC_LED已飞线到PA9，因此额外使能GPIOA时钟。
+ * 返回 - 无 */
 void led_init(void)
 {
 	rcu_periph_clock_enable(RCU_GPIOB);

@@ -3,6 +3,9 @@
 
 
 
+/* 初始化电源相关引脚：充电/充满检测输入、USB供电使能、目标板供电控制。
+ * 未接充电器时打开自身电源保持；原USB_EN所在PB3已飞线到PA8，这里保持浮空。
+ * 返回 - 无 */
 void pwr_init(void)
 {
 	gpio_init(BAT_CHARG_GPIO_Port, GPIO_MODE_IPU, GPIO_OSPEED_50MHZ, BAT_CHARG_Pin);
@@ -19,12 +22,14 @@ void pwr_init(void)
 		gpio_init(PWR_EN_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, PWR_EN_Pin);
 	}
 
-	/* Target power PMOS control (PA15), default OFF (HIGH) */
+	/* 目标供电PMOS控制（PA15），默认关断（输出高电平） */
 	gpio_bit_set(TARGET_PWR_GPIO_Port, TARGET_PWR_Pin);
 	gpio_init(TARGET_PWR_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, TARGET_PWR_Pin);
 
 }
 
+/* 读取电池/充电状态，两个检测脚均为低电平有效。
+ * 返回 - 0=未接充电器，1=正在充电（BAT_CHARG为低），2=已充满（BAT_FULL为低） */
 uint8_t bat_status_get(void)
 {
 	if(!gpio_input_bit_get(BAT_CHARG_GPIO_Port, BAT_CHARG_Pin))

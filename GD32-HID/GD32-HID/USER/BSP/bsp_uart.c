@@ -11,18 +11,20 @@ uart_TypeDef cdc_uart =
 	.rx_bulk = 0
 };
 
+/* 初始化USART2：115200-8-N-1，使能收发与接收中断（优先级4）。
+ * 返回 - 无 */
 void uart_init(void)
 {
     rcu_periph_clock_enable(RCU_GPIOB);
     rcu_periph_clock_enable(RCU_USART2);
 
-    /* connect port to USARTx_Tx */
+    /* 配置TX引脚为复用推挽 */
     gpio_init(UART_TX_GPIO_Port, GPIO_MODE_AF_PP, GPIO_OSPEED_50MHZ, UART_TX_Pin);
 
-    /* connect port to USARTx_Rx */
+    /* 配置RX引脚为浮空输入 */
     gpio_init(UART_RX_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, UART_RX_Pin);
 
-    /* USART configure */
+    /* 串口参数配置：8位数据、1位停止、115200 */
     usart_deinit(USART2);
     usart_word_length_set(USART2, USART_WL_8BIT);
     usart_stop_bit_set(USART2, USART_STB_1BIT);
@@ -38,6 +40,10 @@ void uart_init(void)
 }
 
 
+/* 以查询方式阻塞发送一段数据。
+ * buff - 待发送数据缓冲区
+ * len  - 发送字节数，0~255
+ * 返回 - 无 */
 void uart_tx(uint8_t *buff, uint8_t len)
 {
 		uint16_t i;
@@ -48,6 +54,9 @@ void uart_tx(uint8_t *buff, uint8_t len)
 		}
 }
 
+/* USART2接收中断：把收到的字节按USB_CDC_TX_LEN分组存入环形缓冲，
+ * 满一组就计数一次；首次收到数据时启动TIMER0节流发送。
+ * 返回 - 无 */
 void USART2_IRQHandler(void)
 {
 	uint8_t data;
@@ -79,6 +88,10 @@ void USART2_IRQHandler(void)
 	}
 }
 
+/* 用DMA0通道1把数据搬到USART2数据寄存器，搬完在中断里重新挂接收。
+ * buff - 待发送数据缓冲区（函数返回后仍会被DMA读取，须保持有效）
+ * len  - 发送字节数，0~255
+ * 返回 - 无 */
 void uart_tx_dma(uint8_t *buff, uint8_t len)
 {
 		dma_parameter_struct dma_init_struct;
@@ -95,7 +108,7 @@ void uart_tx_dma(uint8_t *buff, uint8_t len)
     dma_init_struct.periph_width = DMA_PERIPHERAL_WIDTH_8BIT;
     dma_init_struct.priority = DMA_PRIORITY_ULTRA_HIGH;
     dma_init(DMA0, DMA_CH1, &dma_init_struct);
-    /* configure DMA mode */
+    /* DMA模式配置 */
     dma_circulation_disable(DMA0, DMA_CH1);
 		dma_memory_to_memory_disable(DMA0, DMA_CH1);
 		
@@ -104,6 +117,8 @@ void uart_tx_dma(uint8_t *buff, uint8_t len)
     dma_channel_enable(DMA0, DMA_CH1);
 }
 
+/* DMA0通道1传输完成中断：关闭本次DMA请求，并重新挂起CDC OUT端点接收。
+ * 返回 - 无 */
 void DMA0_Channel1_IRQHandler(void)
 {
 		usb_cdc_handler *cdc = (usb_cdc_handler *)usb_hid.class_data[CDC_COM_INTERFACE];

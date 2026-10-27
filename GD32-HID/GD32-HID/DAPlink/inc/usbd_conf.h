@@ -1,6 +1,6 @@
 /*!
     \file    usbd_conf.h
-    \brief   usb device driver basic configuration
+    \brief   USB设备驱动基本配置
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -44,21 +44,21 @@ OF SUCH DAMAGE.
 #define CUSTOM_HID_INTERFACE               0U
 #define CDC_COM_INTERFACE               	 2U
 
-/* define if low power mode is enabled; it allows entering the device into DEEP_SLEEP mode
-   following USB suspend event and wakes up after the USB wakeup event is received. */
+/* 使能后允许设备在USB挂起事件之后进入DEEP_SLEEP模式，
+   并在收到USB唤醒事件后唤醒。 */
 //#define USB_DEVICE_LOW_PWR_MODE_SUPPORT
 
-/* USB feature -- Self Powered */
+/* USB特性：自供电 */
 /* #define USBD_SELF_POWERED */
 
-/* endpoint count used by the HID device */
+/* HID设备使用的端点 */
 #define CUSTOMHID_IN_EP                    EP_IN(1U)
 #define CUSTOMHID_OUT_EP                   EP_OUT(1U)
 
 #define CUSTOMHID_IN_PACKET                64U
 #define CUSTOMHID_OUT_PACKET               64U
 
-/* CDC endpoint definitions */
+/* CDC端点定义 */
 #define CDC_IN_EP                    			 EP_IN(3U)
 #define CDC_CMD_EP                    		 EP_IN(4U)
 #define CDC_OUT_EP                   			 EP_OUT(3U)
@@ -67,28 +67,28 @@ OF SUCH DAMAGE.
 #define CDC_ACM_CMD_PACKET_SIZE            8U
 #define CDC_ACM_OUT_PACKET_SIZE            16U
 
-/* endpoint0, Rx/Tx buffers address offset */
+/* 端点0收发缓冲区地址偏移 */
 
 #define EP0_RX_ADDR                        (0X48)
 #define EP0_TX_ADDR                        (0X88)
 
-/* hid, Rx/Tx buffers address offset */
+/* HID收发缓冲区地址偏移 */
 #define HID_TX_ADDR                        (0XC8)
 #define HID_RX_ADDR                        (0X0108)
 
-/* custom bulk, Rx/Tx buffers address offset (replaces MSC) */
+/* 自定义批量端点收发缓冲区地址偏移（替代原来的MSC） */
 #define CUSTOMBULK_TX_ADDR                 (0X0148)
 #define CUSTOMBULK_RX_ADDR                 (0X0188)
 
-/* CDC, Rx/Tx buffers address offset */
+/* CDC收发缓冲区地址偏移 */
 #define CDC_TX_ADDR                        (0X01C8)
 #define CDC_RX_ADDR                        (0X01D8)
 #define CDC_CMD_ADDR                       (0X01E8)
 
-/* endpoint count used by the device */
+/* 设备使用的端点总数 */
 #define EP_COUNT                           (9U)
 
-/* base address offset of the allocation buffer, used for buffer descriptor table and packet memory */
+/* 分配缓冲区基地址偏移，用于缓冲描述符表和包存储区 */
 #define BTABLE_OFFSET                      (0x0000U)
 
 

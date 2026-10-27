@@ -25,17 +25,16 @@
 /*往SPI发送缓冲区写一个字节*/
 #define LCD_SPI_WRITE(Data)	do { while (SPI1->CSTAT & SPI_FLAG_TXFULL); SPI1->TXREG = (Data); } while (0)
 
-/**
-  * @brief  等待SPI把数据全部发完
-  */
+/* 等待SPI1把发送缓冲区里的数据全部发完（TXEPT置位）。
+ * 返回 - 无（死等，无超时保护） */
 static void LCD_SPI_Wait(void)
 {
 	while (SPI_GetFlagStatus(SPI1, SPI_FLAG_TXEPT) == RESET);
 }
 
-/**
-  * @brief  写命令，写完后DC恢复为数据
-  */
+/* 写一条命令：切换DC前后都等待发送完成，结束后DC恢复为数据模式。
+ * Command - 要发送的ST7789命令码
+ * 返回    - 无（调用方须自行拉低片选） */
 static void LCD_WriteCommand(uint8_t Command)
 {
 	LCD_SPI_Wait();
@@ -45,18 +44,20 @@ static void LCD_WriteCommand(uint8_t Command)
 	LCD_DC(1);
 }
 
-/**
-  * @brief  写一个字节数据
-  */
+/* 往SPI发送缓冲区写一个数据字节，不等待发送完成。
+ * Data - 要发送的字节
+ * 返回 - 无 */
 static void LCD_WriteData(uint8_t Data)
 {
 	LCD_SPI_WRITE(Data);
 }
 
-/**
-  * @brief  设置显示窗口并开始写显存
-  * @param  X0,Y0 左上角坐标   X1,Y1 右下角坐标
-  */
+/* 设置矩形显示窗口并启动显存写入（发0x2A/0x2B/0x2C）。
+ * X0 - 窗口左上角列坐标
+ * Y0 - 窗口左上角行坐标
+ * X1 - 窗口右下角列坐标（含）
+ * Y1 - 窗口右下角行坐标（含）
+ * 返回 - 无（调用方须自行拉低片选） */
 static void LCD_SetWindow(uint16_t X0, uint16_t Y0, uint16_t X1, uint16_t Y1)
 {
 	LCD_WriteCommand(0x2A);			//列地址
@@ -72,9 +73,9 @@ static void LCD_SetWindow(uint16_t X0, uint16_t Y0, uint16_t X1, uint16_t Y1)
 	LCD_WriteCommand(0x2C);			//开始写显存
 }
 
-/**
-  * @brief  LCD初始化：GPIO、SPI1
-  */
+/* 初始化LCD：配置DC/CS/RES控制引脚与SPI1（主机、8位、模式0、只发送），
+ * 硬件复位后依次下发ST7789初始化命令，最后清屏并开显示。
+ * 返回 - 无 */
 void LCD_Init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStructure;
@@ -227,10 +228,13 @@ void LCD_Init(void)
 	LCD_CS(1);
 }
 
-/**
-  * @brief  填充矩形区域
-  * @param  X,Y 左上角坐标   Width,Height 宽高（像素）   Color 颜色（RGB565）
-  */
+/* 填充矩形区域，超出屏幕的部分自动裁掉。
+ * X      - 左上角列坐标，>=LCD_WIDTH时直接返回
+ * Y      - 左上角行坐标，>=LCD_HEIGHT时直接返回
+ * Width  - 宽度（像素），为0时直接返回
+ * Height - 高度（像素），为0时直接返回
+ * Color  - RGB565颜色值
+ * 返回   - 无 */
 void LCD_Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint16_t Color)
 {
 	uint32_t i;
@@ -261,29 +265,32 @@ void LCD_Fill(uint16_t X, uint16_t Y, uint16_t Width, uint16_t Height, uint16_t 
 	LCD_CS(1);
 }
 
-/**
-  * @brief  全屏填充一种颜色
-  */
+/* 全屏填充一种颜色。
+ * Color - RGB565颜色值
+ * 返回  - 无 */
 void LCD_Clear(uint16_t Color)
 {
 	LCD_Fill(0, 0, LCD_WIDTH, LCD_HEIGHT, Color);
 }
 
-/**
-  * @brief  画一个点
-  */
+/* 画一个像素点，复用矩形填充的边界检查。
+ * X     - 列坐标
+ * Y     - 行坐标
+ * Color - RGB565颜色值
+ * 返回  - 无 */
 void LCD_DrawPoint(uint16_t X, uint16_t Y, uint16_t Color)
 {
 	LCD_Fill(X, Y, 1, 1, Color);
 }
 
-/**
-  * @brief  显示一个字符（8x16字体，放大Size倍）
-  * @param  X,Y 左上角坐标
-  * @param  Char 字符，范围：ASCII可见字符，以及0x7F（上标3，LCD_STR_CUBE）
-  * @param  Color 字的颜色   BackColor 背景色
-  * @param  Size 放大倍数，1为8x16，2为16x32，3为24x48……
-  */
+/* 显示一个8×16 ASCII字符，按Size整数倍放大。
+ * X         - 左上角列坐标，放不下整字时不显示
+ * Y         - 左上角行坐标，放不下整字时不显示
+ * Char      - 字符，范围0x20~0x7F；越界按空格处理
+ * Color     - 字的颜色，RGB565
+ * BackColor - 背景色，RGB565
+ * Size      - 放大倍数，1=8×16，2=16×32，3=24×48……；传0按1处理
+ * 返回      - 无 */
 void LCD_ShowChar(uint16_t X, uint16_t Y, char Char, uint16_t Color, uint16_t BackColor, uint8_t Size)
 {
 	const uint8_t *Font;
@@ -326,12 +333,13 @@ void LCD_ShowChar(uint16_t X, uint16_t Y, char Char, uint16_t Color, uint16_t Ba
 	LCD_CS(1);
 }
 
-/**
-  * @brief  显示一个汉字（32x32点阵）
-  * @param  X,Y 左上角坐标
-  * @param  Code 汉字的GBK内码，如"长"为0xB3A4，字库LCD_Chinese.h中没有的汉字显示为空白
-  * @param  Color 字的颜色   BackColor 背景色
-  */
+/* 显示一个32×32点阵汉字，字库中没有的汉字填背景色。
+ * X         - 左上角列坐标，放不下整字时不显示
+ * Y         - 左上角行坐标，放不下整字时不显示
+ * Code      - 汉字的GBK内码，如“长”为0xB3A4
+ * Color     - 字的颜色，RGB565
+ * BackColor - 背景色，RGB565
+ * 返回      - 无 */
 void LCD_ShowChinese(uint16_t X, uint16_t Y, uint16_t Code, uint16_t Color, uint16_t BackColor)
 {
 	const uint8_t *Font = 0;
@@ -371,10 +379,15 @@ void LCD_ShowChinese(uint16_t X, uint16_t Y, uint16_t Code, uint16_t Color, uint
 	LCD_CS(1);
 }
 
-/**
-  * @brief  显示字符串，超出屏幕右边的部分不显示
-  * @note   字符串中的GBK汉字（第一个字节>=0x81）按32x32显示，占两个Size=2字符的宽度
-  */
+/* 显示字符串，超出屏幕右边的部分不显示。
+ * 字符串中的GBK汉字（首字节>=0x81）按32×32显示，占两个Size=2字符的宽度。
+ * X         - 起始列坐标
+ * Y         - 起始行坐标
+ * String    - 以空字符结尾的字符串，GBK编码
+ * Color     - 字的颜色，RGB565
+ * BackColor - 背景色，RGB565
+ * Size      - ASCII放大倍数；传0按1处理
+ * 返回      - 无 */
 void LCD_ShowString(uint16_t X, uint16_t Y, char *String, uint16_t Color, uint16_t BackColor, uint8_t Size)
 {
 	if (Size == 0)
@@ -397,10 +410,15 @@ void LCD_ShowString(uint16_t X, uint16_t Y, char *String, uint16_t Color, uint16
 	}
 }
 
-/**
-  * @brief  显示十进制正整数，位数不足时前面补0
-  * @param  Number 要显示的数字   Length 显示的位数，范围1~10
-  */
+/* 显示十进制正整数，位数不足时前面补0。
+ * X         - 起始列坐标
+ * Y         - 起始行坐标
+ * Number    - 要显示的数字，超出位数的高位被舍弃
+ * Length    - 显示位数，1~10；超过10按10处理
+ * Color     - 字的颜色，RGB565
+ * BackColor - 背景色，RGB565
+ * Size      - ASCII放大倍数；传0按1处理
+ * 返回      - 无 */
 void LCD_ShowNum(uint16_t X, uint16_t Y, uint32_t Number, uint8_t Length, uint16_t Color, uint16_t BackColor, uint8_t Size)
 {
 	char String[11];

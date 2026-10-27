@@ -1,6 +1,6 @@
 /*!
     \file    main.c
-    \brief   construct a USB keyboard
+    \brief   ç¦»çº¿çƒ§å½•å™¨ä¸»å…¥å£ï¼ˆåŸUSBé”®ç›˜ä¾‹ç¨‹ï¼‰
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -44,13 +44,13 @@ int main(void)
     rcu_config();
 		nvic_config();
 	
-		xTaskCreate((TaskFunction_t )run_task,            	//ÈÎÎñº¯Êı
-                (const char*    )"run_task",          	//ÈÎÎñÃû³Æ
-                (uint16_t       )RUN_STK_SIZE,        	//ÈÎÎñ¶ÑÕ»´óĞ¡
-                (void*          )NULL,                  //´«µİ¸øÈÎÎñº¯ÊıµÄ²ÎÊı
-                (UBaseType_t    )RUN_TASK_PRIO,       	//ÈÎÎñÓÅÏÈ¼¶
-                (TaskHandle_t*  )&RunTask_Handler);   	//ÈÎÎñ¾ä±ú              
-    vTaskStartScheduler();          										//¿ªÆôÈÎÎñµ÷¶È
+		xTaskCreate((TaskFunction_t )run_task,            	//ä»»åŠ¡å‡½æ•°
+                (const char*    )"run_task",          	//ä»»åŠ¡åç§°
+                (uint16_t       )RUN_STK_SIZE,        	//ä»»åŠ¡å †æ ˆå¤§å°
+                (void*          )NULL,                  //ä¼ é€’ç»™ä»»åŠ¡å‡½æ•°çš„å‚æ•°
+                (UBaseType_t    )RUN_TASK_PRIO,       	//ä»»åŠ¡ä¼˜å…ˆçº§
+                (TaskHandle_t*  )&RunTask_Handler);   	//ä»»åŠ¡å¥æŸ„              
+    vTaskStartScheduler();          										//å¼€å¯ä»»åŠ¡è°ƒåº¦
 
 //    while(usb_hid.cur_status != USBD_CONFIGURED)
 //		{

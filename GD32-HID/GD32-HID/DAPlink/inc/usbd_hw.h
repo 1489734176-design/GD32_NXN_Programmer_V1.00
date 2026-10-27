@@ -1,6 +1,6 @@
 /*!
     \file    usbd_hw.h
-    \brief   usb device hardware configuration
+    \brief   USB设备硬件配置
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -37,16 +37,16 @@ OF SUCH DAMAGE.
 
 #include "usbd_conf.h"
 
-/* function declarations */
-/* configure the different system clocks */
+/* 函数声明 */
+/* 配置各系统时钟 */
 void rcu_config(void);
-/* configure the gpio peripheral */
+/* 配置GPIO外设 */
 void gpio_config(void);
-/* configure interrupt priority */
+/* 配置中断优先级 */
 void nvic_config(void);
 
 #ifdef USE_IRC48M
-/* configure the CTC peripheral */
+/* 配置CTC外设 */
 void ctc_config(void);
 #endif
 

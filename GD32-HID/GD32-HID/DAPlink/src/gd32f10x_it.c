@@ -1,6 +1,6 @@
 /*!
     \file    gd32f10x_it.c
-    \brief   main interrupt service routines
+    \brief   主要中断服务程序
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -39,72 +39,72 @@ OF SUCH DAMAGE.
 #include "task.h"
 
 /*!
-    \brief      this function handles NMI exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      NMI异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void NMI_Handler(void)
 {
 }
 
 /*!
-    \brief      this function handles HardFault exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      HardFault异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void HardFault_Handler(void)
 {
-    /* if Hard Fault exception occurs, go to infinite loop */
+    /* 发生HardFault异常时进入死循环 */
     while(1){
     }
 }
 
 /*!
-    \brief      this function handles MemManage exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      MemManage异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void MemManage_Handler(void)
 {
-    /* if Memory Manage exception occurs, go to infinite loop */
+    /* 发生MemManage异常时进入死循环 */
     while(1){
     }
 }
 
 /*!
-    \brief      this function handles BusFault exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      BusFault异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void BusFault_Handler(void)
 {
-    /* if Bus Fault exception occurs, go to infinite loop */
+    /* 发生BusFault异常时进入死循环 */
     while(1){
     }
 }
 
 /*!
-    \brief      this function handles UsageFault exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      UsageFault异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void UsageFault_Handler(void)
 {
-    /* if Usage Fault exception occurs, go to infinite loop */
+    /* 发生UsageFault异常时进入死循环 */
     while(1){
     }
 }
 
 /*!
-    \brief      this function handles SVC exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      SVC异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 //void SVC_Handler(void)
 //{
@@ -114,37 +114,37 @@ extern void xPortSysTickHandler(void);
 
 void SysTick_Handler(void)
 {
-    if(xTaskGetSchedulerState()!=taskSCHEDULER_NOT_STARTED)//ϵͳ�Ѿ�����
+    if(xTaskGetSchedulerState()!=taskSCHEDULER_NOT_STARTED)//系统已经运行
     {
         xPortSysTickHandler();	
     }	
 }
 
 /*!
-    \brief      this function handles DebugMon exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      DebugMon异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void DebugMon_Handler(void)
 {
 }
 
 /*!
-    \brief      this function handles PendSV exception
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      PendSV异常处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 //void PendSV_Handler(void)
 //{
 //}
 
 /*!
-    \brief      this function handles USBD interrupt
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      USBD中断处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void USBD_LP_CAN0_RX0_IRQHandler (void)
 {
@@ -152,26 +152,26 @@ void USBD_LP_CAN0_RX0_IRQHandler (void)
 }
 
 /*!
-    \brief      this function handles EXTI14_15_IRQ Handler.
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      EXTI10_15外部中断处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 //void EXTI10_15_IRQHandler (void)
 //{
 //    if (RESET != exti_interrupt_flag_get(TAMPER_KEY_EXTI_LINE)) {
-//        /* check if the remote wakeup feature is enabled */
+//        /* 检查是否已使能远程唤醒 */
 //        if (usbd_core.dev->pm.remote_wakeup) {
-//            /* exit low power mode and re-configure clocks */
+//            /* 退出低功耗模式并重新配置时钟 */
 //            usbd_remote_wakeup_active(usbd_core.dev);
 
 //            usbd_core.dev->cur_status = usbd_core.dev->backup_status;
 
-//            /* disable Remote wakeup feature*/
+//            /* 关闭远程唤醒功能 */
 //            usbd_core.dev->pm.remote_wakeup = 0U;
 //        }
 
-//        /* clear the EXTI line pending bit */
+//        /* 清除EXTI线挂起标志 */
 //        exti_interrupt_flag_clear(TAMPER_KEY_EXTI_LINE);
 //    }
 //}
@@ -179,10 +179,10 @@ void USBD_LP_CAN0_RX0_IRQHandler (void)
 #ifdef USBD_LOWPWR_MODE_ENABLE
 
 /*!
-    \brief      this function handles USBD wakeup interrupt request.
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      USBD唤醒中断处理函数
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void USBD_WKUP_IRQHandler (void)
 {

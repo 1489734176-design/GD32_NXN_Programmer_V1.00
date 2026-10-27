@@ -1,4 +1,4 @@
-/* ÖĞÎÄ×¢ÊÍ²¹³ä£¨2026-10-26£©£º°´¼üÊ±Ğò£º20msÉ¨Ãè£¬×óÓÒ³¤°´500ms£¬ÖĞ¼ü³¤°´1500ms£¬Á¬·¢100ms¡¢Ë«»÷300ms£»³¤°´ÓëÁ¬·¢ÊÂ¼ş·Ö¿ª¡£ */
+/* ä¸­æ–‡æ³¨é‡Šè¡¥å……ï¼ˆ2026-10-26ï¼‰ï¼šæŒ‰é”®æ—¶åºï¼š20msæ‰«æï¼Œå·¦å³é•¿æŒ‰500msï¼Œä¸­é”®é•¿æŒ‰1500msï¼Œè¿å‘100msã€åŒå‡»300msï¼›é•¿æŒ‰ä¸è¿å‘äº‹ä»¶åˆ†å¼€ã€‚ */
 #ifndef _BSP_KEY_H__
 #define _BSP_KEY_H__
 
@@ -13,7 +13,7 @@
 #define read_key_mid    gpio_input_bit_get(KEY_M_GPIO_Port, KEY_M_Pin)
 #define read_key_right  gpio_input_bit_get(KEY_R_GPIO_Port, KEY_R_Pin)
 
-/* Long events fire once; repeat events are separate for menu-specific handling. */
+/* é•¿æŒ‰äº‹ä»¶åªå‘ä¸€æ¬¡ï¼›è¿å‘äº‹ä»¶å•ç‹¬ä¸ŠæŠ¥ï¼Œä¾¿äºå„ç•Œé¢è‡ªè¡Œå¤„ç†ã€‚ */
 typedef enum {key_null, key_left, key_mid, key_right, key_l_left, key_l_mid, key_l_right, key_d_mid, key_rep_left, key_rep_right} key_num;
 
 #define key_dbl_th      (300 / KEY_SCAN_MS)
@@ -29,9 +29,9 @@ extern key_TypeDef key_val;
 
 
 
-/* ³õÊ¼»¯Èı¸ö°´¼üÎªÏÂÀ­ÊäÈë¡£ */
+/* åˆå§‹åŒ–ä¸‰ä¸ªæŒ‰é”®ä¸ºä¸‹æ‹‰è¾“å…¥ã€‚ */
 void key_init(void);
-/* °´¼üÏû¶¶¼°¶Ì°´/³¤°´/Á¬·¢/ÖĞ¼üË«»÷Ê¶±ğ£»³¤°´Ö»·¢Ò»´Î£¬³¤°´ËÉ¿ª²»ÔÙ²¹·¢¶Ì°´¡£ */
+/* æŒ‰é”®æ¶ˆæŠ–åŠçŸ­æŒ‰/é•¿æŒ‰/è¿å‘/ä¸­é”®åŒå‡»è¯†åˆ«ï¼›é•¿æŒ‰åªå‘ä¸€æ¬¡ï¼Œé•¿æŒ‰æ¾å¼€ä¸å†è¡¥å‘çŸ­æŒ‰ã€‚ */
 key_num key_scan(void);
 
 #endif

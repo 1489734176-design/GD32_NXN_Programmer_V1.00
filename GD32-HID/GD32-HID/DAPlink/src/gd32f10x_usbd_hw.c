@@ -1,6 +1,6 @@
 /*!
     \file    gd32f10x_usbd_hw.c
-    \brief   usb device hardware configuration
+    \brief   USB设备硬件配置
 
     \version 2021-04-30, V3.0.0, demo for GD32F10x
 */
@@ -36,10 +36,10 @@ OF SUCH DAMAGE.
 #include "FreeRTOSConfig.h"
 
 /*!
-    \brief      configure the different system clocks
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      配置各系统时钟
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void rcu_config (void)
 {
@@ -56,41 +56,41 @@ void rcu_config (void)
 		rcu_periph_clock_enable(RCU_GPIOB);
 	
 		systick_clksource_set(SYSTICK_CLKSOURCE_HCLK);
-		SysTick->CTRL|=SysTick_CTRL_TICKINT_Msk;   											//����SYSTICK�ж�
-		SysTick->LOAD=SystemCoreClock/configTICK_RATE_HZ; 							//ÿ1/configTICK_RATE_HZ���ж�һ��	
-		SysTick->CTRL|=SysTick_CTRL_ENABLE_Msk;   											//����SYSTICK 
+		SysTick->CTRL|=SysTick_CTRL_TICKINT_Msk;   											//开启SYSTICK中断
+		SysTick->LOAD=SystemCoreClock/configTICK_RATE_HZ; 							//每1/configTICK_RATE_HZ秒中断一次	
+		SysTick->CTRL|=SysTick_CTRL_ENABLE_Msk;   											//开启SYSTICK 
 }
 
 /*!
-    \brief      configure the gpio peripheral
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      配置GPIO外设
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void gpio_config (void)
 {
-    /* configure usb pull-up pin */
+    /* 配置USB上拉引脚 */
 //    gpio_init(USB_PULLUP, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, USB_PULLUP_PIN);
 
-    /* USB wakeup EXTI line configuration */
+    /* USB唤醒EXTI线配置 */
 //    exti_interrupt_flag_clear(EXTI_18);
 //    exti_init(EXTI_18, EXTI_INTERRUPT, EXTI_TRIG_RISING);
 }
 
 /*!
-    \brief      configure interrupt priority
-    \param[in]  none
-    \param[out] none
-    \retval     none
+    \brief      配置中断优先级
+    \param[in]  无
+    \param[out] 无
+    \retval     无
 */
 void nvic_config (void)
 {
-    /* 1 bit for pre-emption priority, 3 bits for subpriority */
+    /* 抢占优先级1位，子优先级3位 */
     nvic_priority_group_set(NVIC_PRIGROUP_PRE4_SUB0);
 
-    /* enable the USB low priority interrupt */
+    /* 使能USB低优先级中断 */
     nvic_irq_enable((uint8_t)USBD_LP_CAN0_RX0_IRQn, 6U, 0U);
 		nvic_irq_enable(DMA0_Channel1_IRQn, 4U, 0U);
-    /* enable the USB Wake-up interrupt */
+    /* 使能USB唤醒中断 */
 //    nvic_irq_enable((uint8_t)USBD_WKUP_IRQn, 0U, 0U);
 }
