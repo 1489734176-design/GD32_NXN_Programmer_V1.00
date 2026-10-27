@@ -22,6 +22,12 @@ static uint8_t staged_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_program[CB_MAX_NAME + 1];
 static uint8_t prepare_opt_required;
+/* 主BIN按字节累加SUM32；已准备的值供LCD提交时读取。 */
+static uint8_t prepare_has_checksum;
+static uint32_t prepare_expected_checksum;
+static uint32_t prepared_checksum;
+/* 变更事件由主任务消费；只读及mkdir不使LCD校验值失效。 */
+static volatile uint8_t files_changed_pending;
 static volatile uint8_t prepare_request_pending;
 static volatile uint8_t prepare_response_pending;
 static volatile uint8_t prepare_complete_pending;
@@ -153,7 +159,12 @@ static void send_response(usb_dev *udev, uint8_t status, uint8_t *data, uint16_t
 void custombulk_reset(void)
 {
     if(cb_handler.file_opened == 2 || staged_algorithm[0])
-        app_data.bin_name[0] = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
+    {
+        app_data.bin_name[0] = 0;
+        files_changed_pending = 1; /* 中断导入时清选择，普通完成会话重连保留LCD值。 */
+    }
+    prepared_checksum = 0;
+    prepare_expected_checksum = 0; prepare_has_checksum = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
     file_cleanup_pending = 1; file_request_pending = 0;
     cb_handler.transfer_active = 0;
     prepare_request_pending = 0; prepare_response_pending = 0;
@@ -259,6 +270,7 @@ static void cmd_open_write(usb_dev *udev, uint8_t *buf, uint16_t len)
         return;
     }
 
+    files_changed_pending = 1; /* CREATE_ALWAYS已创建/截断，旧LCD校验值失效。 */
     cb_handler.file_opened = 2;  /* write mode */
     cb_handler.file_size = file_size;
     cb_handler.bytes_transferred = 0;
@@ -298,18 +310,29 @@ static void cmd_write_data(usb_dev *udev, uint8_t *buf, uint16_t len)
 static void cmd_close_file(usb_dev *udev)
 {
     FRESULT res;
+    uint8_t writing = (cb_handler.file_opened == 2); /* 只对写上传错误撤销导入，读取关闭不影响已有Checksum。 */
 
     if (cb_handler.file_opened == 0 ||
         (cb_handler.file_opened == 2 &&
          cb_handler.bytes_transferred != cb_handler.file_size)) {
         if (cb_handler.file_opened)
             f_close(&cb_fd);
+        if(writing) {
+            /* 未传够声明长度的文件不可prepare，即使随后已能正常读回也必须重新导入。 */
+            staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
+            files_changed_pending = 1; oled.Refresh_flag = 1;
+        }
         cb_handler.file_opened = 0;
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
 
     res = f_close(&cb_fd);
+    if(writing && res != FR_OK) {
+        /* CLOSE失败说明上传未可靠落盘；清会话与旧校验值，禁止故障恢复后误提交。 */
+        staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
+        files_changed_pending = 1; oled.Refresh_flag = 1;
+    }
     cb_handler.file_opened = 0;
     oled.Refresh_flag = 1; /* 文件完成后重新比较列表/文件字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
@@ -393,7 +416,7 @@ static void cmd_delete_file(usb_dev *udev, uint8_t *path, uint16_t path_len)
 
 
     res = f_unlink((const TCHAR *)path);
-    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
+    if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -443,7 +466,7 @@ static void cmd_rename(usb_dev *udev, uint8_t *buf, uint16_t len)
     uint8_t *new_path = &buf[1 + old_len + 1];
 
     res = f_rename((const TCHAR *)old_path, (const TCHAR *)new_path);
-    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
+    if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
 }
 
@@ -504,92 +527,142 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
     {
         if(cb_handler.file_opened) f_close(&cb_fd); /* 取消写入失败的导入，关闭尚未完成的文件。 */
         cb_handler.file_opened = 0; staged_algorithm[0] = 0;
+        prepare_request_pending = 0; prepare_response_pending = 0; prepare_complete_pending = 0;
+        prepare_has_checksum = 0; prepare_expected_checksum = 0; prepared_checksum = 0;
+        files_changed_pending = 1;
         app_data.bin_name[0] = 0; oled.Refresh_flag = 1; /* 残缺上传必须重新导入/选择后才可烧录。 */
         send_response(udev, STATUS_OK, NULL, 0); return;
     }
 
     if (len < 2 || !valid_file_name(&buf[1], name_len) ||
-        prepare_request_pending || prepare_response_pending) {
+        prepare_request_pending || prepare_response_pending || prepare_complete_pending) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
     memcpy(staged_algorithm, &buf[1], name_len);
     staged_algorithm[name_len] = '\0';
+    files_changed_pending = 1; /* 新导入使旧LCD值失效，成功准备后才重新显示。 */
     send_response(udev, STATUS_OK, NULL, 0);
 }
 
-/* PREPARE_DOWNLOAD: [CMD][flags][program file name] */
+/* PREPARE_DOWNLOAD: flags bit0=OPT，bit1=携带期望SUM32。
+ * bit1置位时[2..5]为LE32，文件名从6开始；否则旧格式文件名从2开始。
+ * 成功应答为[STATUS_OK][SUM32 LE32]，旧上位机可忽略追加的四字节。 */
 static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
-    uint16_t name_len;
-
-    if (len < 3 || (buf[1] & (uint8_t)~1U) != 0 ||
-        !valid_file_name(&buf[2], len - 2) ||
-        staged_algorithm[0] == '\0' || prepare_request_pending ||
-        prepare_response_pending) {
+    uint16_t name_offset, name_len;
+    if (len < 3 || (buf[1] & (uint8_t)~3U) != 0) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
-    if (g_programming_active) {
+    name_offset = (buf[1] & 2U) ? 6U : 2U;
+    if (len <= name_offset || !valid_file_name(&buf[name_offset], len - name_offset) ||
+        staged_algorithm[0] == '\0' || prepare_request_pending ||
+        prepare_response_pending || prepare_complete_pending) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+    /* 必须等待成功CLOSE，不能对仍在上传的文件重复打开并误提交。 */
+    if (g_programming_active || cb_handler.file_opened) {
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
     }
-
-    name_len = len - 2;
+    name_len = len - name_offset;
     memcpy(prepare_algorithm, staged_algorithm, sizeof(prepare_algorithm));
-    memcpy(prepare_program, &buf[2], name_len);
+    memcpy(prepare_program, &buf[name_offset], name_len);
     prepare_program[name_len] = '\0';
     prepare_opt_required = buf[1] & 1U;
+    prepare_has_checksum = (buf[1] & 2U) ? 1U : 0U;
+    prepare_expected_checksum = prepare_has_checksum ?
+        (uint32_t)buf[2] | ((uint32_t)buf[3] << 8) |
+        ((uint32_t)buf[4] << 16) | ((uint32_t)buf[5] << 24) : 0U;
     prepare_request_pending = 1;
 }
 
-/* 在主任务中完成文件检查和导入确认，避免USB中断中执行耗时文件操作。 */
+/* 局部FIL和64字节栈缓冲回读主BIN；不复用烧录/OPT工作区或USB文件对象。
+ * USB复位只标记清理，所有读/关闭仍由当前主任务完成。 */
+static uint8_t file_sum32(const uint8_t *path, uint32_t *checksum)
+{
+    FIL sum_fd;
+    uint8_t buffer[64];
+    UINT br, request, i;
+    FRESULT res;
+    uint32_t size, done = 0, sum = 0;
+    if (file_cleanup_pending || f_open(&sum_fd, (const TCHAR *)path, FA_READ) != FR_OK)
+        return 0;
+    size = f_size(&sum_fd);
+    while (!file_cleanup_pending && done < size) {
+        request = (size - done > sizeof(buffer)) ? sizeof(buffer) : (UINT)(size - done);
+        res = f_read(&sum_fd, buffer, request, &br);
+        if (file_cleanup_pending || res != FR_OK || br != request)
+            break; /* FR_OK也可能短读，残缺固件不能接受。 */
+        for (i = 0; i < br; i++) sum += buffer[i]; /* uint32按模2^32溢出。 */
+        done += br;
+    }
+    res = f_close(&sum_fd); /* 成功open后的每条出口恰好close一次。 */
+    if (file_cleanup_pending || res != FR_OK || !size || done != size)
+        return 0;
+    *checksum = sum;
+    return 1;
+}
+
+/* 主任务检查算法/OPT存在并回读主固件，成功后才排队确认应答。 */
 void custombulk_prepare_service(usb_dev *udev)
 {
     uint8_t algorithm[CB_MAX_NAME + 1];
     uint8_t program[CB_MAX_NAME + 1];
     uint8_t opt_name[64];
-    uint8_t path[80];
-
+    uint8_t path[80], response[4];
+    uint8_t status = STATUS_ERR;
+    uint32_t checksum, irq_mask;
     if (!prepare_request_pending)
         return;
-
     prepare_request_pending = 0;
     memcpy(algorithm, prepare_algorithm, sizeof(algorithm));
     memcpy(program, prepare_program, sizeof(program));
-
-    if (g_programming_active) {
-        staged_algorithm[0] = '\0';
-        send_response(udev, STATUS_BUSY, NULL, 0);
-        return;
+    if (g_programming_active || cb_handler.file_opened) {
+        status = STATUS_BUSY;
+        goto prepare_error;
     }
-
     strcpy((char *)path, "0:/download/firmware/");
     strcat((char *)path, (char *)algorithm);
-    if (!file_available(path))
+    if (file_cleanup_pending || !file_available(path))
         goto prepare_error;
-
     strcpy((char *)path, "0:/download/bin/");
     strcat((char *)path, (char *)program);
-    if (!file_available(path))
+    if (!file_sum32(path, &checksum))
         goto prepare_error;
-
+    if (prepare_has_checksum && checksum != prepare_expected_checksum)
+        goto prepare_error;
     if (prepare_opt_required) {
         if (!make_opt_name(program, opt_name))
             goto prepare_error;
         strcpy((char *)path, "0:/download/bin/");
         strcat((char *)path, (char *)opt_name);
-        if (!file_available(path))
+        if (file_cleanup_pending || !file_available(path))
             goto prepare_error;
     }
-
-    prepare_response_pending = 1;
-    send_response(udev, STATUS_OK, NULL, 0);
+    response[0] = (uint8_t)checksum; response[1] = (uint8_t)(checksum >> 8);
+    response[2] = (uint8_t)(checksum >> 16); response[3] = (uint8_t)(checksum >> 24);
+    /* 最后有效性判断、置pending和排队应答不可被reset插入；临界区没有FatFs。 */
+    irq_mask = __get_PRIMASK(); __disable_irq();
+    if (!file_cleanup_pending && staged_algorithm[0]) {
+        prepared_checksum = checksum;
+        prepare_response_pending = 1;
+        send_response(udev, STATUS_OK, response, sizeof(response));
+    }
+    __set_PRIMASK(irq_mask);
     return;
-
 prepare_error:
-    staged_algorithm[0] = '\0';
-    send_response(udev, STATUS_ERR, NULL, 0);
+    irq_mask = __get_PRIMASK(); __disable_irq();
+    if (!file_cleanup_pending) {
+        staged_algorithm[0] = '\0'; prepare_algorithm[0] = '\0'; prepare_program[0] = '\0';
+        prepare_response_pending = 0; prepare_complete_pending = 0;
+        prepare_has_checksum = 0; prepare_expected_checksum = 0;
+        app_data.bin_name[0] = 0; files_changed_pending = 1; oled.Refresh_flag = 1;
+        send_response(udev, status, NULL, 0); /* 复位后不发旧应答或重新置busy。 */
+    }
+    __set_PRIMASK(irq_mask);
 }
 
 /* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
@@ -609,6 +682,23 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
     prepare_program[0] = '\0';
     prepare_opt_required = 0;
     return 1;
+}
+
+/* take_prepare_complete保留原三参数；run.c提交文件名时读取确认的SUM32。 */
+uint32_t custombulk_prepared_checksum(void)
+{
+    return prepared_checksum;
+}
+
+/* 消费一次文件变更事件，兼容调用者已处于短临界区。 */
+uint8_t custombulk_take_files_changed(void)
+{
+    uint8_t changed;
+    uint32_t irq_mask = __get_PRIMASK();
+    __disable_irq();
+    changed = files_changed_pending; files_changed_pending = 0;
+    __set_PRIMASK(irq_mask);
+    return changed;
 }
 
 /* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:

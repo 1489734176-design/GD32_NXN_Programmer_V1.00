@@ -95,6 +95,17 @@ static uint32_t auto_now_ms(void);
    repeat the failure reason after mode4 has returned */
 static char g_last_status[64] = {0};
 
+/* 当前成功导入的主固件SUM32；有效标记独立保存，校验值00000000也有效。 */
+static uint32_t g_program_checksum;
+static uint8_t g_program_checksum_valid;
+
+/* 固件被改写、取消或更换后清除旧校验值；下次只刷新Checksum文字行。 */
+static void invalidate_program_checksum(void)
+{
+    g_program_checksum_valid = 0;
+    oled.Refresh_flag = 1;
+}
+
 /* Quota gets a full-width 32px row. Key hints move to a separate 16px footer. */
 /* 显示剩余次数：三位数字补零或“不限”。独立栈缓冲区保护文件路径D，避免OPT校验打开错误文件。 */
 static void show_quota(uint16_t y)
@@ -107,7 +118,20 @@ static void show_quota(uint16_t y)
         sprintf(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\x25\x30\x33\x6C\x75\xB4\xCE", (unsigned long)burn_quota_remaining()); /* 显示文字：剩余次数:%03lu次（%03lu为三位次数，前面补0） */
     else
         strcpy(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\xB2\xBB\xCF\xDE"); /* 显示文字：剩余次数:不限 */
-    UI_Field(5, 8, y, 304, 32, quota_text, 32, 1); /* 次数变化只覆盖变化数字。 */
+    UI_Field(5, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
+}
+
+/* 显示文字：Checksum: 01234567。SUM32为最终BIN所有字节累加的32位值，
+ * 固件未成功导入或已更换时显示Checksum: --------；字号16像素，数字前补0。
+ * 独立栈缓冲保护OPT文件路径D；复用空闲字段13，只绘制变化字符。 */
+static void show_checksum(uint16_t y)
+{
+    char checksum_text[24];
+    if(g_program_checksum_valid && app_data.bin_name[0])
+        sprintf(checksum_text, "Checksum: %08lX", (unsigned long)g_program_checksum);
+    else
+        strcpy(checksum_text, "Checksum: --------");
+    UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
 }
 
 /* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接；不重置次数。 */
@@ -122,6 +146,9 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     strncpy((char *)app_data.bin_name, (const char *)program_name,
             sizeof(app_data.bin_name) - 1);
     app_data.bin_name[sizeof(app_data.bin_name) - 1] = '\0';
+    /* 仅在设备回读校验并确认导入后提交校验值；算法/OPT不计入SUM32。 */
+    g_program_checksum = custombulk_prepared_checksum();
+    g_program_checksum_valid = 1;
     app_data.mode = 2;
     app_data.head = 2;
     key_val.mesg = 0;
@@ -297,6 +324,7 @@ void mode2(void)
 		oled.Refresh_flag = 0;
 	}
     show_quota(g_auto_en ? 148 : 136);
+    show_checksum(g_auto_en ? 166 : 156); /* 次数下方独立16像素校验行，保留全屏布局。 */
     show_top(0);
 }
 
@@ -314,6 +342,7 @@ static void show_download_status(const char *status)
     strncpy(g_last_status, status, sizeof(g_last_status) - 1);
     g_last_status[sizeof(g_last_status) - 1] = '\0';
     show_quota(208);
+    show_checksum(224); /* 烧录及结果页底行显示主固件校验值，避免与两行状态重叠。 */
 }
 
 /* Native LCD error page: wrapped 32px title, complete 16px register values. */
@@ -336,6 +365,7 @@ static void show_download_error(const char *status, uint32_t diag, uint32_t step
     sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
     UI_Text(8, 172, (char *)D, 16, 1);
     show_quota(208);
+    show_checksum(224); /* 诊断页保留主固件Checksum，独立于OPT与诊断寄存器。 */
 }
 
 /* Connect and halt the core as fast as possible.
@@ -518,6 +548,7 @@ static void auto_draw(void)
     UI_Field(3, 8, 96, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
     UI_Field(4, 8, 128, 304, 16, (const char *)app_data.bin_name, 16, 1);
     show_quota(148);
+    show_checksum(166); /* 自动待机/结果页：校验行位于次数与失败原因之间。 */
     UI_Field(6, 8, 184, 304, 32, detail, UI_TextWidth(detail, 32) <= 304 ? 32 : 16, 1);
     UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1); /* 显示文字：长按右键:手动 */
 }
@@ -579,7 +610,7 @@ void mode4(void)
 	}
 
     if(g_burn_done) /* 手动结果页允许后台设置次数，只刷新次数行。 */
-    { show_quota(208); return; }
+    { show_quota(208); show_checksum(224); return; } /* 结果页仅局刷次数与校验值。 */
 	g_burn_done = 1;
 	g_burn_ok = 0;
 
@@ -1123,6 +1154,9 @@ void mode3(void)
 						}	
 						else if(app_data.head == 1)
 						{
+							/* 手动切换固件名称后旧导入校验值失效，避免显示另一程序的SUM32。 */
+							if(strcmp((char *)app_data.bin_name, FileInfo.fname))
+								invalidate_program_checksum();
 							memset(app_data.bin_name, '\0', 32);
 							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
 							/* manual pick on device: program OPT if the file exists (old behaviour) */
@@ -1146,6 +1180,7 @@ void mode3(void)
 		if(!sum)
 		{
 			index = 0;
+            if(app_data.head == 1) invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
 			UI_Field(1, 8, 52, 304, 32, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1); /* 显示文字：没有文件 */
 		}
         sprintf((char *)D, "%lu/%lu", (unsigned long)(sum ? index + 1 : 0), (unsigned long)sum);
@@ -1162,6 +1197,7 @@ void run_task(void *pvParameters)
 		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 		uint8_t prepare_program[CB_MAX_NAME + 1];
 		uint8_t prepare_opt;
+        uint32_t prepare_irq_mask; /* 短临界区保护导入确认与界面提交，禁止复位插入二者之间。 */
 
 		pwr_init();
 		led_init();
@@ -1219,6 +1255,11 @@ void run_task(void *pvParameters)
             custombulk_file_service(&usb_hid); /* 所有文件系统访问集中到主任务。 */
             custombulk_quota_service(&usb_hid);
 			custombulk_prepare_service(&usb_hid);
+            /* 文件读取已结束：下面只消费状态及拷贝名称，不在临界区读文件/刷新LCD。
+             * 保存并恢复原PRIMASK，确保高优先级USB复位也无法提交半个旧会话。 */
+            prepare_irq_mask = __get_PRIMASK();
+            __disable_irq();
+            if(custombulk_take_files_changed()) invalidate_program_checksum();
 			if(custombulk_take_prepare_complete(prepare_algorithm,
 			                                    prepare_program,
 			                                    &prepare_opt))
@@ -1227,6 +1268,7 @@ void run_task(void *pvParameters)
 				                       prepare_program,
 				                       prepare_opt);
 			}
+            __set_PRIMASK(prepare_irq_mask);
 //			vTaskDelay(1000);
 			switch(app_data.mode)
 			{

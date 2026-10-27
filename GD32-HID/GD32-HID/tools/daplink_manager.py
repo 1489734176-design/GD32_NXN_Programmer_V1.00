@@ -56,6 +56,7 @@ EP_IN = 0x82
 PACKET_SIZE = 64
 MAX_DATA = 56
 TIMEOUT = 5000
+PREPARE_TIMEOUT = 30000  # 设备需要回读主BIN计算SUM32，大文件准备响应允许等待30秒。
 
 CMD_LIST_DIR    = 0x01
 CMD_OPEN_WRITE  = 0x02
@@ -144,7 +145,8 @@ class DAPLinkDevice:
     def _send_cmd(self, cmd_data):
         with self._command_lock:
             self.ep_out.write(cmd_data, timeout=TIMEOUT)
-            data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
+            response_timeout = PREPARE_TIMEOUT if cmd_data and cmd_data[0] == CMD_PREPARE_DOWNLOAD else TIMEOUT
+            data = self.ep_in.read(PACKET_SIZE, timeout=response_timeout)  # 只延长0x0C准备响应，普通USB指令仍等待5秒。
             return bytes(data)
 
     def list_dir(self, path="/"):
@@ -204,17 +206,34 @@ class DAPLinkDevice:
         if not resp or resp[0] != STATUS_OK:
             raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
 
-    def prepare_download(self, program_name, opt_required):
+    # 0x0C准备指令：bit0表示OPT，bit1表示随后携带主BIN的SUM32（小端32位）。
+    def prepare_download(self, program_name, opt_required, checksum=None):
         if not program_name or len(program_name.encode('ascii')) > 31:
             raise ValueError("Program filename must be 1-31 ASCII characters")
         flags = 1 if opt_required else 0
-        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + program_name.encode('ascii'))
+        checksum_data = b''
+        if checksum is not None:
+            # 校验值0也是有效值，不能用真假判断；只接受无符号32位整数。
+            if type(checksum) is not int or not 0 <= checksum <= 0xFFFFFFFF:
+                raise ValueError("Checksum(SUM32) 必须为 0–FFFFFFFF 的整数。")
+            flags |= 2
+            checksum_data = struct.pack('<I', checksum)
+        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + checksum_data + program_name.encode('ascii'))
         if not resp:
-            raise RuntimeError("Prepare response was empty")
+            raise RuntimeError("设备准备响应为空，无法确认 Checksum(SUM32)。")
         if resp[0] == STATUS_BUSY:
-            raise RuntimeError("Device is busy")
+            raise RuntimeError("设备正在传输或烧录，请完成后再导入。")
         if resp[0] != STATUS_OK:
-            raise RuntimeError("Device rejected download preparation")
+            raise RuntimeError("设备拒绝导入准备，请检查程序、算法、OPT文件和 Checksum(SUM32)。")
+        # 旧调用允许旧固件仅返回OK；请求校验时必须收到完整5字节及匹配的值。
+        if len(resp) == 1 and checksum is None:
+            return None
+        if len(resp) != 5:
+            raise RuntimeError("设备未返回完整 Checksum(SUM32)，请更新固件后重试。")
+        actual_checksum = struct.unpack('<I', resp[1:5])[0]
+        if checksum is not None and actual_checksum != checksum:
+            raise RuntimeError(f"Checksum(SUM32) 不一致：上位机 {checksum:08X}，设备 {actual_checksum:08X}。")
+        return actual_checksum
 
     @staticmethod
     # 验证设备次数响应的状态、版本、长度与范围，返回启用/异常/剩余次数字段。
@@ -383,9 +402,11 @@ class ImportWorker(QThread):
         self.program_path = program_path
         self.algorithm_name = algorithm_name
         self.opt_path = opt_path
+        self.checksum = None  # 只在设备确认主BIN的SUM32后保留值，供GUI显示。
 
     # 后台导入固件、算法和可选OPT文件，确认准备完成后设备转入离线烧录。
     def run(self):
+        self.checksum = None  # 每次导入开始清除此前结果，失败不能沿用旧校验值。
         try:
             try:
                 self.device.mkdir("0:/download/bin/")
@@ -395,6 +416,12 @@ class ImportWorker(QThread):
             # 先暂存算法名锁住整个导入过程，防止固件与OPT两次上传间隙自动开始。
             self.device.stage_algorithm(self.algorithm_name)
             prog_name = os.path.basename(self.program_path)
+            # 只累加最终上传主BIN的全部字节；HEX填洞已在转换时写入BIN，OPT/算法和尾页填充不计。
+            # 上传前确定期望值；若本地文件或传输内容变化，由设备prepare校验拒绝提交。
+            expected_checksum = 0
+            with open(self.program_path, 'rb') as program_file:
+                for chunk in iter(lambda: program_file.read(65536), b''):
+                    expected_checksum = (expected_checksum + sum(chunk)) & 0xFFFFFFFF
             self.log.emit("Uploading program: " + prog_name)
             written = self.device.push(
                 self.program_path,
@@ -416,7 +443,8 @@ class ImportWorker(QThread):
 
             self.log.emit("Preparing offline programming")
             self.device.stage_algorithm(self.algorithm_name)
-            self.device.prepare_download(prog_name, opt_required)
+            self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum)
+            self.log.emit(f"Checksum(SUM32): {self.checksum:08X}")  # 已由设备确认，按8位大写十六进制显示。
             self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
             # 导入失败取消暂存，恢复设备待机；断线时取消失败交由设备断线清理。
@@ -536,12 +564,19 @@ class DAPLinkManager(QMainWindow):
         row1.addWidget(self.lbl_status_text)
         row1.addStretch()
         status_layout.addLayout(row1)
-        # Row 2: path
+        # 第二行显示路径与最近成功导入主BIN的校验值，共用一行以适应小窗口和OPT布局。
+        row2 = QHBoxLayout()
         self.lbl_path = QLabel("路径: /")
         self.lbl_path.setFont(QFont("Consolas", 9))
         self.lbl_path.setStyleSheet("color: #555;")
         self.lbl_path.setWordWrap(True)
-        status_layout.addWidget(self.lbl_path)
+        row2.addWidget(self.lbl_path, 1)
+        self.lbl_checksum = QLabel("Checksum(SUM32): --------")  # 横线表示尚无成功导入，避免误认成有效的零校验值。
+        self.lbl_checksum.setFont(QFont("Consolas", 10))
+        self.lbl_checksum.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
+        self.lbl_checksum.setToolTip("最近成功导入主BIN的全部字节相加，取低32位；HEX填洞计入，OPT和算法不计。")
+        row2.addWidget(self.lbl_checksum)
+        status_layout.addLayout(row2)
         layout.addWidget(self.status_frame)
 
         # ── Chip & OPT Selection Bar ──
@@ -549,7 +584,7 @@ class DAPLinkManager(QMainWindow):
         self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
         self.chip_opt_frame.setProperty("panel", True)
         chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
-        chip_opt_layout.setContentsMargins(12, 12, 12, 12)
+        chip_opt_layout.setContentsMargins(12, 8, 12, 8)  # 减少竖向留白，900×600时芯片框不能覆盖配额框。
         chip_opt_layout.setSpacing(12)
         chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
 
@@ -598,7 +633,7 @@ class DAPLinkManager(QMainWindow):
         self.opt_scroll = QScrollArea()
         self.opt_scroll.setObjectName("optScroll")
         self.opt_scroll.setWidgetResizable(True)
-        self.opt_scroll.setMinimumHeight(100)
+        self.opt_scroll.setMinimumHeight(48)  # 小窗口及上传进度条出现时允许滚动查看OPT，保持配额控件完整尺寸。
         self.opt_scroll.setMaximumHeight(350)
         self.opt_scroll.setVisible(True)
         self.opt_content = QWidget()
@@ -650,6 +685,7 @@ class DAPLinkManager(QMainWindow):
         local_layout.addWidget(lbl_local)
 
         self.local_tree = QTreeWidget()
+        self.local_tree.setMinimumHeight(32)  # 文件区可在小窗口收缩，给OPT和配额区域留出空间。
         self.local_tree.setHeaderLabels(["名称", "大小", "类型"])
         self.local_tree.setRootIsDecorated(False)
         self.local_tree.setAlternatingRowColors(True)
@@ -681,6 +717,7 @@ class DAPLinkManager(QMainWindow):
         remote_layout.addWidget(lbl_remote)
 
         self.remote_tree = QTreeWidget()
+        self.remote_tree.setMinimumHeight(32)  # 保持两侧文件区一致，不再以默认最小高度挤压上方配置框。
         self.remote_tree.setHeaderLabels(["名称", "大小", "类型"])
         self.remote_tree.setRootIsDecorated(False)
         self.remote_tree.setAlternatingRowColors(True)
@@ -861,6 +898,8 @@ class DAPLinkManager(QMainWindow):
 
     def _set_import_state(self, active):
         self.import_in_progress = active
+        if active:
+            self.lbl_checksum.setText("Checksum(SUM32): --------")  # 新导入开始即清除旧值，上传期间不显示未验证值。
         self.remote_tree.setEnabled(not active)
         self.remote_path_input.setEnabled(not active)
         self._update_toolbar_state()
@@ -1407,6 +1446,8 @@ class DAPLinkManager(QMainWindow):
         if not file_path:
             return
 
+        self.lbl_checksum.setText("Checksum(SUM32): --------")  # 已选定新文件；HEX转换或文件检查失败也不能沿用旧值。
+
         # Convert .hex to .bin if needed
         if file_path.lower().endswith('.hex'):
             try:
@@ -1509,6 +1550,10 @@ class DAPLinkManager(QMainWindow):
     def _import_done(self, ok, msg):
         self.progress.setVisible(False)
         if ok:
+            # 兼容既有完成回调；只有新导入线程保留的已验证校验值才显示。
+            checksum = getattr(self.worker, 'checksum', None)
+            if checksum is not None:
+                self.lbl_checksum.setText(f"Checksum(SUM32): {checksum:08X}")
             # 新固件留在烧录页继续USB通信，导入完成后保持连接状态和远端列表。
             self.statusBar().showMessage("导入完成，设备已准备烧录，USB保持连接。")
             QMessageBox.information(self, "导入完成",
@@ -1516,6 +1561,7 @@ class DAPLinkManager(QMainWindow):
                                     "自动模式检测到芯片后开始烧录；手动模式按中键开始。\n"
                                     "上位机仍保持连接，可继续设置次数和传输文件。")
         else:
+            self.lbl_checksum.setText("Checksum(SUM32): --------")  # 导入失败不得保留此前成功值。
             self.statusBar().showMessage(f"导入失败: {msg}")
             QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")
         self._set_import_state(False)

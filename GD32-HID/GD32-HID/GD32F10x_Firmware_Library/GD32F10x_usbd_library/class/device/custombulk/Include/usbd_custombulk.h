@@ -70,6 +70,11 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required);
 
+/* 成功准备的主固件SUM32，保持到下一成功prepare、reset或取消；值0也合法。 */
+uint32_t custombulk_prepared_checksum(void);
+/* 主任务消费文件变更标记使LCD旧值失效；只读和mkdir不产生标记。 */
+uint8_t custombulk_take_files_changed(void);
+
 /* Send response to host */
 uint8_t custombulk_send_response(usb_dev *udev, uint8_t *data, uint16_t len);
 
