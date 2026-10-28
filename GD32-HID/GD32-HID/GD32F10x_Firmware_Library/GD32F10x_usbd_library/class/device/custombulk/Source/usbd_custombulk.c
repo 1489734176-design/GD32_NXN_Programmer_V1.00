@@ -34,6 +34,7 @@ static volatile uint8_t prepare_complete_pending;
 static volatile uint8_t quota_request_pending;
 static uint8_t quota_request_enabled;
 static uint32_t quota_request_remaining;
+static uint8_t quota_request_program[CB_MAX_NAME + 1];
 
 /* Forward declarations */
 static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index);
@@ -74,6 +75,7 @@ static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index)
     prepare_response_pending = 0;
     prepare_complete_pending = 0;
     quota_request_pending = 0;
+    memset(quota_request_program, 0, sizeof(quota_request_program));
 
     udev->class_data[CUSTOMBULK_INTERFACE] = (void *)&cb_handler;
 
@@ -169,6 +171,7 @@ void custombulk_reset(void)
     cb_handler.transfer_active = 0;
     prepare_request_pending = 0; prepare_response_pending = 0;
     prepare_complete_pending = 0; quota_request_pending = 0;
+    memset(quota_request_program, 0, sizeof(quota_request_program));
     staged_algorithm[0] = 0; prepare_algorithm[0] = 0; prepare_program[0] = 0;
     oled.Refresh_flag = 1;
 }
@@ -731,19 +734,44 @@ uint8_t custombulk_take_files_changed(void)
     return changed;
 }
 
-/* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:
- * [status][version=1][enabled][fault][remaining LE32]. Writes run in task context. */
-/* 验证上位机次数指令并暂存；USB中断内不写Flash，交由主任务延后执行。 */
+/* GET: [0D][optional program basename]; SET: [0E][enabled][remaining LE32]
+ * [optional program basename]. Short requests use app_data.bin_name.
+ * Response: [status][version=2][enabled][fault][remaining LE32]. */
+static uint8_t valid_quota_name(uint8_t *name, uint16_t len)
+{
+    uint16_t i;
+    if(!valid_file_name(name, len) || name[len - 1] == '.' || name[len - 1] == ' ')
+        return 0;
+    for(i = 0; i < len; i++) {
+        if(name[i] > 0x7EU || strchr("*?\"<>|", name[i]) != NULL)
+            return 0;
+    }
+    return 1;
+}
+
 static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint32_t remaining = 0;
+    uint16_t name_offset, name_len;
+    uint8_t *program;
     if(g_programming_active || cb_handler.file_opened || prepare_request_pending ||
        prepare_response_pending || prepare_complete_pending || quota_request_pending) {
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
     }
-    if((buf[0] == CMD_GET_BURN_QUOTA && len != 1) ||
-       (buf[0] == CMD_SET_BURN_QUOTA && (len != 6 || buf[1] > 1))) {
+    name_offset = buf[0] == CMD_GET_BURN_QUOTA ? 1U : 6U;
+    if(len < name_offset || (buf[0] == CMD_SET_BURN_QUOTA && buf[1] > 1)) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+    name_len = len - name_offset;
+    program = &buf[name_offset];
+    if(!name_len) {
+        program = app_data.bin_name;
+        while(name_len < sizeof(app_data.bin_name) && program[name_len]) name_len++;
+    }
+    if((name_len && !valid_quota_name(program, name_len)) ||
+       (!name_len && buf[0] == CMD_SET_BURN_QUOTA)) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
@@ -757,15 +785,25 @@ static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
         quota_request_enabled = buf[1];
         quota_request_remaining = remaining;
     }
+    memcpy(quota_request_program, program, name_len);
+    quota_request_program[name_len] = '\0';
     quota_request_pending = buf[0];
 }
 
-/* 在主任务中保存/读取次数，返回版本、开关、异常标志和剩余值；避免USB中断中擦写Flash。 */
+/* Filesystem/checkpoint and internal Flash work stays in the main task. */
 void custombulk_quota_service(usb_dev *udev)
 {
-    uint8_t cmd = quota_request_pending, result = BURN_QUOTA_OK;
-    uint8_t response[7];
-    uint32_t remaining;
+    uint8_t cmd, result = BURN_QUOTA_OK, enabled = 0, fault = 0;
+    uint8_t response[7], program[CB_MAX_NAME + 1], request_enabled;
+    uint32_t remaining = 0, request_remaining, irq_mask;
+    if(!quota_request_pending) return;
+    /* USB reset can clear pending/name: snapshot only, never hold IRQs over I/O. */
+    irq_mask = __get_PRIMASK(); __disable_irq();
+    cmd = quota_request_pending;
+    memcpy(program, quota_request_program, sizeof(program));
+    request_enabled = quota_request_enabled;
+    request_remaining = quota_request_remaining;
+    __set_PRIMASK(irq_mask);
     if(!cmd) return;
     /* OUT is rearmed only after this response completes. */
     if(g_programming_active || cb_handler.file_opened) {
@@ -773,16 +811,32 @@ void custombulk_quota_service(usb_dev *udev)
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
     }
-    if(cmd == CMD_SET_BURN_QUOTA) {
-        result = burn_quota_set(quota_request_enabled, quota_request_remaining);
-        oled.Refresh_flag = 1;
+    if(program[0]) {
+        result = burn_quota_select(program);
+        if(result != BURN_QUOTA_OK) {
+            quota_request_pending = 0;
+            send_response(udev, result == BURN_QUOTA_BUSY ? STATUS_BUSY : STATUS_ERR, NULL, 0);
+            return;
+        }
+        if(file_cleanup_pending) {
+            quota_request_pending = 0;
+            return;
+        }
+        if(cmd == CMD_SET_BURN_QUOTA) {
+            result = burn_quota_set(request_enabled, request_remaining);
+            oled.Refresh_flag = 1;
+        }
+        enabled = burn_quota_enabled(); fault = burn_quota_fault();
+        remaining = burn_quota_remaining();
+    } else if(cmd == CMD_SET_BURN_QUOTA) {
+        result = BURN_QUOTA_STORAGE; /* Defend against a lost/empty filename. */
     }
-    remaining = burn_quota_remaining();
-    response[0] = 1; response[1] = burn_quota_enabled(); response[2] = burn_quota_fault();
+    response[0] = 2; response[1] = enabled; response[2] = fault;
     response[3] = (uint8_t)remaining; response[4] = (uint8_t)(remaining >> 8);
     response[5] = (uint8_t)(remaining >> 16); response[6] = (uint8_t)(remaining >> 24);
     quota_request_pending = 0;
-    send_response(udev, result == BURN_QUOTA_OK ? STATUS_OK : STATUS_ERR, response, sizeof(response));
+    send_response(udev, result == BURN_QUOTA_OK ? STATUS_OK :
+                  (result == BURN_QUOTA_BUSY ? STATUS_BUSY : STATUS_ERR), response, sizeof(response));
 }
 
 /* Command dispatcher */

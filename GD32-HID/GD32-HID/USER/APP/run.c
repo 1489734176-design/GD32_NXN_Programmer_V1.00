@@ -124,8 +124,12 @@ static void capture_program_selection(program_selection_t *selection)
 static uint8_t save_program_selection(void)
 {
     program_selection_t selection;
+    /* 次数请求可临时查看别的固件，进入界面/烧录前必须重新绑定实际选择。
+     * 在主任务且USB空闲时进行账本I/O，不放入prepare的关中断区。 */
+    if(custombulk_is_busy() || g_programming_active) return 0;
+    if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK) return 0;
     if(!g_selection_dirty) return !g_selection_save_failed;
-    if(g_selection_save_failed || custombulk_is_busy() || g_programming_active) return 0;
+    if(g_selection_save_failed) return 0;
     capture_program_selection(&selection);
     if(!selection_store_save(&selection))
     {
@@ -280,7 +284,7 @@ static const char *selected_chip_name(void)
 }
 
 /* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接。
- * 新上位机在提交前已通过次数指令重新加载额度；这里保留已确认额度，不重复写入。
+ * 上位机在提交前已为此固件重设次数；本函数只复制选择，关中断区外再绑定其额度。
  * algorithm_name - 算法文件名（不含路径），长度不超过app_data.firmware_name容量
  * program_name   - 主固件文件名（不含路径），长度不超过app_data.bin_name容量
  * opt_required   - 上位机是否要求编程OPT，1=需要，0=跳过
@@ -303,7 +307,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     app_data.mode = 2;
     app_data.head = 2;
     key_val.mesg = 0;
-    /* 导入完成只更新文件字段；保留上位机刚加载的次数和USB连接，重新开始芯片检测。 */
+    /* 导入完成后主任务绑定本固件额度并保存选择，再开始芯片检测。 */
     g_auto_st = AUTO_ST_WAIT; g_present_seen = 0; g_absent_seen = 0;
     g_auto_tprobe = auto_now_ms();
     oled.Refresh_flag = 1;
@@ -330,6 +334,7 @@ void start_page(void)
     uint8_t ret;
     uint32_t ulReadNum;
     const char *status;
+    program_selection_t legacy_selection;
     burn_quota_init();
     selection_store_init();
     ret = f_mount(&fs, "0:", 1);
@@ -337,6 +342,12 @@ void start_page(void)
     if(ret == FR_OK)
     {
         restore_program_selection();
+        /* 旧全局额度只迁移给曾保存的固件；之后手选文件不再继承全局次数。 */
+        if(selection_store_load(&legacy_selection))
+            burn_quota_migrate_legacy(legacy_selection.program_name);
+        else
+            burn_quota_migrate_legacy((const uint8_t *)"");
+        burn_quota_select(app_data.bin_name);
         status = "\xCD\xBC\xB1\xEA\xBC\xD3\xD4\xD8\xCA\xA7\xB0\xDC"; /* 显示文字：图标加载失败 */
         if(f_open(&fd, "0:/system/logo.bin", FA_READ) == FR_OK)
         {
@@ -798,7 +809,10 @@ void mode4(void)
         return;
     }
 
-    if(burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
+    /* USB响应完成可能插在主循环保存与本次烧录之间。此时禁止借用
+     * 上位机临时查询的另一固件额度，必须在目标上电前重新绑定当前文件。 */
+    if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK ||
+       burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
     {
 quota_rejected:
         OLED_Clear();

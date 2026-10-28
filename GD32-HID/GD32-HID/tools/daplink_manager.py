@@ -1,4 +1,4 @@
-# 中文注释补充（2026-10-27）：烧录次数保存到设备；每次导入程序时，按上位机当前设置重新加载次数。
+# 固件次数独立保存到设备；重新导入只加载当前导入文件的次数，不影响其他固件。
 #!/usr/bin/env python3
 """
 CMSIS-DAPLINK File Manager
@@ -242,23 +242,44 @@ class DAPLinkDevice:
             raise RuntimeError("设备正在传输或烧录，请完成后再设置次数。")
         if not resp or resp[0] != STATUS_OK:
             raise RuntimeError("设备不支持次数限制或保存失败，请更新固件后重试。")
-        if len(resp) != 8 or resp[1] != 1 or resp[2] > 1 or resp[3] > 1:
+        if len(resp) != 8:
+            raise RuntimeError("设备次数响应无效。")
+        if resp[1] != 2:
+            raise RuntimeError("设备固件不支持按固件文件独立保存次数，请更新设备固件后重试。")
+        if resp[2] > 1 or resp[3] > 1:
             raise RuntimeError("设备次数响应无效。")
         remaining = struct.unpack('<I', resp[4:8])[0]
         if remaining > 999 or (not resp[2] and remaining):
             raise RuntimeError("设备剩余次数无效。")
         return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
 
-    # 发送0x0D指令读取设备剩余次数。
-    def get_burn_quota(self):
-        return self._decode_quota(self._send_cmd(bytes([CMD_GET_BURN_QUOTA])))
+    @staticmethod
+    def _quota_name_bytes(program_name):
+        if program_name is None:
+            return b''  # 不附文件名时，设备使用其当前选择的主固件。
+        try:
+            name = program_name.encode('ascii')
+        except (AttributeError, UnicodeEncodeError) as exc:
+            raise ValueError("固件文件名必须为 1–31 个 ASCII 字符。") from exc
+        if (not 1 <= len(name) <= 31 or program_name in ('.', '..') or
+                name[-1:] in (b'.', b' ') or
+                any(c < 0x20 or c > 0x7E for c in name) or
+                any(c in program_name for c in '/\\:*?"<>|')):
+            raise ValueError("固件文件名无效，需为 1–31 个 ASCII 字符的文件名。")
+        return name
+
+    # 发送0x0D读取指定固件次数；省略文件名时读取设备当前选择的固件。
+    def get_burn_quota(self, program_name=None):
+        request = bytes([CMD_GET_BURN_QUOTA]) + self._quota_name_bytes(program_name)
+        return self._decode_quota(self._send_cmd(request))
 
     # 发送0x0E指令设置次数并检查设备回传，取消限制时额度归零但恢复不限。
-    def set_burn_quota(self, enabled, remaining):
+    def set_burn_quota(self, enabled, remaining, program_name=None):
         if not isinstance(remaining, int) or not 0 <= remaining <= 999:
             raise ValueError("烧录次数必须为 0–999。")
         remaining = remaining if enabled else 0
-        request = bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining)
+        request = (bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining) +
+                   self._quota_name_bytes(program_name))
         result = self._decode_quota(self._send_cmd(request))
         if result['fault'] or result['enabled'] != bool(enabled) or result['remaining'] != remaining:
             raise RuntimeError("设备次数保存校验失败。")
@@ -384,6 +405,8 @@ class QuotaWorker(QThread):
             if self.setting is None:
                 result = self.device.get_burn_quota()
             else:
+                # 先只读检查协议版本，防止旧固件执行SET后才发现仍是全局次数。
+                self.device.get_burn_quota()
                 result = self.device.set_burn_quota(*self.setting)
             self.finished.emit(result, "")
         except Exception as exc:
@@ -413,13 +436,17 @@ class ImportWorker(QThread):
         self.checksum = None  # 每次导入开始清除此前结果，失败不能沿用旧校验值。
         self.quota_result = None
         self.quota_error = ""
+        session_started = False
         try:
+            # 在创建目录、暂存算法或覆盖文件之前，先确认设备支持独立固件次数。
+            self.device.get_burn_quota()
             try:
                 self.device.mkdir("0:/download/bin/")
             except Exception:
                 pass
 
             # 先暂存算法名锁住整个导入过程，防止固件与OPT两次上传间隙自动开始。
+            session_started = True  # 暂存返回失败或超时也可能已改变设备，仍需取消会话。
             self.device.stage_algorithm(self.algorithm_name)
             prog_name = os.path.basename(self.program_path)
             # 只累加最终上传主BIN的全部字节；HEX填洞已在转换时写入BIN，OPT/算法和尾页填充不计。
@@ -451,24 +478,25 @@ class ImportWorker(QThread):
             self.device.stage_algorithm(self.algorithm_name)
             if self.quota_setting is not None:
                 # 暂存算法仍锁住自动烧录；必须先成功写入次数，再发0x0C最终提交指令。
-                # 每次导入按当前设置重载：启用100次时恢复100，取消限制时恢复不限。
-                self.log.emit("正在重新加载烧录次数")
+                # 用最终上传的主BIN文件名指定次数，暂存期间设备当前选择已清空。
+                self.log.emit("正在重新加载该固件烧录次数：" + prog_name)
                 try:
-                    self.quota_result = self.device.set_burn_quota(*self.quota_setting)
+                    self.quota_result = self.device.set_burn_quota(*self.quota_setting, program_name=prog_name)
                 except Exception as exc:
                     self.quota_error = str(exc)
                     raise RuntimeError("烧录次数重新加载失败：" + str(exc)) from exc
                 remaining_text = f"{self.quota_result['remaining']:03d}次" if self.quota_result['enabled'] else "不限"
-                self.log.emit("烧录次数已重新加载：" + remaining_text)
+                self.log.emit("该固件烧录次数已重新加载：" + remaining_text)
             self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum)
             self.log.emit(f"Checksum(SUM32): {self.checksum:08X}")  # 已由设备确认，按8位大写十六进制显示。
             self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
             # 导入失败取消暂存，恢复设备待机；断线时取消失败交由设备断线清理。
-            try:
-                self.device.stage_algorithm("")
-            except Exception:
-                pass
+            if session_started:
+                try:
+                    self.device.stage_algorithm("")
+                except Exception:
+                    pass
             self.finished.emit(False, str(e))
 
     def _cb(self, cur, total):
@@ -657,7 +685,7 @@ class DAPLinkManager(QMainWindow):
         layout.addWidget(self.chip_opt_frame)
 
         # 每次导入都会按此处当前设置重新加载次数；仍保留单独保存/读取按钮。
-        self.quota_frame = QGroupBox("烧录次数限制")
+        self.quota_frame = QGroupBox("固件烧录次数")
         quota_layout = QGridLayout(self.quota_frame)
         quota_layout.setContentsMargins(12, 2, 12, 4)
         quota_layout.setHorizontalSpacing(10)
@@ -667,9 +695,9 @@ class DAPLinkManager(QMainWindow):
         self.spin_quota.setValue(100)
         self.spin_quota.setSuffix(" 次")
         self.spin_quota.setMinimumWidth(100)
-        self.btn_quota_save = QPushButton("保存到设备")
-        self.btn_quota_read = QPushButton("读取剩余次数")
-        self.lbl_quota = QLabel("剩余次数：请连接设备后读取")
+        self.btn_quota_save = QPushButton("保存当前固件")
+        self.btn_quota_read = QPushButton("读取当前剩余")
+        self.lbl_quota = QLabel("当前固件剩余：请连接设备后读取")
         self.lbl_quota.setWordWrap(True)
         self.chk_quota.toggled.connect(lambda _: self._update_toolbar_state())
         self.btn_quota_save.clicked.connect(lambda: self._start_quota(True))
@@ -682,7 +710,7 @@ class DAPLinkManager(QMainWindow):
         quota_layout.addWidget(self.btn_quota_read, 0, 3)
         quota_layout.addWidget(self.lbl_quota, 0, 4)
         quota_layout.setColumnStretch(4, 1)
-        self.quota_frame.setToolTip("每次导入程序都会按当前设置重新加载烧录次数，设100次即恢复100次；取消勾选后导入为不限。也可单独保存或读取；失败不扣次数，烧录中断电按一次计。")
+        self.quota_frame.setToolTip("每个主固件文件独立保存次数。导入按当前设置重新加载该文件的次数，设100次即恢复100次；取消勾选后该文件为不限，其他文件不受影响。单独保存/读取针对设备当前选择的固件；手动切换文件会恢复该文件自己的剩余次数。失败不扣次数，烧录中断电按一次计。")
         layout.addWidget(self.quota_frame)
 
         # ── Splitter: Local + Remote ──
@@ -939,10 +967,10 @@ class DAPLinkManager(QMainWindow):
         if result['enabled']:
             self.spin_quota.setValue(result['remaining'])
         if result['fault']:
-            self.lbl_quota.setText("次数记录异常：请重新设置并保存到设备")
+            self.lbl_quota.setText("当前固件次数记录异常：请重新设置并保存")
         else:
             text = f"{result['remaining']:03d}次" if result['enabled'] else "不限"
-            self.lbl_quota.setText("剩余次数：" + text)
+            self.lbl_quota.setText("当前固件剩余：" + text)
 
     # 恢复单独保存/读取操作的控件状态；次数显示与导入完成回调保持一致。
     def _quota_done(self, result, error, saved):
@@ -950,7 +978,7 @@ class DAPLinkManager(QMainWindow):
         self.remote_tree.setEnabled(True)
         self.remote_path_input.setEnabled(True)
         if error:
-            self.lbl_quota.setText("剩余次数：读取或保存失败")
+            self.lbl_quota.setText("当前固件剩余：读取或保存失败")
             self.statusBar().showMessage(error)
         else:
             self._display_burn_quota(result)
@@ -969,7 +997,7 @@ class DAPLinkManager(QMainWindow):
             self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
             self.lbl_status_text.setText("已连接")
             self.statusBar().showMessage("设备已连接；可设置或读取烧录次数")
-            self.lbl_quota.setText("剩余次数：请点击“读取剩余次数”")
+            self.lbl_quota.setText("当前固件剩余：请点击“读取当前剩余”")
             self._navigate_remote("/")
         else:
             self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
@@ -983,7 +1011,7 @@ class DAPLinkManager(QMainWindow):
         self.lbl_status_text.setText("未连接")
         self.remote_tree.clear()
         self.statusBar().showMessage("已断开")
-        self.lbl_quota.setText("剩余次数：设备未连接")
+        self.lbl_quota.setText("当前固件剩余：设备未连接")
         self._update_toolbar_state()
 
     # ── Remote Navigation ──
@@ -1561,7 +1589,7 @@ class DAPLinkManager(QMainWindow):
         if quota_result is not None:
             self._display_burn_quota(quota_result)
         elif getattr(self.worker, 'quota_error', ""):
-            self.lbl_quota.setText("剩余次数：重新加载失败")  # 次数未确认成功，不能显示输入值已生效。
+            self.lbl_quota.setText("导入固件次数：重新加载失败")  # 次数未确认成功，不能显示输入值已生效。
         if ok:
             # 兼容既有完成回调；只有新导入线程保留的已验证校验值才显示。
             checksum = getattr(self.worker, 'checksum', None)

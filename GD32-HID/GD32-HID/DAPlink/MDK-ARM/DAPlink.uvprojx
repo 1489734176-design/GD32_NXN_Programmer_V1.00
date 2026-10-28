@@ -720,6 +720,11 @@
               <FilePath>..\..\USER\APP\burn_quota.c</FilePath>
             </File>
             <File>
+              <FileName>burn_quota_catalog.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\USER\APP\burn_quota_catalog.c</FilePath>
+            </File>
+            <File>
               <FileName>burn_quota_port.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\USER\APP\burn_quota_port.c</FilePath>
