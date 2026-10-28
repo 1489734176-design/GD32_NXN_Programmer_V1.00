@@ -259,6 +259,12 @@ static void cmd_open_write(usb_dev *udev, uint8_t *buf, uint16_t len)
     path[path_len] = '\0';
 
 
+    /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
+    if (!app_selection_invalidate() || file_cleanup_pending) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+
     /* Close any previously open file */
     if (cb_handler.file_opened) {
         f_close(&cb_fd);
@@ -415,6 +421,12 @@ static void cmd_delete_file(usb_dev *udev, uint8_t *path, uint16_t path_len)
     path[path_len] = '\0';
 
 
+    /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
+    if (!app_selection_invalidate() || file_cleanup_pending) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+
     res = f_unlink((const TCHAR *)path);
     if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
@@ -464,6 +476,12 @@ static void cmd_rename(usb_dev *udev, uint8_t *buf, uint16_t len)
     }
 
     uint8_t *new_path = &buf[1 + old_len + 1];
+
+    /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
+    if (!app_selection_invalidate() || file_cleanup_pending) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
 
     res = f_rename((const TCHAR *)old_path, (const TCHAR *)new_path);
     if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
@@ -525,6 +543,12 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
     /* 空文件名取消未完成导入，失败后不让待机页一直暂停检测。 */
     if(len == 1)
     {
+        /* 先持久化选择失效；失败或USB复位时保留原导入会话。 */
+        if (!app_selection_invalidate() || file_cleanup_pending) {
+            send_response(udev, STATUS_ERR, NULL, 0);
+            return;
+        }
+
         if(cb_handler.file_opened) f_close(&cb_fd); /* 取消写入失败的导入，关闭尚未完成的文件。 */
         cb_handler.file_opened = 0; staged_algorithm[0] = 0;
         prepare_request_pending = 0; prepare_response_pending = 0; prepare_complete_pending = 0;
@@ -539,6 +563,12 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
+    /* 先持久化选择失效；失败或USB复位时保留原导入会话。 */
+    if (!app_selection_invalidate() || file_cleanup_pending) {
+        send_response(udev, STATUS_ERR, NULL, 0);
+        return;
+    }
+
     memcpy(staged_algorithm, &buf[1], name_len);
     staged_algorithm[name_len] = '\0';
     files_changed_pending = 1; /* 新导入使旧LCD值失效，成功准备后才重新显示。 */

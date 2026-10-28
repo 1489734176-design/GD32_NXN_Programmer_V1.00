@@ -45,6 +45,8 @@ extern usb_dev usb_hid;
 extern app_TypeDef app_data;
 /* 实际目标烧录占用标志；结果页面不占用USB文件服务。 */
 extern volatile uint8_t g_programming_active;
+/* 主任务在修改文件前持久化不可烧录状态；失败返回0并拒绝文件变更。 */
+uint8_t app_selection_invalidate(void);
 /* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 extern EventGroupHandle_t  EventGroupHandle;

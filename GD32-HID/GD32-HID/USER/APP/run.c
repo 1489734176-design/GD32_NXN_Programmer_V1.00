@@ -7,6 +7,7 @@
 #include "DAP_config.h"
 #include "usbd_custombulk.h"
 #include "burn_quota.h"
+#include "selection_store.h"
 
 
 usb_dev usb_hid;
@@ -98,11 +99,137 @@ static char g_last_status[64] = {0};
 static uint32_t g_program_checksum;
 static uint8_t g_program_checksum_valid;
 
+/* 选择改变仅标记；Flash写入安排在主任务临界区外，失败时暂停烧录。 */
+static uint8_t g_selection_dirty;
+static uint8_t g_selection_save_failed;
+
+static void mark_selection_dirty(void)
+{
+    g_selection_dirty = 1;
+    g_selection_save_failed = 0;
+}
+
+/* 记录算法名即可反查芯片型号，次数仍由独立次数日志管理。 */
+static void capture_program_selection(program_selection_t *selection)
+{
+    memset(selection, 0, sizeof(*selection));
+    memcpy(selection->algorithm_name, app_data.firmware_name, sizeof(selection->algorithm_name));
+    memcpy(selection->program_name, app_data.bin_name, sizeof(selection->program_name));
+    selection->opt_enabled = app_data.opt_enable;
+    selection->checksum = g_program_checksum;
+    selection->checksum_valid = g_program_checksum_valid;
+}
+
+/* 同一主任务集中保存，避开文件传输和目标烧录；相同记录由日志层免写。 */
+static uint8_t save_program_selection(void)
+{
+    program_selection_t selection;
+    if(!g_selection_dirty) return !g_selection_save_failed;
+    if(g_selection_save_failed || custombulk_is_busy() || g_programming_active) return 0;
+    capture_program_selection(&selection);
+    if(!selection_store_save(&selection))
+    {
+        g_selection_save_failed = 1;
+        return 0;
+    }
+    g_selection_dirty = 0;
+    return 1;
+}
+
+/* USB主任务在覆盖/删除/改名/新导入之前调用：先保存不可烧录状态。
+ * 保存失败必须拒绝文件变更，避免掉电后复活已被改写的旧固件选择。 */
+uint8_t app_selection_invalidate(void)
+{
+    program_selection_t selection;
+    app_data.bin_name[0] = 0;
+    app_data.opt_enable = 0;
+    g_program_checksum_valid = 0;
+    oled.Refresh_flag = 1;
+    capture_program_selection(&selection);
+    if(!selection_store_save(&selection))
+    {
+        g_selection_dirty = 1;
+        g_selection_save_failed = 1;
+        return 0;
+    }
+    g_selection_dirty = 0;
+    g_selection_save_failed = 0;
+    return 1;
+}
+
+/* 上电恢复选择并核对文件。复用已有工作缓冲区，校验不限于首个4KB。 */
+static void restore_program_selection(void)
+{
+    program_selection_t selection;
+    char path[64];
+    uint32_t size, done, request, read_count, checksum;
+    uint8_t ret;
+    uint16_t base_len;
+    const char *dot;
+    if(!selection_store_load(&selection))
+    {
+        g_selection_save_failed = selection_store_fault();
+        return;
+    }
+    memcpy(app_data.firmware_name, selection.algorithm_name, sizeof(app_data.firmware_name));
+    memcpy(app_data.bin_name, selection.program_name, sizeof(app_data.bin_name));
+    app_data.opt_enable = selection.opt_enabled;
+    g_program_checksum = selection.checksum;
+    g_program_checksum_valid = selection.checksum_valid;
+    if(!app_data.bin_name[0]) return;
+    if(!app_data.firmware_name[0]) goto invalid_selection;
+    sprintf(path, "0:/download/firmware/%s", app_data.firmware_name);
+    if(f_open(&fd, path, FA_READ) != FR_OK) goto invalid_selection;
+    size = f_size(&fd);
+    ret = f_close(&fd);
+    if(!size || ret != FR_OK) goto invalid_selection;
+    sprintf(path, "0:/download/bin/%s", app_data.bin_name);
+    if(f_open(&fd, path, FA_READ) != FR_OK) goto invalid_selection;
+    size = f_size(&fd); done = 0; checksum = 0; ret = FR_OK;
+    if(g_program_checksum_valid)
+    {
+        while(done < size)
+        {
+            request = size - done;
+            if(request > sizeof(DATA_BUFFER)) request = sizeof(DATA_BUFFER);
+            ret = f_read(&fd, DATA_BUFFER, request, &read_count);
+            if(ret != FR_OK || read_count != request) break;
+            for(base_len = 0; base_len < read_count; base_len++) checksum += DATA_BUFFER[base_len];
+            done += read_count;
+        }
+    }
+    if(f_close(&fd) != FR_OK) ret = FR_DISK_ERR;
+    if(!size || ret != FR_OK ||
+       (g_program_checksum_valid && (done != size || checksum != g_program_checksum))) goto invalid_selection;
+    if(app_data.opt_enable)
+    {
+        /* 与实际烧录相同：按最后一个扩展名生成OPT，无扩展名时用默认文件。 */
+        dot = strrchr((const char *)app_data.bin_name, '.');
+        if(dot && dot - (const char *)app_data.bin_name < 30)
+        {
+            base_len = (uint16_t)(dot - (const char *)app_data.bin_name);
+            sprintf(path, "0:/download/bin/%.*s_opt.bin", (int)base_len, app_data.bin_name);
+        }
+        else strcpy(path, "0:/download/bin/default_opt.bin");
+        if(f_open(&fd, path, FA_READ) != FR_OK) goto invalid_selection;
+        size = f_size(&fd);
+        ret = f_close(&fd);
+        if(!size || ret != FR_OK) goto invalid_selection;
+    }
+    return;
+invalid_selection:
+    app_data.bin_name[0] = 0;
+    app_data.opt_enable = 0;
+    g_program_checksum_valid = 0;
+    mark_selection_dirty();
+}
+
 /* 固件被改写、取消或更换后清除旧校验值；下次只刷新Checksum文字行。
  * 返回 - 无 */
 static void invalidate_program_checksum(void)
 {
     g_program_checksum_valid = 0;
+    mark_selection_dirty();
     oled.Refresh_flag = 1;
 }
 
@@ -172,6 +299,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     /* 仅在设备回读校验并确认导入后提交校验值；算法/OPT不计入SUM32。 */
     g_program_checksum = custombulk_prepared_checksum();
     g_program_checksum_valid = 1;
+    mark_selection_dirty();
     app_data.mode = 2;
     app_data.head = 2;
     key_val.mesg = 0;
@@ -203,10 +331,12 @@ void start_page(void)
     uint32_t ulReadNum;
     const char *status;
     burn_quota_init();
+    selection_store_init();
     ret = f_mount(&fs, "0:", 1);
     status = "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3"; /* 显示文字：文件系统异常 */
     if(ret == FR_OK)
     {
+        restore_program_selection();
         status = "\xCD\xBC\xB1\xEA\xBC\xD3\xD4\xD8\xCA\xA7\xB0\xDC"; /* 显示文字：图标加载失败 */
         if(f_open(&fd, "0:/system/logo.bin", FA_READ) == FR_OK)
         {
@@ -232,6 +362,7 @@ void start_page(void)
 static void power_down(void)
 {
     uint8_t step = 0;
+    save_program_selection();
     OLED_DisPlay_Off(); GD25QXX_PowerDown(); usbd_disconnect(&usb_hid);
     vTaskDelete(LedTask_Handler); POWER_OFF;
     for(;;)
@@ -443,7 +574,8 @@ static uint32_t auto_now_ms(void)
  * 返回 - 1=两个文件都已加载，0=缺文件 */
 static uint8_t auto_has_files(void)
 {
-	return (app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0');
+	return (!g_selection_dirty && !g_selection_save_failed &&
+            app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0');
 }
 
 /* 短暂上电并尝试SWD连接以检测芯片；上电瞬间立即探测，
@@ -659,6 +791,12 @@ void mode4(void)
     { show_quota(208); show_checksum(224); return; } /* 结果页仅局刷次数与校验值。 */
 	g_burn_done = 1;
 	g_burn_ok = 0;
+    if(g_selection_dirty || g_selection_save_failed)
+    {
+        show_download_status("\xD1\xA1\xD4\xF1\xB1\xA3\xB4\xE6\xCA\xA7\xB0\xDC"); /* 显示文字：选择保存失败 */
+        if(g_auto_en) app_data.mode = 2;
+        return;
+    }
 
     if(burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
     {
@@ -1201,6 +1339,7 @@ void mode3(void)
 							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
 							/* 设备上手动选文件：OPT文件存在就编程OPT（保持旧行为） */
 							app_data.opt_enable = 1;
+                            mark_selection_dirty();
 						}
 						/* 完整文件名在下面绘制。 */
                         UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 0); /* 选中行反白显示。 */
@@ -1220,6 +1359,8 @@ void mode3(void)
 		if(!sum)
 		{
 			index = 0;
+            app_data.bin_name[0] = 0;
+            app_data.opt_enable = 0;
             invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
 			UI_Field(1, 8, 52, 304, 32, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1); /* 显示文字：没有文件 */
 		}
@@ -1311,6 +1452,7 @@ void run_task(void *pvParameters)
 				                       prepare_opt);
 			}
             __set_PRIMASK(prepare_irq_mask);
+            save_program_selection(); /* 已恢复中断且USB空闲时才持久化，先于自动烧录。 */
 //			vTaskDelay(1000);
 			switch(app_data.mode)
 			{
