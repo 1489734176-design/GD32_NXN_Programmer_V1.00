@@ -24,14 +24,12 @@ def settle():
 
 
 def check_layout(window):
-    controls = (window.cmb_chip, window.algorithm_edit,
-                window.btn_bind_algorithm, window.btn_opt_toggle)
+    # 固定算法标签与芯片框对齐，OPT按钮只保留在芯片行。
+    controls = (window.cmb_chip, window.lbl_algorithm, window.btn_opt_toggle)
     assert {c.height() for c in controls} == {window.control_height}
-    assert window.cmb_chip.size() == window.algorithm_edit.size()
-    assert window.btn_bind_algorithm.size() == window.btn_opt_toggle.size()
+    assert window.cmb_chip.size() == window.lbl_algorithm.size()
     assert window.cmb_chip.y() == window.btn_opt_toggle.y()
-    assert window.algorithm_edit.y() == window.btn_bind_algorithm.y()
-    assert window.cmb_chip.x() == window.algorithm_edit.x()
+    assert window.cmb_chip.x() == window.lbl_algorithm.x()
     for i, control in enumerate(controls):
         for other in controls[i + 1:]:
             assert not control.geometry().intersects(other.geometry())

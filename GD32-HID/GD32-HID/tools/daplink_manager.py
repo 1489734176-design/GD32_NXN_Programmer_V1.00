@@ -605,7 +605,7 @@ class DAPLinkManager(QMainWindow):
         chip_opt_layout.setSpacing(12)
         chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
 
-        # Two rows share the same input and button columns.
+        # 芯片选择与只读算法共用显示列，算法由芯片型号自动决定。
         chip_bar = QGridLayout()
         chip_bar.setHorizontalSpacing(12)
         chip_bar.setVerticalSpacing(10)
@@ -621,24 +621,21 @@ class DAPLinkManager(QMainWindow):
         self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
         chip_bar.addWidget(self.cmb_chip, 0, 1)
         chip_bar.addWidget(QLabel("算法文件："), 1, 0)
-        self.algorithm_edit = QLineEdit()
-        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的算法文件名")
-        self.algorithm_edit.setMinimumWidth(220)
-        chip_bar.addWidget(self.algorithm_edit, 1, 1)
-        self.btn_bind_algorithm = QPushButton("保存算法")
-        self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
-        chip_bar.addWidget(self.btn_bind_algorithm, 1, 2)
+        # 只读标签替代输入框与保存按钮，用户只能查看配套算法文件名。
+        self.lbl_algorithm = QLabel("")
+        self.lbl_algorithm.setMinimumWidth(220)
+        self.lbl_algorithm.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.lbl_algorithm.setToolTip("随芯片型号自动选择，导入成功后同步到烧录器。")
+        chip_bar.addWidget(self.lbl_algorithm, 1, 1)
         self.btn_opt_toggle = QPushButton("OPT 配置 ▲")
         self.btn_opt_toggle.setCheckable(True)
         self.btn_opt_toggle.setChecked(True)
         self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
         chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
         button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
-        for control in (self.cmb_chip, self.algorithm_edit,
-                        self.btn_bind_algorithm, self.btn_opt_toggle):
+        for control in (self.cmb_chip, self.lbl_algorithm, self.btn_opt_toggle):
             control.setFixedHeight(self.control_height)
-        for button in (self.btn_bind_algorithm, self.btn_opt_toggle):
-            button.setFixedWidth(button_width)
+        self.btn_opt_toggle.setFixedWidth(button_width)
         self.chk_opt = QCheckBox("上传 OPT")
         self.chk_opt.setChecked(True)
         self.chk_opt.setEnabled(False)
@@ -904,8 +901,6 @@ class DAPLinkManager(QMainWindow):
         self.btn_refresh.setEnabled(connected and idle)
         self.btn_import.setEnabled(connected and idle)
         self.cmb_chip.setEnabled(idle)
-        self.algorithm_edit.setEnabled(idle)
-        self.btn_bind_algorithm.setEnabled(idle)
         self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
         self.chk_opt.setEnabled(idle and self.current_chip is not None)
         self.chk_quota.setEnabled(connected and idle)
@@ -1228,21 +1223,10 @@ class DAPLinkManager(QMainWindow):
             return False
         return not require_bin or name.lower().endswith('.bin')
 
-    def _bind_algorithm(self):
-        if not self.current_model:
-            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
-            return
-        name = self.algorithm_edit.text().strip()
-        if not self._valid_name(name, require_bin=True):
-            QMessageBox.warning(self, "Algorithm Error", "算法文件名必须是 1-31 个 ASCII 字符的 .bin 文件名。")
-            return
-        self.opt_config.set_algorithm(self.current_model, name)
-        self.algorithm_edit.setText(name)
-        self.statusBar().showMessage(f"已保存 {self.current_model} 的算法绑定: {name}")
-
     def _on_chip_changed(self, model_name):
         self.current_model = model_name or ''
-        self.algorithm_edit.setText(
+        # 切换芯片只更新显示；已导入程序的设备算法在导入提交成功时同步。
+        self.lbl_algorithm.setText(
             self.opt_config.get_algorithm(self.current_model) if self.current_model else '')
         if not model_name:
             self.current_chip = None
@@ -1455,11 +1439,11 @@ class DAPLinkManager(QMainWindow):
         algorithm_name = self.opt_config.get_algorithm(self.current_model)
         if not algorithm_name:
             QMessageBox.warning(self, "Warning",
-                                f"芯片 {self.current_model} 尚未绑定算法文件，请先在“算法文件”中填写并保存。")
+                                f"芯片 {self.current_model} 没有配套算法，请选择受支持的芯片型号。")
             return
         if not self._valid_name(algorithm_name, require_bin=True):
             QMessageBox.warning(self, "Warning",
-                                f"已保存的算法文件名无效: {algorithm_name}")
+                                f"配套算法文件名无效: {algorithm_name}")
             return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择程序文件", "",

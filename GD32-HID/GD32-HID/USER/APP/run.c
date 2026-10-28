@@ -44,7 +44,7 @@ EventGroupHandle_t  EventGroupHandle;
 extern void DAP_Thread (void *argument);
 #endif
 extern void DAP_Setup(void);
-/* 离线选择页：选择算法/固件/开始烧录；长按右键切换自动与手动，实际烧录统一进入mode4。 */
+/* 离线选择页：芯片型号只读，手动选择固件或开始烧录；长按右键切换自动与手动。 */
 void mode2(void);
 /* 文件选择页：每页五项，文件名16像素完整显示，左右键循环选取。 */
 void mode3(void);
@@ -81,7 +81,7 @@ static uint32_t g_auto_tprobe  = 0;             /* 上一次检测时的系统�
 
 /* 自动检测芯片：连续检测到芯片后烧录，显示结果后等待芯片取出，避免同一颗芯片重复烧录。 */
 static void auto_standby_tick(void);
-/* 绘制自动烧录待机/烧录/结果页；中文32像素，算法名与固件名16像素，次数独占一行。 */
+/* 绘制自动烧录待机/烧录/结果页；中文32像素，芯片型号与固件名16像素，次数独占一行。 */
 static void auto_draw(void);
 /* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。 */
 static void auto_start_burn(void);
@@ -136,6 +136,20 @@ static void show_checksum(uint16_t y)
     else
         strcpy(checksum_text, "Checksum: --------");
     UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
+}
+
+/* 由已提交的算法文件名反查芯片型号，仅用于显示，不读取或更改目标芯片。
+ * 算法由上位机固定配套并通过已有导入事务提交；旧名/未知名不能误标为已知芯片。
+ * 返回 - 芯片型号；空选择显示“未选择”，未知旧算法显示“未知”（GBK字节）。 */
+static const char *selected_chip_name(void)
+{
+    if(!app_data.firmware_name[0])
+        return "\xCE\xB4\xD1\xA1\xD4\xF1"; /* 显示文字：未选择 */
+    if(!strcmp((const char *)app_data.firmware_name, "MM32G001-OPT_ext.bin"))
+        return "MM32G0001A";
+    if(!strcmp((const char *)app_data.firmware_name, "MM32SPIN0230-OPT_ext.bin"))
+        return "MM32SPIN0230";
+    return "\xCE\xB4\xD6\xAA"; /* 显示文字：未知 */
 }
 
 /* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接。
@@ -235,8 +249,7 @@ static void power_down(void)
     }
 }
 
-/* mode2: 离线下载选择页 (算法 / 文件 / 开始烧录), 只负责选择, 烧录在 mode4 */
-/* 离线选择页：选择算法/固件/开始烧录；长按右键切换自动与手动，实际烧录统一进入mode4。
+/* 离线选择页：芯片型号只读；手动模式仅固件选择和开始烧录参与按键导航。
  * 返回 - 无 */
 void mode2(void)
 {
@@ -244,6 +257,8 @@ void mode2(void)
 	   （长按右键切换自动/手动） */
 	if(g_auto_en)
 		app_data.head = 2;
+	else if(app_data.head != 1 && app_data.head != 2)
+		app_data.head = 1; /* 修正旧算法焦点或异常值，禁止进入算法选择。 */
 
 	if(key_val.mesg == 1)
 	{
@@ -259,12 +274,12 @@ void mode2(void)
 			case key_rep_left:
 				if(g_auto_en)                   /* 自动模式下不切换焦点 */
 					break;
-				app_data.head = (app_data.head + 2) % 3;
+				app_data.head = app_data.head == 1 ? 2 : 1; /* 仅固件/开始两项循环。 */
 				break;
 			case key_right:                     /* 下一个(循环) */
 				if(g_auto_en)
 					break;
-				app_data.head = (app_data.head + 1) % 3;
+				app_data.head = app_data.head == 1 ? 2 : 1; /* 两项时左右方向均切换到另一项。 */
 				break;
 			case key_l_right:                   /* 长按右键 -> 自动/手动 切换 */
 				g_auto_en = g_auto_en ? 0 : 1;
@@ -278,7 +293,7 @@ void mode2(void)
 			case key_mid:
                 /* 传输尚未完成时禁止选择/开始，避免使用正在改写的文件。 */
                 if(custombulk_is_busy()) { key_val.mesg = 0; return; }
-				if(app_data.head != 2)          /* 选算法/文件 */
+				if(app_data.head == 1)          /* 仅进入固件文件选择，芯片型号只读。 */
 				{
 					app_data.mode = 3;
 					oled.Refresh_flag = 1;
@@ -325,13 +340,12 @@ void mode2(void)
 		}
 		else
 		{
-            UI_Field(1, 8, 8, 256, 32, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1); /* 显示文字：烧录算法 */
-            UI_Field(2, 8, 48, 304, 16, (const char *)app_data.firmware_name, 16, 1);
+            UI_Field(1, 8, 8, 256, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
+            UI_Field(2, 8, 48, 304, 16, selected_chip_name(), 16, 1);
             UI_Field(3, 8, 72, 256, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
             UI_Field(4, 8, 112, 304, 16, (const char *)app_data.bin_name, 16, 1);
             UI_Field(6, 8, 176, 256, 32, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1); /* 显示文字：开始烧录 */
-            /* 焦点变化只更新三处箭头，字段缓存自动擦除旧箭头。 */
-            UI_Field(0, 272, 8, 32, 32, app_data.head == 0 ? "<-" : "", 32, 1);
+            /* 芯片型号为只读信息，不显示箭头；焦点仅在固件和开始之间切换。 */
             UI_Field(8, 272, 72, 32, 32, app_data.head == 1 ? "<-" : "", 32, 1);
             UI_Field(14, 272, 176, 32, 32, app_data.head == 2 ? "<-" : "", 32, 1);
             show_quota(136);
@@ -573,8 +587,8 @@ static void auto_draw(void)
 	}
 
     UI_Field(0, 8, 8, 304, 32, st, 32, 1);
-    UI_Field(1, 8, 44, 304, 32, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1); /* 显示文字：烧录算法 */
-    UI_Field(2, 8, 76, 304, 16, (const char *)app_data.firmware_name, 16, 1);
+    UI_Field(1, 8, 44, 304, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
+    UI_Field(2, 8, 76, 304, 16, selected_chip_name(), 16, 1);
     UI_Field(3, 8, 96, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
     UI_Field(4, 8, 128, 304, 16, (const char *)app_data.bin_name, 16, 1);
     show_quota(148);
@@ -630,7 +644,7 @@ void mode4(void)
 				return;
 			case key_l_mid:                     /* 长按 -> 烧录选择页 */
 				app_data.mode = 2;
-				app_data.head = 0;
+				app_data.head = 1; /* 返回固件焦点，不再恢复旧算法焦点。 */
 				g_burn_done = 0;
 				oled.Refresh_flag = 1;
 				key_val.mesg = 0;
@@ -662,7 +676,7 @@ quota_rejected:
 
     OLED_Clear();
     UI_Text(8, 8, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1); /* 显示文字：开始烧录 */
-    sprintf((char *)D, "\xCB\xE3\xB7\xA8\x3A\x25\x73", app_data.firmware_name); /* 显示文字：算法:%s */
+    sprintf((char *)D, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA%s", selected_chip_name()); /* 显示文字：芯片型号：%s */
     UI_Text(8, 56, (char *)D, 16, 1);
     sprintf((char *)D, "\xB9\xCC\xBC\xFE\x3A\x25\x73", app_data.bin_name); /* 显示文字：固件:%s */
     UI_Text(8, 80, (char *)D, 16, 1);
@@ -1117,6 +1131,8 @@ void mode3(void)
 	uint32_t j;
 	uint8_t i, ret;
 	
+    /* 文件页固定浏览主固件；即使遗留状态传入算法焦点，也不能改写上位机配套算法。 */
+    app_data.head = 1;
 	if(key_val.mesg == 1)
 	{
 		switch(key_val.key)
@@ -1143,7 +1159,7 @@ void mode3(void)
 			case key_l_mid:                 /* 长按 -> 烧录选择页 */
 				index = 0;
 				app_data.mode = 2;
-				app_data.head = 0;
+				app_data.head = 1; /* 返回固件焦点，不再恢复旧算法焦点。 */
 				oled.Refresh_flag = 1;
 				key_val.mesg = 0;
 				return;
@@ -1156,12 +1172,9 @@ void mode3(void)
 	if(oled.Refresh_flag == 1 && !custombulk_is_busy())
 	{
         UI_EnterPage(3); /* 文件列表布局首次进入才清屏。 */
-        UI_Field(0, 8, 8, 304, 32, app_data.head == 0 ? "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8" : "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录算法；或 烧录固件 */
+        UI_Field(0, 8, 8, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
         sum = 0;
-		if(app_data.head == 0)
-			ret = f_opendir(&DirInfo, "0:/download/firmware");
-		else if(app_data.head == 1)
-			ret = f_opendir(&DirInfo, "0:/download/bin");
+		ret = f_opendir(&DirInfo, "0:/download/bin");
 		
         i = 0;
         if(ret == FR_OK)
@@ -1180,13 +1193,7 @@ void mode3(void)
 					if(i == index % 5)
 					{
 //						OLED_ShowString(i*8, 110, "<-", 8, 1);
-						if(app_data.head == 0)
-						{
-							memset(app_data.firmware_name, '\0', 32);
-							strncpy((char *)app_data.firmware_name, FileInfo.fname, sizeof(app_data.firmware_name) - 1);
-						}	
-						else if(app_data.head == 1)
-						{
+						{ /* 只更新固件，配套算法仍由上位机导入事务提交。 */
 							/* 手动切换固件名称后旧导入校验值失效，避免显示另一程序的SUM32。 */
 							if(strcmp((char *)app_data.bin_name, FileInfo.fname))
 								invalidate_program_checksum();
@@ -1213,7 +1220,7 @@ void mode3(void)
 		if(!sum)
 		{
 			index = 0;
-            if(app_data.head == 1) invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
+            invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
 			UI_Field(1, 8, 52, 304, 32, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1); /* 显示文字：没有文件 */
 		}
         sprintf((char *)D, "%lu/%lu", (unsigned long)(sum ? index + 1 : 0), (unsigned long)sum);

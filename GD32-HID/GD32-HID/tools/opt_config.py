@@ -8,22 +8,22 @@ import json
 import os
 
 
+# 芯片与算法固定配套，旧的用户绑定文件不能覆盖此关系。
+CHIP_ALGORITHMS = {
+    'MM32G0001A': 'MM32G001-OPT_ext.bin',
+    'MM32SPIN0230': 'MM32SPIN0230-OPT_ext.bin',
+}
+
+
 class OptConfig:
-    """Read chip OPT configuration and per-chip algorithm bindings."""
+    """读取芯片OPT配置与固定配套算法。"""
 
     def __init__(self, json_path=None, bindings_path=None):
         if json_path is None:
             json_path = os.path.join(os.path.dirname(__file__), 'chip_config.json')
-        if bindings_path is None:
-            bindings_path = os.path.join(os.path.dirname(__file__), 'algorithm_bindings.json')
         with open(json_path, 'r', encoding='utf-8') as f:
             self.data = json.load(f)
-        self.bindings_path = bindings_path
-        try:
-            with open(bindings_path, 'r', encoding='utf-8') as f:
-                self.bindings = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            self.bindings = {}
+        # 保留bindings_path参数兼容旧调用；不再读取或保存可编辑的算法绑定。
 
     def get_chip_models(self):
         """Return sorted list of available chip model names."""
@@ -34,10 +34,5 @@ class OptConfig:
         return self.data.get(model)
 
     def get_algorithm(self, model):
-        return self.bindings.get(model, '')
-
-    def set_algorithm(self, model, filename):
-        self.bindings[model] = filename
-        with open(self.bindings_path, 'w', encoding='utf-8') as f:
-            json.dump(self.bindings, f, ensure_ascii=True, indent=2)
-            f.write('\n')
+        # 未选择或未知芯片返回空名，不能套用其他芯片算法。
+        return CHIP_ALGORITHMS.get(model, '')
