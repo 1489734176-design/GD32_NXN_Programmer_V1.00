@@ -251,7 +251,7 @@ static void show_quota(uint16_t y)
         sprintf(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\x25\x30\x33\x6C\x75\xB4\xCE", (unsigned long)burn_quota_remaining()); /* 显示文字：剩余次数:%03lu次（%03lu为三位次数，前面补0） */
     else
         strcpy(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\xB2\xBB\xCF\xDE"); /* 显示文字：剩余次数:不限 */
-    UI_Field(5, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
+    UI_Field(4, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
 }
 
 /* 显示主固件SUM32：Checksum: 01234567；固件未导入或已更换时显示 --------。
@@ -485,7 +485,7 @@ void mode2(void)
             UI_Field(1, 8, 8, 256, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
             UI_Field(2, 8, 48, 304, 16, selected_chip_name(), 16, 1);
             UI_Field(3, 8, 72, 256, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
-            UI_Field(4, 8, 112, 304, 16, (const char *)app_data.bin_name, 16, 1);
+            UI_Field(5, 8, 112, 304, 16, (const char *)app_data.bin_name, 16, 1);
             UI_Field(6, 8, 176, 256, 32, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1); /* 显示文字：开始烧录 */
             /* 芯片型号为只读信息，不显示箭头；焦点仅在固件和开始之间切换。 */
             UI_Field(8, 272, 72, 32, 32, app_data.head == 1 ? "<-" : "", 32, 1);
@@ -496,8 +496,8 @@ void mode2(void)
 		OLED_Refresh();
 		oled.Refresh_flag = 0;
 	}
-    show_quota(g_auto_en ? 148 : 136);
-    show_checksum(g_auto_en ? 166 : 156); /* 次数下方独立16像素校验行，保留全屏布局。 */
+    show_quota(g_auto_en ? 112 : 136);
+    show_checksum(g_auto_en ? 130 : 156); /* 次数下方独立16像素校验行，保留全屏布局。 */
     show_top(0);
 }
 
@@ -729,13 +729,14 @@ static void auto_draw(void)
 		detail = g_last_status[0] ? g_last_status : "\xC7\xEB\xC8\xA1\xB3\xF6\xD0\xBE\xC6\xAC"; /* 显示文字：请取出芯片 */
 	}
 
-    UI_Field(0, 8, 8, 304, 32, st, 32, 1);
-    UI_Field(1, 8, 44, 304, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
-    UI_Field(2, 8, 76, 304, 16, selected_chip_name(), 16, 1);
-    UI_Field(3, 8, 96, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
-    UI_Field(4, 8, 128, 304, 16, (const char *)app_data.bin_name, 16, 1);
-    show_quota(148);
-    show_checksum(166); /* 自动待机/结果页：校验行位于次数与失败原因之间。 */
+    
+    UI_Field(0, 8, 8, 304, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
+    UI_Field(1, 8, 40, 304, 16, selected_chip_name(), 16, 1);
+    UI_Field(2, 8, 60, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
+    UI_Field(3, 8, 92, 304, 16, (const char *)app_data.bin_name, 16, 1);
+    show_quota(112);
+    show_checksum(130); /* 自动待机/结果页：校验行位于次数与失败原因之间。 */
+	UI_Field(5, 8, 150, 304, 32, st, 32, 1);
     UI_Field(6, 8, 184, 304, 32, detail, UI_TextWidth(detail, 32) <= 304 ? 32 : 16, 1);
     UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1); /* 显示文字：长按右键:手动 */
 }

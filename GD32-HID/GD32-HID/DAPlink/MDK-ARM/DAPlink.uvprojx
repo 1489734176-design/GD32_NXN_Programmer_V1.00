@@ -725,6 +725,16 @@
               <FilePath>..\..\USER\APP\burn_quota_catalog.c</FilePath>
             </File>
             <File>
+              <FileName>quota_auth.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\USER\APP\quota_auth.c</FilePath>
+            </File>
+            <File>
+              <FileName>burn_quota_mirror.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\USER\APP\burn_quota_mirror.c</FilePath>
+            </File>
+            <File>
               <FileName>burn_quota_port.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\USER\APP\burn_quota_port.c</FilePath>

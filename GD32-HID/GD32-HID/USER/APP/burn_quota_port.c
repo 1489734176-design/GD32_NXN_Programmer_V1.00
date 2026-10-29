@@ -2,6 +2,15 @@
 #include "main.h"
 #include "burn_quota.h"
 #include "gd32f10x_fmc.h"
+#include "quota_auth.h"
+
+/* GD32唯一ID只参与设备绑定；不把UID当作秘密密钥。 */
+void burn_quota_device_id(uint32_t out[3])
+{
+    out[0] = *(volatile uint32_t *)0x1FFFF7E8UL;
+    out[1] = *(volatile uint32_t *)0x1FFFF7ECUL;
+    out[2] = *(volatile uint32_t *)0x1FFFF7F0UL;
+}
 
 /* 只允许访问预留的最后两个1KB页，且必须四字节对齐。
  * address - 待检查的内部Flash地址
