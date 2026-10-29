@@ -4,6 +4,7 @@
 #include "font.h"
 #include "ui_chinese_font.h"
 #include <string.h>
+#include <stdio.h>
 
 /* 直接使用原生像素坐标，MCU侧不分配帧缓存，显示像素由LCD掌管。
  * 中文使用同一套细宋体16×16点阵，按1倍或整数2倍放大。
@@ -233,10 +234,21 @@ void UI_Logo(uint16_t x, uint16_t y, uint8_t index)
 {
 #ifndef LCD_BAREMETAL
     if(index < sizeof(logo) / sizeof(logo[0]))
-        LCD_BlitMono(x, y, 18, 8, 18, logo[index], 1, 2, 1);
+        LCD_BlitMonoColor(x, y, 18, 8, 18, logo[index], 1, 2, 1, LCD_YELLOW);
 #else
     (void)x; (void)y; (void)index;
 #endif
+}
+
+/* 电池左侧独立竖闪电，8x16行式单色点阵；拔掉充电器时只清除此矩形。 */
+void UI_ChargingBolt(uint16_t x, uint16_t y, uint8_t visible)
+{
+    static const uint8_t bolt[16] = {
+        0x06, 0x0C, 0x0C, 0x18, 0x18, 0x30, 0x3E, 0x7C,
+        0x1C, 0x18, 0x18, 0x30, 0x30, 0x60, 0x60, 0x40
+    };
+    if(visible) LCD_BlitMonoColor(x, y, 8, 16, 1, bolt, 0, 1, 1, LCD_YELLOW);
+    else LCD_Fill(x, y, 8, 16, LCD_BLACK);
 }
 
 /* 将128×64单色开机图标放大两倍显示在320×240屏幕中央偏上位置。
@@ -478,6 +490,61 @@ void UI_FieldColor(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t 
     ui_text_color = color;
     UI_Field(id, x, y, width, height, text, size, mode);
     ui_text_color = previous;
+}
+
+/* 几何布局变化前统一清旧字段，避免逐项清理擦到已按新位置画出的内容。 */
+void UI_ClearFields(uint8_t first, uint8_t count)
+{
+    uint8_t i;
+    for(i = first; i < 16 && i - first < count; i++)
+    {
+        ui_field_t *field = &ui_fields[i];
+        if(field->valid) UI_Fill(field->x, field->y, field->width, field->height, 0);
+        field->valid = 0;
+    }
+}
+
+/* 编号与名称紧接；续行对齐名称，最长31字节名称最多占两行。 */
+uint16_t UI_NumberedItemHeight(uint32_t number, const char *name)
+{
+    char prefix[16];
+    uint16_t indent;
+    sprintf(prefix, "%lu.", (unsigned long)number);
+    indent = (uint16_t)strlen(prefix) * 8U;
+    return UI_TextWidth(name, 16) > 224U - indent ? 36U : 16U;
+}
+
+/* 列表沿用ui_fields缓存，不分配新文字表或帧缓冲；只重画内容/选中态改变的项。
+ * 同页上下移动只更新原选中项和新选中项；跨页先由调用方UI_ClearFields清旧几何。 */
+uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
+                         const char *name, uint8_t selected)
+{
+    char prefix[16], text[64];
+    const char *next;
+    uint16_t indent, height, previous;
+    uint8_t mode = selected ? 0 : 1;
+    ui_field_t *field;
+    if(id >= 16 || !name || !name[0]) return 0;
+    sprintf(prefix, "%lu.", (unsigned long)number);
+    sprintf(text, "%s%.31s", prefix, name);
+    indent = (uint16_t)strlen(prefix) * 8U;
+    height = UI_TextWidth(name, 16) > 224U - indent ? 36U : 16U;
+    field = &ui_fields[id];
+    if(field->valid && field->x == 8 && field->y == y && field->width == 224 &&
+       field->height == height && field->mode == mode && field->color == LCD_YELLOW &&
+       !strcmp(field->text, text)) return height;
+    previous = ui_text_color; ui_text_color = LCD_YELLOW;
+    if(field->valid && (field->y != y || field->height != height))
+        UI_Fill(field->x, field->y, field->width, field->height, 0);
+    UI_Fill(8, y, 224, height, selected);
+    UI_TextLine(8, y, indent, prefix, 16, mode);
+    next = UI_TextLine(8 + indent, y, 224 - indent, name, 16, mode);
+    if(height > 16) UI_TextLine(8 + indent, y + 20, 224 - indent, next, 16, mode);
+    ui_text_color = previous;
+    strcpy(field->text, text);
+    field->x = 8; field->y = y; field->width = 224; field->height = height;
+    field->size = 16; field->mode = mode; field->color = LCD_YELLOW; field->valid = 1;
+    return height;
 }
 
 /* 兼容旧OLED行列坐标接口：在128×64虚拟坐标系中画一个点，放大两倍显示。

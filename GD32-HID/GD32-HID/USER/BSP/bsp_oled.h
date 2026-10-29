@@ -43,6 +43,13 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
  * mode=1为彩字黑底，mode=0为黑字彩底。颜色变化也触发缓存更新。 */
 void UI_FieldColor(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                    const char *text, uint8_t size, uint8_t mode, uint16_t color);
+/* 清除一段缓存字段及其旧像素，适用于列表跨页/高度变化前；不影响其他字段。 */
+void UI_ClearFields(uint8_t first, uint8_t count);
+/* 224px宽编号列表项的实际文字高度（16/36），编号后紧接名称，续行对齐名称。 */
+uint16_t UI_NumberedItemHeight(uint32_t number, const char *name);
+/* 绘制x=8的编号列表项，返回实际高度；使用指定字段缓存，选中项为黄底黑字。 */
+uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
+                         const char *name, uint8_t selected);
 /* 彩色单行文本，参数与UI_Text相同；超出右边界截断。 */
 void UI_TextColor(uint16_t x, uint16_t y, const char *text, uint8_t size,
                   uint8_t mode, uint16_t color);
@@ -97,12 +104,14 @@ void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const c
  * on     - 1=白色，0=黑色
  * 返回   - 无 */
 void UI_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t on);
-/* 显示状态小图标（18×8点阵放大两倍）。
+/* 显示黄色状态小图标（18×8点阵放大两倍）。
  * x     - 左上角列坐标
  * y     - 左上角行坐标
  * index - 图标序号，对应font.h中的logo表；越界不绘制
  * 返回  - 无 */
 void UI_Logo(uint16_t x, uint16_t y, uint8_t index);
+/* 8x16竖闪电：visible非0画黄色闪电，0清黑；供充电和充满两种状态使用。 */
+void UI_ChargingBolt(uint16_t x, uint16_t y, uint8_t visible);
 /* 将128×64单色开机图标放大两倍显示。
  * data - 128×64点阵数据，列页式存储（每行128字节、共8页）
  * 返回 - 无 */

@@ -1,4 +1,4 @@
-/* 中文说明：内外Flash保存相同BQT3记录，每次烧录前回读校验；双写失败只禁烧。 */
+/* 内外Flash保存相同BQT4记录；烧录前回读校验，确认成功后扣次；双写失败禁烧。 */
 #include "burn_quota.h"
 #include "burn_quota_mirror.h"
 #include "quota_auth.h"
@@ -163,7 +163,7 @@ invalid:
     return 0;
 }
 
-/* 外部先写、内部最后提交。仅显式SET允许修复，正常烧录/退款不得修复不一致。 */
+/* 外部先写、内部最后提交。仅显式SET允许修复，正常烧录不得修复不一致。 */
 static uint8_t append(const uint8_t *name, uint8_t enabled, uint32_t remaining,
                       const burn_quota_catalog_t *catalog, const burn_quota_stats_t *stats, uint8_t repair)
 {
@@ -241,7 +241,7 @@ uint8_t burn_quota_select(const uint8_t *name)
     if(!memcmp(normalized, quota_name, sizeof(quota_name))) {
         view_selected = 1; view_fault = 0;
         /* 主循环反复绑定同名时不重复遍历账本。启动首次检查；真正烧录、
-         * 设置、切换和退回次数仍始终调用verify_pair回读物理存储。 */
+         * 设置、切换和成功扣次仍始终调用verify_pair回读物理存储。 */
         if(!quota_checked) verify_pair();
         return BURN_QUOTA_OK;
     }
@@ -296,13 +296,13 @@ uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total)
 
 uint8_t burn_quota_begin(void)
 {
-    uint8_t result;
     if(quota_reserved) return BURN_QUOTA_BUSY;
     if(!view_selected || burn_quota_fault() || !verify_pair()) return BURN_QUOTA_STORAGE;
     if(quota_enabled && !quota_remaining) return BURN_QUOTA_EMPTY;
-    result = quota_enabled ? append(quota_name, 1, quota_remaining - 1U, &quota_catalog, &quota_stats, 0) : BURN_QUOTA_OK;
-    if(result == BURN_QUOTA_OK) quota_reserved = 1;
-    return result;
+    /* RAM-only session, including unlimited: failed/interrupted burns must
+     * not change either medium, remaining balance or successful-used. */
+    quota_reserved = 1;
+    return BURN_QUOTA_OK;
 }
 
 uint8_t burn_quota_finish(uint8_t success)
@@ -310,14 +310,14 @@ uint8_t burn_quota_finish(uint8_t success)
     burn_quota_stats_t stats;
     if(!quota_reserved) return BURN_QUOTA_OK;
     quota_reserved = 0;
+    if(!success) return BURN_QUOTA_OK;
     if(!verify_pair()) return BURN_QUOTA_STORAGE;
-    if(success) {
-        /* Only the confirmed-success path advances used. A interrupted begin
-         * keeps its conservative debit, never reconstructed as total-left. */
-        if(!quota_stats.known || quota_stats.used == 0xFFFFFFFFUL) return BURN_QUOTA_OK;
-        stats = quota_stats; stats.used++;
-        return append(quota_name, quota_enabled, quota_remaining, &quota_catalog, &stats, 0);
-    }
-    if(!quota_enabled) return BURN_QUOTA_OK;
-    return append(quota_name, 1, quota_remaining + 1U, &quota_catalog, &quota_stats, 0);
+    /* One authenticated transaction commits both values after confirmed
+     * success. Unknown legacy history stays unknown; used never wraps. */
+    stats = quota_stats;
+    if(stats.known && stats.used != 0xFFFFFFFFUL) stats.used++;
+    if(!quota_enabled && stats.used == quota_stats.used) return BURN_QUOTA_OK;
+    return append(quota_name, quota_enabled,
+                  quota_enabled ? quota_remaining - 1U : 0,
+                  &quota_catalog, &stats, 0);
 }

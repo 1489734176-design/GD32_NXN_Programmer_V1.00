@@ -24,7 +24,11 @@ uint32_t burn_quota_used(void);
 uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining);
 /* A completed host import resets history even when its limit is unchanged. */
 uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total);
+/* Authenticate and open a RAM-only session; no debit until finish(1).
+ * Active sessions block selection/SET/reimport/reentrant begin, even unlimited. */
 uint8_t burn_quota_begin(void);
+/* Failure closes without writes. Success commits remaining/used together once.
+ * Reboot discards an unfinished session; duplicate finish is a no-op. */
 uint8_t burn_quota_finish(uint8_t success);
 uint32_t burn_quota_read_word(uint32_t address);
 uint8_t burn_quota_program_word(uint32_t address, uint32_t value);
