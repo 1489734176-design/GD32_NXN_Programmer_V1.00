@@ -24,15 +24,23 @@ void OLED_DisPlay_On(void) { LCD_DisplayOn(); }
 /* 关显示：转调LCD_DisplayOff，保留原OLED接口名。
  * 返回 - 无 */
 void OLED_DisPlay_Off(void) { LCD_DisplayOff(); }
-/* 小型字段缓存只保存文字，不分配320×240帧缓冲。清屏后缓存及进度边框失效。 */
+/* 小型字段缓存只保存文字，不分配帧缓冲。清屏后缓存及进度边框失效。 */
 typedef struct {
     char text[64];
-    uint16_t x, y, width, height;
+    uint16_t x, y, width, height, color;
     uint8_t size, mode, valid;
 } ui_field_t;
 static ui_field_t ui_fields[16];
+static uint16_t ui_text_color = LCD_WHITE; /* 仅彩色文字调用期间改变，返回后恢复。 */
 static uint8_t ui_page = 255, progress_valid, progress_percent;
 static uint16_t progress_y;
+/* 最多每8像素一个字节；240像素屏仅42字节静态缓存，无像素数组。 */
+typedef struct {
+    char text[LCD_WIDTH / 8 + 1];
+    uint8_t valid;
+    uint16_t x, y, width, fill, color;
+} ui_progress_status_t;
+static ui_progress_status_t ui_progress_status;
 /* 全屏清黑，并使所有字段缓存与进度条状态失效，下次绘制全部重画。
  * 返回 - 无 */
 void OLED_Clear(void)
@@ -40,6 +48,7 @@ void OLED_Clear(void)
     uint8_t i;
     for(i = 0; i < 16; i++) ui_fields[i].valid = 0;
     progress_valid = 0;
+    ui_progress_status.valid = 0;
     ui_page = 255;
     LCD_Clear(LCD_BLACK);
 }
@@ -134,15 +143,20 @@ const char *UI_TextLine(uint16_t x, uint16_t y, uint16_t width,
         if(gbk(s))
         {
             bitmap = find_chinese(((uint16_t)(uint8_t)s[0] << 8) | (uint8_t)s[1]);
-            if(bitmap) LCD_BlitMono(x, y, 16, 16, 2, bitmap, 0, scale, mode);
-            else LCD_BlitMono(x, y, 8, 16, 8, asc2_1608['?' - ' '], 1, scale, mode);
+            if(bitmap) LCD_BlitMonoColor(x, y, 16, 16, 2, bitmap, 0, scale, mode, ui_text_color);
+            else
+            {
+                /* 缺字占完整汉字单元；先清除右半格，避免旧16像素字留下残影。 */
+                UI_Fill(x, y, advance, size, (uint8_t)!mode);
+                LCD_BlitMonoColor(x, y, 8, 16, 8, asc2_1608['?' - ' '], 1, scale, mode, ui_text_color);
+            }
             s += 2;
         }
         else
         {
             uint8_t ch = (uint8_t)*s++;
             if(ch < ' ' || ch > '~') ch = '?';
-            LCD_BlitMono(x, y, 8, 16, 8, asc2_1608[ch - ' '], 1, scale, mode);
+            LCD_BlitMonoColor(x, y, 8, 16, 8, asc2_1608[ch - ' '], 1, scale, mode, ui_text_color);
         }
         x += advance;
     }
@@ -159,6 +173,16 @@ const char *UI_TextLine(uint16_t x, uint16_t y, uint16_t width,
 void UI_Text(uint16_t x, uint16_t y, const char *s, uint8_t size, uint8_t mode)
 {
     UI_TextLine(x, y, LCD_WIDTH, s, size, mode);
+}
+
+/* 显式前景颜色只在本次调用生效，不改变后续单色文字/图标。 */
+void UI_TextColor(uint16_t x, uint16_t y, const char *text, uint8_t size,
+                  uint8_t mode, uint16_t color)
+{
+    uint16_t previous = ui_text_color;
+    ui_text_color = color;
+    UI_Text(x, y, text, size, mode);
+    ui_text_color = previous;
 }
 
 /* 在指定矩形内换行显示文字，按完整字符换行，超出高度后停止。
@@ -182,8 +206,9 @@ void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
         next = UI_TextLine(x, y, width, s, size, mode);
         if(next == s) break;
         s = next;
-        y += size;
-        height -= size;
+        if(height < size + UI_LINE_GAP) break;
+        y += size + UI_LINE_GAP;
+        height -= size + UI_LINE_GAP;
     }
 }
 
@@ -196,7 +221,7 @@ void UI_TextBox(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
  * 返回   - 无 */
 void UI_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t on)
 {
-    LCD_Fill(x, y, width, height, on ? LCD_WHITE : LCD_BLACK);
+    LCD_Fill(x, y, width, height, on ? ui_text_color : LCD_BLACK);
 }
 
 /* 显示状态小图标（18×8点阵放大两倍）。
@@ -234,20 +259,128 @@ void UI_Progress(uint16_t y, uint8_t percent)
     if(progress_valid && progress_y == y && progress_percent == percent) return;
     if(!progress_valid || progress_y != y)
     {
-        UI_Fill(8, y + 4, 220, 24, 1);
+        LCD_Fill(8, y + 4, 220, 24, LCD_BLUE);
         UI_Fill(10, y + 6, 216, 20, 0);
         progress_percent = 0;
     }
     before = (uint16_t)(216U * progress_percent / 100);
     after = (uint16_t)(216U * percent / 100);
-    if(after > before) UI_Fill(10 + before, y + 6, after - before, 20, 1);
+    if(after > before) LCD_Fill(10 + before, y + 6, after - before, 20, LCD_YELLOW);
     else if(after < before) UI_Fill(10 + after, y + 6, before - after, 20, 0);
     text[0] = percent == 100 ? '1' : ' ';
     text[1] = percent >= 10 ? '0' + (percent / 10) % 10 : ' ';
     text[2] = '0' + percent % 10;
     text[3] = '%'; text[4] = 0;
-    UI_Field(9, 244, y, 64, 32, text, 32, 1);
+    UI_FieldColor(9, 244, y + 8, 64, 16, text, 16, 1, LCD_YELLOW);
     progress_y = y; progress_percent = percent; progress_valid = 1;
+}
+
+/* 叠字进度仅缓存可见文字。变长/变短、GBK换字及填充移动都合成同一脏区，
+ * 先恢复该区的正确双色背景，再在相同裁剪区内重新写入相交字模。 */
+void UI_ProgressStatus(uint16_t x, uint16_t y, uint16_t width,
+                       uint8_t percent, uint8_t state, const char *status)
+{
+    ui_progress_status_t *cache = &ui_progress_status;
+    char text[LCD_WIDTH / 8 + 1];
+    uint16_t fill, color, first, last, before, after, col, n, bytes, old_n;
+    const uint8_t *bitmap;
+    const char *p;
+    uint8_t ch;
+    if(!width || x >= LCD_WIDTH || y >= LCD_HEIGHT || 16U > LCD_HEIGHT - y) return;
+    if(width > LCD_WIDTH - x) width = LCD_WIDTH - x;
+    if(percent > 100) percent = 100;
+    if(state > UI_PROGRESS_SUCCESS) state = UI_PROGRESS_IDLE;
+    color = state == UI_PROGRESS_FAILED ? LCD_RED :
+            state == UI_PROGRESS_SUCCESS ? LCD_GREEN : LCD_YELLOW;
+    fill = state == UI_PROGRESS_RUNNING ? (uint16_t)(width * percent / 100U) :
+           state == UI_PROGRESS_IDLE ? 0 : width;
+    n = 0;
+    if(state == UI_PROGRESS_RUNNING)
+    {
+        if(percent == 100) text[n++] = '1';
+        if(percent >= 10) text[n++] = '0' + (percent / 10) % 10;
+        text[n++] = '0' + percent % 10;
+        text[n++] = '%';
+        if(status && *status) text[n++] = ' ';
+    }
+    if(n > width / 8) n = width / 8;
+    p = status ? status : "";
+    while(*p)
+    {
+        bytes = gbk(p) ? 2 : 1;
+        if((n + bytes) * 8U > width) break;
+        memcpy(text + n, p, bytes); n += bytes; p += bytes;
+    }
+    text[n] = 0;
+    first = width; last = 0;
+    if(!cache->valid || cache->x != x || cache->y != y ||
+       cache->width != width || cache->color != color)
+    {
+        first = 0; last = width;
+    }
+    else
+    {
+        /* 相同字节数的字符串按完整字逐项比较，保留未变化的前后文字。 */
+        old_n = (uint16_t)strlen(cache->text);
+        for(col = 0; col < n || col < old_n; )
+        {
+            bytes = col < n && gbk(text + col) ? 2 : 1;
+            if(col >= n || col >= old_n ||
+               bytes != (gbk(cache->text + col) ? 2U : 1U) ||
+               memcmp(text + col, cache->text + col, bytes))
+            {
+                if(first > col * 8U) first = col * 8U;
+                if(n != old_n || (col < old_n && bytes != (gbk(cache->text + col) ? 2U : 1U)))
+                {
+                    last = (n > old_n ? n : old_n) * 8U;
+                    break;
+                }
+                last = (col + bytes) * 8U;
+            }
+            col += bytes;
+        }
+        before = cache->fill; after = fill;
+        if(before > after) { before = fill; after = cache->fill; }
+        if(before != after)
+        {
+            if(first > before) first = before;
+            if(last < after) last = after;
+        }
+    }
+    if(first < last)
+    {
+        if(first < fill)
+        {
+            after = last < fill ? last : fill;
+            LCD_Fill(x + first, y, after - first, 16, color);
+        }
+        if(last > fill)
+        {
+            before = first > fill ? first : fill;
+            LCD_Fill(x + before, y, last - before, 16, LCD_BLACK);
+        }
+        for(col = 0, p = text; *p; p += bytes, col += bytes * 8U)
+        {
+            bytes = gbk(p) ? 2 : 1;
+            if(col >= last || col + bytes * 8U <= first) continue;
+            if(bytes == 2)
+                bitmap = find_chinese(((uint16_t)(uint8_t)p[0] << 8) | (uint8_t)p[1]);
+            else bitmap = NULL;
+            if(bitmap)
+                LCD_BlitMonoSplit(x + col, y, 16, 16, 2, bitmap, 0,
+                                  x + fill, color, x + first, last - first);
+            else
+            {
+                ch = bytes == 2 ? '?' : (uint8_t)*p;
+                if(ch < ' ' || ch > '~') ch = '?';
+                LCD_BlitMonoSplit(x + col, y, 8, 16, 8, asc2_1608[ch - ' '], 1,
+                                  x + fill, color, x + first, last - first);
+            }
+        }
+    }
+    strcpy(cache->text, text);
+    cache->x = x; cache->y = y; cache->width = width;
+    cache->fill = fill; cache->color = color; cache->valid = 1;
 }
 
 /* 带缓存的文字字段刷新：逐字比较新旧内容，只重绘变化字符，短文本只擦尾部。
@@ -255,7 +388,7 @@ void UI_Progress(uint16_t y, uint8_t percent)
  * x      - 左上角列坐标（原生像素）
  * y      - 左上角行坐标（原生像素）
  * width  - 字段宽度（像素），超出部分截断
- * height - 字段高度（像素），按size逐行换行
+ * height - 字段高度（像素），按size+UI_LINE_GAP逐行换行
  * text   - 要显示的文字，GBK编码，最长63字节
  * size   - 字号（像素高度），16或32
  * mode   - 1=白字黑底，0=黑字白底
@@ -283,14 +416,15 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
     current[length] = 0;
     field = &ui_fields[id];
     redraw = !field->valid || field->x != x || field->y != y || field->width != width ||
-             field->height != height || field->size != size || field->mode != mode;
+             field->height != height || field->size != size || field->mode != mode ||
+             field->color != ui_text_color;
     if(!redraw && !strcmp(field->text, current)) return;
     /* 字段缩小/移动时先清旧范围，避免32像素空目录提示缩成28像素行后留下边缘。 */
     if(field->valid && (field->x != x || field->y != y || field->width != width || field->height != height))
         UI_Fill(field->x, field->y, field->width, field->height, 0);
     if(redraw && (field->valid || !mode)) UI_Fill(x, y, width, height, (uint8_t)!mode);
     now = current; old = redraw ? "" : field->text;
-    for(row = 0; row + size <= height; row += size)
+    for(row = 0; row + size <= height; row += size + UI_LINE_GAP)
     {
         col = 0;
         while(*now && col < width)
@@ -333,7 +467,17 @@ void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t heigh
     }
     strcpy(field->text, current);
     field->x = x; field->y = y; field->width = width; field->height = height;
-    field->size = size; field->mode = mode; field->valid = 1;
+    field->size = size; field->mode = mode; field->color = ui_text_color; field->valid = 1;
+}
+
+/* 彩色字段共用原有逐字缓存；颜色也属于字段身份，支持只改颜色。 */
+void UI_FieldColor(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                   const char *text, uint8_t size, uint8_t mode, uint16_t color)
+{
+    uint16_t previous = ui_text_color;
+    ui_text_color = color;
+    UI_Field(id, x, y, width, height, text, size, mode);
+    ui_text_color = previous;
 }
 
 /* 兼容旧OLED行列坐标接口：在128×64虚拟坐标系中画一个点，放大两倍显示。

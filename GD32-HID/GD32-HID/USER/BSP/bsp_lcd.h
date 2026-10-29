@@ -1,4 +1,4 @@
-/* 中文注释补充（2026-10-26）：原生屏幕布局：默认横屏320×240；LCD_BlitMono按小块直接画字，不分配整屏显存。 */
+/* 原生屏幕布局：应用默认竖屏240×320；Bootloader保持横屏；直接画字，不分配整屏显存。 */
 #ifndef _BSP_LCD_H__
 #define _BSP_LCD_H__
 
@@ -22,12 +22,16 @@
 #define LCD_BLK_ACTIVE_HIGH 1 /* 1：高电平点亮背光；0：低电平点亮 */
 
 /* 显示方向：0 为竖屏，1 为横屏，2/3 分别为竖屏/横屏旋转 180 度。
- * 可在工程预定义 LCD_DIRECTION；默认横屏 320x240。
+ * 可在工程预定义 LCD_DIRECTION；应用默认竖屏240x320，Bootloader默认横屏320x240。
  */
 #ifndef LCD_DIRECTION
+#ifdef LCD_BAREMETAL
 #define LCD_DIRECTION 1
+#else
+#define LCD_DIRECTION 0
 #endif
-/* 屏幕原生几何尺寸；界面统一按320×240横屏像素坐标。 */
+#endif
+/* 屏幕原生几何尺寸，随编译方向选择。 */
 #if LCD_DIRECTION == 0 || LCD_DIRECTION == 2
 #define LCD_WIDTH 240
 #define LCD_HEIGHT 320
@@ -64,6 +68,18 @@ void LCD_Init(void);
 void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                   uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
                   uint8_t scale, uint8_t mode);
+/* 彩色单色点阵：笔画使用color，背景为黑色；反显时交换笔画/背景。
+ * 其余参数与LCD_BlitMono相同，旧接口继续使用白色，兼容Bootloader。 */
+void LCD_BlitMonoColor(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                       uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                       uint8_t scale, uint8_t mode, uint16_t color);
+/* 1倍字模叠画：split_x为绝对填充右边界，左侧黑字彩底，右侧彩字黑底。
+ * 只更新绝对横向区间[clip_x, clip_x+clip_width)，并自动裁剪屏幕边界。
+ * 点阵格式与LCD_BlitMono相同；不申请临时像素数组，支持软件反显。 */
+void LCD_BlitMonoSplit(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                      uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                      uint16_t split_x, uint16_t color,
+                      uint16_t clip_x, uint16_t clip_width);
 /* 发送ST7789开显示命令并点亮背光。
  * 返回 - 无 */
 void LCD_DisplayOn(void);

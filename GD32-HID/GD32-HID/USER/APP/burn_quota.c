@@ -4,7 +4,8 @@
 #include "quota_auth.h"
 #include <string.h>
 
-#define QUOTA_MAGIC 0x33545142UL
+#define QUOTA_MAGIC 0x34545142UL
+#define V3_MAGIC 0x33545142UL
 #define V2_MAGIC 0x32545142UL
 #define V1_MAGIC 0x31545142UL
 #define QUOTA_COMMIT 0x54494D43UL
@@ -15,6 +16,7 @@ static uint32_t quota_record[QUOTA_WORDS], quota_address, quota_sequence;
 static uint32_t quota_remaining, legacy_length, legacy_crc;
 static uint8_t quota_name[BURN_QUOTA_NAME_SIZE];
 static burn_quota_catalog_t quota_catalog;
+static burn_quota_stats_t quota_stats;
 static uint8_t quota_enabled, quota_fault, quota_reserved, quota_valid;
 static uint8_t quota_page, occupied[2], legacy_pending, view_selected, view_fault, quota_checked;
 
@@ -53,7 +55,14 @@ static uint32_t checksum(const uint32_t *words, uint8_t count)
 static uint8_t record_valid(const uint32_t *r, uint8_t version)
 {
     uint8_t name[BURN_QUOTA_NAME_SIZE], tag[16];
-    if(r[2] > 1 || r[3] > BURN_QUOTA_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
+    uint32_t remaining = r[3] & 0xFFFFU, total = r[3] >> 16;
+    if(version == 3 && r[0] == QUOTA_MAGIC) {
+        /* BQT4 keeps 96-byte slots: flags, packed total/remaining, used.
+         * HMAC protects all three words; the old redundant inverse is gone. */
+        if(r[2] > 3U || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
+           (!(r[2] & 1U) && remaining) ||
+           (!(r[2] & 2U) && (total || r[4]))) return 0;
+    } else if(r[2] > 1 || r[3] > BURN_QUOTA_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
     if(version == 1)
         return r[0] == V1_MAGIC && r[5] == checksum(r, 5) && r[6] == ~r[1] && r[7] == QUOTA_COMMIT;
     if(!normalize_name(name, (const uint8_t *)&r[5]) ||
@@ -61,7 +70,7 @@ static uint8_t record_valid(const uint32_t *r, uint8_t version)
     if(version == 2)
         return r[0] == V2_MAGIC && r[15] == checksum(r, 15) && r[16] == ~r[1] &&
                r[17] == QUOTA_COMMIT && (r[13] || !r[14]);
-    if(r[0] != QUOTA_MAGIC || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
+    if((r[0] != QUOTA_MAGIC && r[0] != V3_MAGIC) || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
        (!r[13] && (r[14] || r[15] || r[16] || r[17]))) return 0;
     quota_auth_tag(1, r, 18U * 4U, tag);
     return quota_auth_equal(tag, &r[18], sizeof(tag));
@@ -76,6 +85,7 @@ void burn_quota_init(void)
     memset(quota_record, 0, sizeof(quota_record));
     memset(quota_name, 0, sizeof(quota_name));
     memset(&quota_catalog, 0, sizeof(quota_catalog));
+    memset(&quota_stats, 0, sizeof(quota_stats));
     quota_enabled = quota_reserved = quota_valid = quota_page = legacy_pending = 0;
     occupied[0] = occupied[1] = view_selected = view_fault = quota_fault = quota_checked = 0;
     for(version = 3; version; version--) {
@@ -101,8 +111,14 @@ void burn_quota_init(void)
                     continue;
                 }
                 if(!quota_valid || (int32_t)(r[1] - quota_sequence) > 0) {
-                    quota_valid = 1; quota_sequence = r[1]; quota_enabled = (uint8_t)r[2];
-                    quota_remaining = r[3]; quota_page = page; quota_address = address;
+                    quota_valid = 1; quota_sequence = r[1]; quota_enabled = (uint8_t)(r[2] & 1U);
+                    quota_remaining = r[0] == QUOTA_MAGIC ? r[3] & 0xFFFFU : r[3];
+                    memset(&quota_stats, 0, sizeof(quota_stats));
+                    if(r[0] == QUOTA_MAGIC) {
+                        quota_stats.known = (uint8_t)((r[2] >> 1) & 1U);
+                        quota_stats.total = r[3] >> 16; quota_stats.used = r[4];
+                    }
+                    quota_page = page; quota_address = address;
                     legacy_pending = version == 3 ? 0 : version;
                     if(version != 1) memcpy(quota_name, &r[5], sizeof(quota_name));
                     if(version == 3) {
@@ -149,12 +165,14 @@ invalid:
 
 /* 外部先写、内部最后提交。仅显式SET允许修复，正常烧录/退款不得修复不一致。 */
 static uint8_t append(const uint8_t *name, uint8_t enabled, uint32_t remaining,
-                      const burn_quota_catalog_t *catalog, uint8_t repair)
+                      const burn_quota_catalog_t *catalog, const burn_quota_stats_t *stats, uint8_t repair)
 {
     uint32_t r[QUOTA_WORDS], address;
     uint8_t i, page = quota_page, slot = occupied[quota_page], preserved = quota_page;
     memset(r, 0, sizeof(r));
-    r[0] = QUOTA_MAGIC; r[1] = quota_sequence + 1U; r[2] = enabled; r[3] = remaining; r[4] = ~remaining;
+    r[0] = QUOTA_MAGIC; r[1] = quota_sequence + 1U;
+    r[2] = enabled | ((uint32_t)stats->known << 1);
+    r[3] = remaining | (stats->total << 16); r[4] = stats->used;
     memcpy(&r[5], name, BURN_QUOTA_NAME_SIZE);
     r[13] = catalog->length; memcpy(&r[14], catalog->tag, 16);
     quota_auth_tag(1, r, 18U * 4U, (uint8_t *)&r[18]);
@@ -172,6 +190,7 @@ static uint8_t append(const uint8_t *name, uint8_t enabled, uint32_t remaining,
     /* 修复后清除旧错误页，避免重启时继续报告已处理的损坏。 */
     if(repair && !erase_page(preserved)) goto storage_error;
     quota_sequence = r[1]; quota_enabled = enabled; quota_remaining = remaining;
+    quota_stats = *stats;
     memcpy(quota_name, name, sizeof(quota_name)); quota_catalog = *catalog;
     memcpy(quota_record, r, sizeof(r)); quota_address = address;
     quota_page = page; quota_valid = 1; quota_fault = legacy_pending = view_fault = 0;
@@ -191,7 +210,7 @@ uint8_t burn_quota_migrate_legacy(const uint8_t *name)
     if(!normalize_name(normalized, legacy_pending == 2 ? quota_name : name)) goto invalid;
     if(!burn_quota_catalog_migrate(legacy_length, legacy_crc, &upgraded)) goto invalid;
     return append(normalized, normalized[0] ? quota_enabled : 0,
-                  normalized[0] ? quota_remaining : 0, &upgraded, 0);
+                  normalized[0] ? quota_remaining : 0, &upgraded, &quota_stats, 0);
 invalid:
     quota_fault = 1;
     return BURN_QUOTA_STORAGE;
@@ -202,6 +221,7 @@ uint8_t burn_quota_select(const uint8_t *name)
     uint8_t normalized[BURN_QUOTA_NAME_SIZE], enabled;
     uint32_t remaining;
     burn_quota_catalog_t updated;
+    burn_quota_stats_t stats;
     if(quota_reserved) return BURN_QUOTA_BUSY;
     if(!normalize_name(normalized, name)) { view_fault = 1; return BURN_QUOTA_STORAGE; }
     if(!normalized[0]) { view_selected = view_fault = 0; return BURN_QUOTA_OK; }
@@ -228,34 +248,51 @@ uint8_t burn_quota_select(const uint8_t *name)
     view_fault = 1;
     if(!verify_pair()) return BURN_QUOTA_STORAGE;
     updated = quota_catalog;
-    if(quota_name[0] && !burn_quota_catalog_save(&quota_catalog, quota_name,
-                                               quota_enabled, quota_remaining, &updated)) return BURN_QUOTA_STORAGE;
-    if(!burn_quota_catalog_load(&updated, normalized, &enabled, &remaining)) return BURN_QUOTA_STORAGE;
-    return append(normalized, enabled, remaining, &updated, 0);
+    if(quota_name[0] && !burn_quota_catalog_save_stats(&quota_catalog, quota_name,
+                                                     quota_enabled, quota_remaining, &quota_stats, &updated)) return BURN_QUOTA_STORAGE;
+    if(!burn_quota_catalog_load_stats(&updated, normalized, &enabled, &remaining, &stats)) return BURN_QUOTA_STORAGE;
+    return append(normalized, enabled, remaining, &updated, &stats, 0);
 }
 
 uint8_t burn_quota_enabled(void) { return view_selected ? quota_enabled : 0; }
 uint32_t burn_quota_remaining(void) { return view_selected ? quota_remaining : 0; }
 uint8_t burn_quota_fault(void) { return quota_fault || view_fault || legacy_pending; }
+uint8_t burn_quota_stats_known(void) { return view_selected && quota_stats.known; }
+uint32_t burn_quota_total(void) { return view_selected ? quota_stats.total : 0; }
+uint32_t burn_quota_used(void) { return view_selected ? quota_stats.used : 0; }
 
-uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
+static uint8_t set_quota(uint8_t enabled, uint32_t remaining, uint8_t reimport)
 {
     uint8_t ignored_enabled;
     uint32_t ignored_remaining;
     burn_quota_catalog_t upgraded;
+    burn_quota_stats_t stats;
     if(quota_reserved) return BURN_QUOTA_BUSY;
     if(!view_selected || view_fault || enabled > 1 || remaining > BURN_QUOTA_MAX || (!enabled && remaining))
         return BURN_QUOTA_STORAGE;
+    /* Ordinary administrator SET adjusts the available balance, preserving
+     * the imported batch history. Replayed SET after a burn must not erase
+     * used. Only reimport (or first setup on a blank device) starts history. */
+    stats = quota_stats;
+    if(reimport || !quota_valid) {
+        memset(&stats, 0, sizeof(stats));
+        stats.known = 1; stats.total = remaining;
+    }
     /* 升级中途断电可由显式SET恢复；仍先验证旧账本，保留其他固件额度。 */
     if(legacy_pending) {
         if(!burn_quota_catalog_migrate(legacy_length, legacy_crc, &upgraded)) return BURN_QUOTA_STORAGE;
-        return append(quota_name, enabled, remaining, &upgraded, 1);
+        return append(quota_name, enabled, remaining, &upgraded, &stats, 1);
     }
     /* 修复当前镜像也不能擅自丢弃其他固件的已提交账本。 */
     if(!burn_quota_catalog_load(&quota_catalog, quota_name, &ignored_enabled, &ignored_remaining)) return BURN_QUOTA_STORAGE;
-    if(verify_pair() && enabled == quota_enabled && remaining == quota_remaining) return BURN_QUOTA_OK;
-    return append(quota_name, enabled, remaining, &quota_catalog, quota_fault || !quota_valid);
+    if(verify_pair() && !reimport && enabled == quota_enabled && remaining == quota_remaining) return BURN_QUOTA_OK;
+    return append(quota_name, enabled, remaining, &quota_catalog, &stats, quota_fault || !quota_valid);
 }
+
+uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
+{ return set_quota(enabled, remaining, 0); }
+uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total)
+{ return set_quota(enabled, total, 1); }
 
 uint8_t burn_quota_begin(void)
 {
@@ -263,16 +300,24 @@ uint8_t burn_quota_begin(void)
     if(quota_reserved) return BURN_QUOTA_BUSY;
     if(!view_selected || burn_quota_fault() || !verify_pair()) return BURN_QUOTA_STORAGE;
     if(quota_enabled && !quota_remaining) return BURN_QUOTA_EMPTY;
-    result = quota_enabled ? append(quota_name, 1, quota_remaining - 1U, &quota_catalog, 0) : BURN_QUOTA_OK;
+    result = quota_enabled ? append(quota_name, 1, quota_remaining - 1U, &quota_catalog, &quota_stats, 0) : BURN_QUOTA_OK;
     if(result == BURN_QUOTA_OK) quota_reserved = 1;
     return result;
 }
 
 uint8_t burn_quota_finish(uint8_t success)
 {
+    burn_quota_stats_t stats;
     if(!quota_reserved) return BURN_QUOTA_OK;
     quota_reserved = 0;
     if(!verify_pair()) return BURN_QUOTA_STORAGE;
-    if(success || !quota_enabled) return BURN_QUOTA_OK;
-    return append(quota_name, 1, quota_remaining + 1U, &quota_catalog, 0);
+    if(success) {
+        /* Only the confirmed-success path advances used. A interrupted begin
+         * keeps its conservative debit, never reconstructed as total-left. */
+        if(!quota_stats.known || quota_stats.used == 0xFFFFFFFFUL) return BURN_QUOTA_OK;
+        stats = quota_stats; stats.used++;
+        return append(quota_name, quota_enabled, quota_remaining, &quota_catalog, &stats, 0);
+    }
+    if(!quota_enabled) return BURN_QUOTA_OK;
+    return append(quota_name, 1, quota_remaining + 1U, &quota_catalog, &quota_stats, 0);
 }

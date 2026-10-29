@@ -35,6 +35,13 @@ static volatile uint8_t quota_request_pending;
 static uint8_t quota_request_enabled;
 static uint32_t quota_request_remaining;
 static uint8_t quota_request_program[CB_MAX_NAME + 1];
+static uint8_t quota_request_reimport;
+/* The official host stages, uploads main BIN then optional OPT, stages again,
+ * and sends a named SET. Only the first successfully closed BIN in that
+ * session may reset statistics. Consume it once after a successful SET. */
+static uint8_t quota_import_program[BURN_QUOTA_NAME_SIZE];
+static uint8_t quota_write_program[BURN_QUOTA_NAME_SIZE];
+static uint8_t quota_import_consumed;
 
 /* Forward declarations */
 static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index);
@@ -171,6 +178,8 @@ void custombulk_reset(void)
     cb_handler.transfer_active = 0;
     prepare_request_pending = 0; prepare_response_pending = 0;
     prepare_complete_pending = 0; quota_request_pending = 0;
+    quota_request_reimport = quota_import_consumed = 0;
+    quota_import_program[0] = quota_write_program[0] = 0;
     memset(quota_request_program, 0, sizeof(quota_request_program));
     staged_algorithm[0] = 0; prepare_algorithm[0] = 0; prepare_program[0] = 0;
     oled.Refresh_flag = 1;
@@ -279,6 +288,12 @@ static void cmd_open_write(usb_dev *udev, uint8_t *buf, uint16_t len)
         return;
     }
 
+    quota_write_program[0] = 0;
+    if(staged_algorithm[0] && !strncmp((const char *)path, "0:/download/bin/", 16) &&
+       path_len > 16 && path_len - 16 < BURN_QUOTA_NAME_SIZE) {
+        memcpy(quota_write_program, path + 16, path_len - 16);
+        quota_write_program[path_len - 16] = 0;
+    }
     files_changed_pending = 1; /* CREATE_ALWAYS已创建/截断，旧LCD校验值失效。 */
     cb_handler.file_opened = 2;  /* write mode */
     cb_handler.file_size = file_size;
@@ -337,6 +352,10 @@ static void cmd_close_file(usb_dev *udev)
     }
 
     res = f_close(&cb_fd);
+    if(writing && res == FR_OK && staged_algorithm[0] && quota_write_program[0] &&
+       !quota_import_program[0] && !quota_import_consumed)
+        memcpy(quota_import_program, quota_write_program, sizeof(quota_import_program));
+    quota_write_program[0] = 0;
     if(writing && res != FR_OK) {
         /* CLOSE失败说明上传未可靠落盘；清会话与旧校验值，禁止故障恢复后误提交。 */
         staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
@@ -572,6 +591,10 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
         return;
     }
 
+    if(!staged_algorithm[0]) {
+        quota_import_program[0] = quota_write_program[0] = 0;
+        quota_import_consumed = 0;
+    }
     memcpy(staged_algorithm, &buf[1], name_len);
     staged_algorithm[name_len] = '\0';
     files_changed_pending = 1; /* 新导入使旧LCD值失效，成功准备后才重新显示。 */
@@ -749,6 +772,20 @@ static uint8_t valid_quota_name(uint8_t *name, uint16_t len)
     return 1;
 }
 
+static uint8_t quota_import_match(const uint8_t *program)
+{
+    uint8_t i, a, b;
+    if(!staged_algorithm[0] || !quota_import_program[0] || quota_import_consumed) return 0;
+    for(i = 0; i < BURN_QUOTA_NAME_SIZE; i++) {
+        a = program[i]; b = quota_import_program[i];
+        if(a >= 'A' && a <= 'Z') a += 'a' - 'A';
+        if(b >= 'A' && b <= 'Z') b += 'a' - 'A';
+        if(a != b) return 0;
+        if(!a) return 1;
+    }
+    return 0;
+}
+
 static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint32_t remaining = 0;
@@ -787,6 +824,8 @@ static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
     }
     memcpy(quota_request_program, program, name_len);
     quota_request_program[name_len] = '\0';
+    quota_request_reimport = buf[0] == CMD_SET_BURN_QUOTA && len > name_offset &&
+                             quota_import_match(quota_request_program);
     quota_request_pending = buf[0];
 }
 
@@ -794,7 +833,7 @@ static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
 void custombulk_quota_service(usb_dev *udev)
 {
     uint8_t cmd, result = BURN_QUOTA_OK, enabled = 0, fault = 0;
-    uint8_t response[7], program[CB_MAX_NAME + 1], request_enabled;
+    uint8_t response[7], program[CB_MAX_NAME + 1], request_enabled, request_reimport;
     uint32_t remaining = 0, request_remaining, irq_mask;
     if(!quota_request_pending) return;
     /* USB reset can clear pending/name: snapshot only, never hold IRQs over I/O. */
@@ -802,6 +841,7 @@ void custombulk_quota_service(usb_dev *udev)
     cmd = quota_request_pending;
     memcpy(program, quota_request_program, sizeof(program));
     request_enabled = quota_request_enabled;
+    request_reimport = quota_request_reimport;
     request_remaining = quota_request_remaining;
     __set_PRIMASK(irq_mask);
     if(!cmd) return;
@@ -823,7 +863,12 @@ void custombulk_quota_service(usb_dev *udev)
             return;
         }
         if(cmd == CMD_SET_BURN_QUOTA) {
-            result = burn_quota_set(request_enabled, request_remaining);
+            result = request_reimport ? burn_quota_reimport(request_enabled, request_remaining) :
+                                        burn_quota_set(request_enabled, request_remaining);
+            if(result == BURN_QUOTA_OK && request_reimport) {
+                quota_import_consumed = 1;
+                quota_import_program[0] = 0;
+            }
             oled.Refresh_flag = 1;
         }
         enabled = burn_quota_enabled(); fault = burn_quota_fault();

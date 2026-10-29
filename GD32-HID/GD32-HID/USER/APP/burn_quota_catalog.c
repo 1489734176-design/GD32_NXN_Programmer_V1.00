@@ -10,6 +10,7 @@
 
 #define CATALOG_PATH "0:/system/burnquota.dat"
 #define CATALOG_MAGIC 0x31435142UL /* BQC1 */
+#define CATALOG_STATS_MAGIC 0x32435142UL /* BQC2, same 48-byte record size */
 #define CATALOG_NAME_SIZE 32U
 #define CATALOG_RECORD_SIZE 48U
 #define CATALOG_AUTH_DOMAIN 2U
@@ -68,9 +69,17 @@ static uint8_t normalize_name(const uint8_t *name, uint8_t *normalized)
 static uint8_t record_valid(const catalog_record_t *record)
 {
     uint8_t normalized[CATALOG_NAME_SIZE];
-    return record->magic == CATALOG_MAGIC && record->enabled <= 1U &&
-           record->remaining <= BURN_QUOTA_MAX &&
-           (record->enabled || !record->remaining) &&
+    uint32_t state = record->enabled, remaining, total;
+    if(record->magic == CATALOG_STATS_MAGIC) {
+        /* 1 enabled + 1 known + 10 remaining + 10 total; full 32-bit used
+         * replaces the old remaining field. CRC and the HMAC root remain. */
+        remaining = (state >> 2) & 1023U; total = (state >> 12) & 1023U;
+        if(state >> 22 || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
+           (!(state & 1U) && remaining) ||
+           (!(state & 2U) && (total || record->remaining))) return 0;
+    } else if(record->magic != CATALOG_MAGIC || state > 1U ||
+              record->remaining > BURN_QUOTA_MAX || (!state && record->remaining)) return 0;
+    return
            normalize_name(record->name, normalized) &&
            !memcmp(record->name, normalized, CATALOG_NAME_SIZE) &&
            record->crc == (crc_step(0xFFFFFFFFUL, record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL);
@@ -81,13 +90,15 @@ static uint8_t record_valid(const catalog_record_t *record)
  * Unknown names have no quota until explicitly configured. */
 static uint8_t read_prefix(uint32_t length, const uint8_t *name,
                            uint8_t *enabled, uint32_t *remaining,
-                           uint32_t *legacy_crc)
+                           burn_quota_stats_t *stats, uint32_t *legacy_crc)
 {
     catalog_record_t record;
     uint32_t offset, crc = 0xFFFFFFFFUL, found_remaining = 0;
     uint8_t found_enabled = 1, valid = 1;
+    burn_quota_stats_t found_stats;
     UINT received;
     if(length % CATALOG_RECORD_SIZE) return 0;
+    memset(&found_stats, 0, sizeof(found_stats));
     quota_auth_init(&catalog_auth, CATALOG_AUTH_DOMAIN);
     if(length)
     {
@@ -97,7 +108,8 @@ static uint8_t read_prefix(uint32_t length, const uint8_t *name,
         {
             received = 0;
             if(f_read(&catalog_file, &record, sizeof(record), &received) != FR_OK ||
-               received != sizeof(record) || !record_valid(&record))
+               received != sizeof(record) || !record_valid(&record) ||
+               (legacy_crc && record.magic != CATALOG_MAGIC))
             {
                 valid = 0;
                 break;
@@ -106,8 +118,15 @@ static uint8_t read_prefix(uint32_t length, const uint8_t *name,
             if(legacy_crc) crc = crc_step(crc, &record, sizeof(record));
             if(name && !memcmp(record.name, name, CATALOG_NAME_SIZE))
             {
-                found_enabled = (uint8_t)record.enabled;
+                memset(&found_stats, 0, sizeof(found_stats));
+                found_enabled = (uint8_t)(record.enabled & 1U);
                 found_remaining = record.remaining;
+                if(record.magic == CATALOG_STATS_MAGIC) {
+                    found_remaining = (record.enabled >> 2) & 1023U;
+                    found_stats.known = (uint8_t)((record.enabled >> 1) & 1U);
+                    found_stats.total = (record.enabled >> 12) & 1023U;
+                    found_stats.used = record.remaining;
+                }
             }
         }
         if(f_close(&catalog_file) != FR_OK) valid = 0;
@@ -115,6 +134,7 @@ static uint8_t read_prefix(uint32_t length, const uint8_t *name,
     if(!valid) return 0;
     if(enabled) *enabled = found_enabled;
     if(remaining) *remaining = found_remaining;
+    if(stats) *stats = found_stats;
     if(legacy_crc) *legacy_crc = crc ^ 0xFFFFFFFFUL;
     return 1;
 }
@@ -123,12 +143,13 @@ static uint8_t read_prefix(uint32_t length, const uint8_t *name,
  * authenticated. Nonempty roots authenticate every committed byte before a
  * matching or absent name can be returned. Never trust a record's CRC alone. */
 static uint8_t scan(const burn_quota_catalog_t *catalog, const uint8_t *name,
-                    uint8_t *enabled, uint32_t *remaining)
+                    uint8_t *enabled, uint32_t *remaining, burn_quota_stats_t *stats)
 {
     uint8_t tag[QUOTA_AUTH_TAG_SIZE], found_enabled;
     uint32_t found_remaining;
+    burn_quota_stats_t found_stats;
     if(!catalog || !read_prefix(catalog->length, name, &found_enabled,
-                                &found_remaining, 0)) return 0;
+                                &found_remaining, &found_stats, 0)) return 0;
     if(catalog->length)
     {
         catalog_auth_verify = catalog_auth;
@@ -137,6 +158,7 @@ static uint8_t scan(const burn_quota_catalog_t *catalog, const uint8_t *name,
     else memset(tag, 0, sizeof(tag));
     if(!quota_auth_equal(tag, catalog->tag, sizeof(tag))) return 0;
     *enabled = found_enabled; *remaining = found_remaining;
+    if(stats) *stats = found_stats;
     return 1;
 }
 
@@ -144,10 +166,15 @@ static uint8_t scan(const burn_quota_catalog_t *catalog, const uint8_t *name,
 uint8_t burn_quota_catalog_load(const burn_quota_catalog_t *catalog,
                                const uint8_t *name, uint8_t *enabled,
                                uint32_t *remaining)
+{ return burn_quota_catalog_load_stats(catalog, name, enabled, remaining, 0); }
+
+uint8_t burn_quota_catalog_load_stats(const burn_quota_catalog_t *catalog,
+                                     const uint8_t *name, uint8_t *enabled,
+                                     uint32_t *remaining, burn_quota_stats_t *stats)
 {
     uint8_t normalized[CATALOG_NAME_SIZE];
     if(!enabled || !remaining || !normalize_name(name, normalized)) return 0;
-    return scan(catalog, normalized, enabled, remaining);
+    return scan(catalog, normalized, enabled, remaining, stats);
 }
 
 /* 切换前追加当前余额，同步并回读验证后才发布新认证根；失败保持旧根。 */
@@ -155,24 +182,38 @@ uint8_t burn_quota_catalog_save(const burn_quota_catalog_t *catalog,
                                const uint8_t *name, uint8_t enabled,
                                uint32_t remaining, burn_quota_catalog_t *updated)
 {
+    burn_quota_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    return burn_quota_catalog_save_stats(catalog, name, enabled, remaining, &stats, updated);
+}
+
+uint8_t burn_quota_catalog_save_stats(const burn_quota_catalog_t *catalog,
+                                     const uint8_t *name, uint8_t enabled,
+                                     uint32_t remaining, const burn_quota_stats_t *stats,
+                                     burn_quota_catalog_t *updated)
+{
     catalog_record_t record;
     burn_quota_catalog_t next;
     uint8_t normalized[CATALOG_NAME_SIZE], old_enabled, verified_enabled, valid = 1;
     uint32_t old_remaining, verified_remaining;
+    burn_quota_stats_t old_stats, verified_stats;
     UINT written = 0;
-    if(!updated || enabled > 1U || remaining > BURN_QUOTA_MAX ||
+    if(!updated || !stats || stats->known > 1U || stats->total > BURN_QUOTA_MAX ||
+       (!stats->known && (stats->total || stats->used)) ||
+       enabled > 1U || remaining > BURN_QUOTA_MAX ||
        (!enabled && remaining) || !normalize_name(name, normalized) ||
-       !scan(catalog, normalized, &old_enabled, &old_remaining)) return 0;
-    if(old_enabled == enabled && old_remaining == remaining)
+       !scan(catalog, normalized, &old_enabled, &old_remaining, &old_stats)) return 0;
+    if(old_enabled == enabled && old_remaining == remaining && old_stats.known == stats->known &&
+       old_stats.total == stats->total && old_stats.used == stats->used)
     {
         *updated = *catalog;
         return 1;
     }
     if(catalog->length > 0xFFFFFFFFUL - CATALOG_RECORD_SIZE) return 0;
-    record.magic = CATALOG_MAGIC;
+    record.magic = stats->known ? CATALOG_STATS_MAGIC : CATALOG_MAGIC;
     memcpy(record.name, normalized, sizeof(record.name));
-    record.enabled = enabled;
-    record.remaining = remaining;
+    record.enabled = stats->known ? enabled | 2U | (remaining << 2) | (stats->total << 12) : enabled;
+    record.remaining = stats->known ? stats->used : remaining;
     record.crc = crc_step(0xFFFFFFFFUL, &record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL;
     next.length = catalog->length + sizeof(record);
     quota_auth_update(&catalog_auth, &record, sizeof(record));
@@ -185,8 +226,10 @@ uint8_t burn_quota_catalog_save(const burn_quota_catalog_t *catalog,
        f_write(&catalog_file, &record, sizeof(record), &written) != FR_OK ||
        written != sizeof(record) || f_sync(&catalog_file) != FR_OK) valid = 0;
     if(f_close(&catalog_file) != FR_OK) valid = 0;
-    if(!valid || !scan(&next, normalized, &verified_enabled, &verified_remaining) ||
-       verified_enabled != enabled || verified_remaining != remaining) return 0;
+    if(!valid || !scan(&next, normalized, &verified_enabled, &verified_remaining, &verified_stats) ||
+       verified_enabled != enabled || verified_remaining != remaining ||
+       verified_stats.known != stats->known || verified_stats.total != stats->total ||
+       verified_stats.used != stats->used) return 0;
     *updated = next;
     return 1;
 }
@@ -199,7 +242,7 @@ uint8_t burn_quota_catalog_migrate(uint32_t length, uint32_t crc,
 {
     burn_quota_catalog_t next;
     uint32_t actual_crc;
-    if(!updated || !read_prefix(length, 0, 0, 0, &actual_crc) || actual_crc != crc) return 0;
+    if(!updated || !read_prefix(length, 0, 0, 0, 0, &actual_crc) || actual_crc != crc) return 0;
     next.length = length;
     if(length) quota_auth_final(&catalog_auth, next.tag);
     else memset(next.tag, 0, sizeof(next.tag));

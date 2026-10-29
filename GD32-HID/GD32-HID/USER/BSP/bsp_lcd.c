@@ -330,6 +330,14 @@ void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                   uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
                   uint8_t scale, uint8_t mode)
 {
+    LCD_BlitMonoColor(x, y, width, height, stride, bitmap, column_pages, scale, mode, LCD_WHITE);
+}
+
+/* 彩色点阵仍分块直接写屏，不增加显存；color为笔画颜色，背景黑色。 */
+void LCD_BlitMonoColor(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                       uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                       uint8_t scale, uint8_t mode, uint16_t color)
+{
     uint16_t row, offset, count, pixel, sx, sy, out_width, out_height;
     uint8_t bit;
     if(!bitmap || !scale || scale > 4 || !width || !height ||
@@ -353,7 +361,48 @@ void LCD_BlitMono(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                 if(column_pages) bit = (bitmap[(sy >> 3) * stride + sx] >> (sy & 7)) & 1;
                 else bit = (bitmap[sy * stride + sx / 8] >> (7 - (sx & 7))) & 1;
                 bit ^= (uint8_t)(!mode) ^ ui_invert;
-                data16(bit ? LCD_WHITE : LCD_BLACK);
+                data16(bit ? color : LCD_BLACK);
+            }
+            SPI0_LCDRelease();
+            if(!SPI0_BusOK()) return;
+        }
+    }
+}
+
+/* 同一次字模写出依据绝对列坐标选择背景；进度填充经过字模时同步反色。
+ * 横向裁剪不改变字模原点，因此可以只重绘填充变化所穿过的若干列。 */
+void LCD_BlitMonoSplit(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                      uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
+                      uint16_t split_x, uint16_t color,
+                      uint16_t clip_x, uint16_t clip_width)
+{
+    uint16_t left, right, clip_right, row, col, count, pixel, sx;
+    uint8_t bit;
+    if(!bitmap || !width || !height || !clip_width || x >= LCD_WIDTH ||
+       y >= LCD_HEIGHT || clip_x >= LCD_WIDTH) return;
+    if(width > LCD_WIDTH - x) width = LCD_WIDTH - x;
+    if(height > LCD_HEIGHT - y) height = LCD_HEIGHT - y;
+    if(clip_width > LCD_WIDTH - clip_x) clip_width = LCD_WIDTH - clip_x;
+    left = x > clip_x ? x : clip_x;
+    right = x + width;
+    clip_right = clip_x + clip_width;
+    if(right > clip_right) right = clip_right;
+    if(left >= right) return;
+    for(row = 0; row < height; row++)
+    {
+        for(col = left; col < right; col += count)
+        {
+            count = right - col;
+            if(count > LCD_CHUNK_PIXELS) count = LCD_CHUNK_PIXELS;
+            SPI0_LCDSelect();
+            window(col, y + row, count);
+            for(pixel = 0; pixel < count; pixel++)
+            {
+                sx = col + pixel - x;
+                if(column_pages) bit = (bitmap[(row >> 3) * stride + sx] >> (row & 7)) & 1;
+                else bit = (bitmap[row * stride + sx / 8] >> (7 - (sx & 7))) & 1;
+                bit ^= ui_invert ^ (uint8_t)(col + pixel < split_x);
+                data16(bit ? color : LCD_BLACK);
             }
             SPI0_LCDRelease();
             if(!SPI0_BusOK()) return;

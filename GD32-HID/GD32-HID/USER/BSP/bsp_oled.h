@@ -1,9 +1,11 @@
-/* 中文注释补充（2026-10-26）：显示接口：新UI使用320×240屏幕像素，中文16/32点，ASCII半宽；直接分块绘制，不维护整屏缓存。 */
+/* 显示接口：应用默认240×320竖屏，中文16/32点，ASCII半宽；直接分块绘制，不维护整屏缓存。 */
 #ifndef _BSP_OLED_H__
 #define _BSP_OLED_H__
 #include "main.h"
 typedef struct { uint8_t oled_Read_addr, oled_Write_addr, Refresh_flag; } oled_TypeDef;
 extern oled_TypeDef oled;
+/* 相邻文字行之间留4像素；16像素文字的行起点相隔20像素。 */
+#define UI_LINE_GAP 4U
 /* 初始化显示（转调LCD_Init），保留原OLED接口名。
  * 返回 - 无 */
 void OLED_Init(void);
@@ -30,13 +32,20 @@ void UI_EnterPage(uint8_t page);
  * x      - 左上角列坐标（原生像素）
  * y      - 左上角行坐标（原生像素）
  * width  - 字段宽度（像素）
- * height - 字段高度（像素），按size逐行换行
+ * height - 字段高度（像素），按size+UI_LINE_GAP逐行换行
  * text   - 要显示的文字，GBK编码，最长63字节
  * size   - 字号16或32
  * mode   - 1=白字黑底，0=黑字白底
  * 返回   - 无 */
 void UI_Field(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
               const char *text, uint8_t size, uint8_t mode);
+/* 彩色字段：参数与UI_Field相同；color为RGB565笔画色。
+ * mode=1为彩字黑底，mode=0为黑字彩底。颜色变化也触发缓存更新。 */
+void UI_FieldColor(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                   const char *text, uint8_t size, uint8_t mode, uint16_t color);
+/* 彩色单行文本，参数与UI_Text相同；超出右边界截断。 */
+void UI_TextColor(uint16_t x, uint16_t y, const char *text, uint8_t size,
+                  uint8_t mode, uint16_t color);
 /* 兼容旧OLED刷新接口，改为直绘后为空实现。
  * 返回 - 无 */
 void OLED_Refresh(void);
@@ -103,6 +112,18 @@ void UI_BootLogo(const uint8_t *data);
  * percent - 进度百分比0~100，超过100按100处理
  * 返回    - 无 */
 void UI_Progress(uint16_t y, uint8_t percent);
+enum {
+    UI_PROGRESS_IDLE = 0,
+    UI_PROGRESS_RUNNING,
+    UI_PROGRESS_FAILED,
+    UI_PROGRESS_SUCCESS
+};
+/* 固定16像素高的单行状态进度条。运行时前缀百分比并按比例填黄；
+ * 失败/成功整条填红/绿；待机空底。GBK按完整字符裁剪，不自动换行。
+ * 文字在填充内黑色、填充外黄色，同内容零写屏；颜色/填充变化同步重画叠字。
+ * OLED_Clear使缓存失效；x/y/width为原生像素，status允许NULL。 */
+void UI_ProgressStatus(uint16_t x, uint16_t y, uint16_t width,
+                       uint8_t percent, uint8_t state, const char *status);
 /* 兼容旧接口：在128×64虚拟坐标系中画点，放大两倍显示。
  * row  - 虚拟行坐标0~63
  * col  - 虚拟列坐标0~127

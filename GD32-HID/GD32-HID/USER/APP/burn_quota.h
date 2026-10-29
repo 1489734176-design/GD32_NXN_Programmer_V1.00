@@ -8,6 +8,8 @@
 #define BURN_QUOTA_NAME_SIZE 32U
 enum { BURN_QUOTA_OK = 0, BURN_QUOTA_EMPTY, BURN_QUOTA_STORAGE, BURN_QUOTA_BUSY };
 typedef struct { uint32_t length; uint8_t tag[16]; } burn_quota_catalog_t;
+/* Unknown legacy history is represented by known=0,total=0,used=0. */
+typedef struct { uint32_t total, used; uint8_t known; } burn_quota_stats_t;
 void burn_quota_init(void);
 /* 只在启动时调用：旧全局额度归属最后保存的固件；无可恢复文件时清除归属。 */
 uint8_t burn_quota_migrate_legacy(const uint8_t *name);
@@ -16,7 +18,12 @@ uint8_t burn_quota_select(const uint8_t *name);
 uint8_t burn_quota_enabled(void);
 uint8_t burn_quota_fault(void);
 uint32_t burn_quota_remaining(void);
+uint8_t burn_quota_stats_known(void);
+uint32_t burn_quota_total(void);
+uint32_t burn_quota_used(void);
 uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining);
+/* A completed host import resets history even when its limit is unchanged. */
+uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total);
 uint8_t burn_quota_begin(void);
 uint8_t burn_quota_finish(uint8_t success);
 uint32_t burn_quota_read_word(uint32_t address);
@@ -28,4 +35,9 @@ uint8_t burn_quota_catalog_load(const burn_quota_catalog_t *catalog, const uint8
 uint8_t burn_quota_catalog_save(const burn_quota_catalog_t *catalog, const uint8_t *name,
                               uint8_t enabled, uint32_t remaining, burn_quota_catalog_t *updated);
 uint8_t burn_quota_catalog_migrate(uint32_t length, uint32_t crc, burn_quota_catalog_t *updated);
+uint8_t burn_quota_catalog_load_stats(const burn_quota_catalog_t *catalog, const uint8_t *name,
+                                    uint8_t *enabled, uint32_t *remaining, burn_quota_stats_t *stats);
+uint8_t burn_quota_catalog_save_stats(const burn_quota_catalog_t *catalog, const uint8_t *name,
+                                    uint8_t enabled, uint32_t remaining, const burn_quota_stats_t *stats,
+                                    burn_quota_catalog_t *updated);
 #endif

@@ -8,6 +8,7 @@
 #include "usbd_custombulk.h"
 #include "burn_quota.h"
 #include "selection_store.h"
+#include "bsp_lcd.h"
 
 
 usb_dev usb_hid;
@@ -47,7 +48,7 @@ extern void DAP_Thread (void *argument);
 extern void DAP_Setup(void);
 /* 离线选择页：芯片型号只读，手动选择固件或开始烧录；长按右键切换自动与手动。 */
 void mode2(void);
-/* 文件选择页：每页五项，文件名16像素完整显示，左右键循环选取。 */
+/* 兼容旧文件选择状态；实际选择在竖屏固件行内完成。 */
 void mode3(void);
 /* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；成功扣一次，正常失败退回一次。 */
 void mode4(void);
@@ -82,7 +83,7 @@ static uint32_t g_auto_tprobe  = 0;             /* 上一次检测时的系统�
 
 /* 自动检测芯片：连续检测到芯片后烧录，显示结果后等待芯片取出，避免同一颗芯片重复烧录。 */
 static void auto_standby_tick(void);
-/* 绘制自动烧录待机/烧录/结果页；中文32像素，芯片型号与固件名16像素，次数独占一行。 */
+/* 自动待机与结果共用竖屏固定页，固件固定预留两行。 */
 static void auto_draw(void);
 /* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。 */
 static void auto_start_burn(void);
@@ -102,6 +103,14 @@ static uint8_t g_program_checksum_valid;
 /* 选择改变仅标记；Flash写入安排在主任务临界区外，失败时暂停烧录。 */
 static uint8_t g_selection_dirty;
 static uint8_t g_selection_save_failed;
+
+/* 竖屏固定页：内部状态变化仅重绘字段，不切换可见页面。 */
+static uint8_t g_ui_ready, g_ui_percent, g_ui_state;
+static void draw_main(void);
+static void show_counts(void);
+static void reset_feedback(void);
+static void finish_burn_ui(void);
+static void select_next_firmware(void);
 
 static void mark_selection_dirty(void)
 {
@@ -148,6 +157,7 @@ uint8_t app_selection_invalidate(void)
     app_data.bin_name[0] = 0;
     app_data.opt_enable = 0;
     g_program_checksum_valid = 0;
+    reset_feedback();
     oled.Refresh_flag = 1;
     capture_program_selection(&selection);
     if(!selection_store_save(&selection))
@@ -234,39 +244,32 @@ static void invalidate_program_checksum(void)
 {
     g_program_checksum_valid = 0;
     mark_selection_dirty();
+    reset_feedback();
     oled.Refresh_flag = 1;
 }
 
-/* 显示剩余次数：三位数字补零或“不限”，使用16像素文字行。
- * 独立栈缓冲区保护文件路径D，避免OPT校验时打开错误文件。
- * y     - 该行在320×240原生屏上的起始纵坐标（像素）
- * 返回  - 无 */
+/* 同行标题蓝色、内容黄色；直接绘制用于已清屏的启动/诊断页。 */
+
+
+/* 剩余次数独占一行；独立缓冲区不能覆盖正在使用的OPT文件路径D。 */
 static void show_quota(uint16_t y)
 {
-    /* 次数文字使用独立栈缓冲区；D还保存OPT路径/诊断文本，刷新界面不能覆盖它。 */
-    char quota_text[32];
-    if(burn_quota_fault())
-        strcpy(quota_text, "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3"); /* 显示文字：次数记录异常 */
-    else if(burn_quota_enabled())
-        sprintf(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\x25\x30\x33\x6C\x75\xB4\xCE", (unsigned long)burn_quota_remaining()); /* 显示文字：剩余次数:%03lu次（%03lu为三位次数，前面补0） */
-    else
-        strcpy(quota_text, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\xB2\xBB\xCF\xDE"); /* 显示文字：剩余次数:不限 */
-    UI_Field(4, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
+    char text[32];
+    if(g_selection_dirty || !app_data.bin_name[0]) strcpy(text, "--");
+    else if(burn_quota_fault()) strcpy(text, "\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
+    else if(burn_quota_enabled()) sprintf(text, "%08lu", (unsigned long)burn_quota_remaining());
+    else strcpy(text, "\xCE\xDE\xCF\xDE");
+    UI_FieldColor(6, 80, y, 152, 16, text, 16, 1, LCD_YELLOW);
 }
 
-/* 显示主固件SUM32：Checksum: 01234567；固件未导入或已更换时显示 --------。
- * SUM32为最终BIN所有字节累加的32位值；字号16像素，数字前补0。
- * 复用空闲字段13，只重绘变化字符。
- * y     - 该行在320×240原生屏上的起始纵坐标（像素）
- * 返回  - 无 */
+/* 主固件SUM32同行显示；只更新变化的数字，不影响其他字段。 */
 static void show_checksum(uint16_t y)
 {
-    char checksum_text[24];
+    char text[16];
     if(g_program_checksum_valid && app_data.bin_name[0])
-        sprintf(checksum_text, "Checksum: %08lX", (unsigned long)g_program_checksum);
-    else
-        strcpy(checksum_text, "Checksum: --------");
-    UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
+        sprintf(text, "%08lX", (unsigned long)g_program_checksum);
+    else strcpy(text, "--------");
+    UI_FieldColor(3, 80, y, 152, 16, text, 16, 1, LCD_YELLOW);
 }
 
 /* 由已提交的算法文件名反查芯片型号，仅用于显示，不读取或更改目标芯片。
@@ -283,7 +286,180 @@ static const char *selected_chip_name(void)
     return "\xCE\xB4\xD6\xAA"; /* 显示文字：未知 */
 }
 
-/* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接。
+/* 芯片型号同一行显示，英文冒号后紧接黄色型号（标题宽72像素）。 */
+static void show_chip_name(uint16_t y)
+{
+    UI_FieldColor(0, 80, y, 152, 16, selected_chip_name(), 16, 1, LCD_YELLOW);
+}
+
+/* 固件固定占两行，行间隔4像素：首行接标题，次行与内容起点对齐。 */
+static void show_firmware_name(uint16_t y)
+{
+    UI_FieldColor(1, 80, y, 152, 36, (const char *)app_data.bin_name, 16, 1, LCD_YELLOW);
+}
+
+/* 底部按键标题蓝色，切换目标模式黄色；字段9在主界面不用于进度。 */
+/* 本次总数、成功已用和余量来自当前固件；旧记录的未知统计用--显示。 */
+static void show_counts(void)
+{
+    char total[16], used[16];
+    if(g_selection_dirty || !app_data.bin_name[0] || burn_quota_fault() || !burn_quota_stats_known())
+    { strcpy(total, "--"); strcpy(used, "--"); }
+    else
+    {
+        if(burn_quota_enabled()) sprintf(total, "%08lu", (unsigned long)burn_quota_total());
+        else strcpy(total, "\xCE\xDE\xCF\xDE");
+        sprintf(used, "%08lu", (unsigned long)burn_quota_used());
+    }
+    UI_FieldColor(4, 80, 148, 152, 16, total, 16, 1, LCD_YELLOW);
+    UI_FieldColor(5, 80, 168, 152, 16, used, 16, 1, LCD_YELLOW);
+    show_quota(188);
+}
+
+/* 静态标题只画一次，16个缓存槽只分配给动态值和两个光标。 */
+static void draw_main(void)
+{
+    if(!g_ui_ready)
+    {
+        UI_EnterPage(10);
+        UI_TextColor(8, 28, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
+        UI_TextColor(96, 28, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
+        UI_TextColor(8, 48, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
+        UI_TextColor(8, 68, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
+        UI_TextColor(8, 88, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
+        UI_TextColor(8, 108, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
+        UI_TextColor(8, 148, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
+        UI_TextColor(8, 168, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
+        UI_TextColor(8, 188, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
+        UI_TextColor(8, 208, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
+        UI_TextColor(8, 228, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
+        UI_TextColor(64, 28, "000", 16, 1, LCD_YELLOW);
+        UI_TextColor(168, 28, "  V", 16, 1, LCD_YELLOW);
+        g_ui_ready = 1;
+        show_top(1);
+    }
+    show_chip_name(48);
+    show_firmware_name(108);
+    UI_FieldColor(2, 80, 68, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
+    show_checksum(88);
+    show_counts();
+    UI_FieldColor(7, 0, 108, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
+    UI_FieldColor(8, 0, 208, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
+    show_top(0);
+    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
+}
+
+static void reset_feedback(void)
+{
+    g_ui_state = UI_PROGRESS_IDLE;
+    g_ui_percent = 0;
+    strcpy(g_last_status, !app_data.bin_name[0] ? "\xC7\xEB\xD1\xA1\xD4\xF1\xB9\xCC\xBC\xFE" :
+                         (g_auto_en ? "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC" : "\xB5\xC8\xB4\xFD\xB2\xD9\xD7\xF7"));
+}
+
+/* 成功色只在整体烧录和次数提交都成功后显示。结果仍保留在原来的第12行。 */
+static void finish_burn_ui(void)
+{
+    if(g_burn_ok)
+    {
+        g_ui_state = UI_PROGRESS_SUCCESS; g_ui_percent = 100;
+        strcpy(g_last_status, "\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6");
+    }
+    else
+    {
+        g_ui_state = UI_PROGRESS_FAILED;
+        if(!g_last_status[0]) strcpy(g_last_status, "\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC");
+    }
+    if(g_auto_en) { g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms(); }
+    app_data.mode = 2; key_val.mesg = 0; oled.Refresh_flag = 1;
+    draw_main();
+}
+
+/* 在固件行内循环选择，排除目录和OPT数据；文件内容与校验由主任务串行读取。 */
+static uint8_t selectable_firmware(const char *name, uint8_t attr)
+{
+    unsigned int i, n = strlen(name);
+    char tail[9];
+    if((attr & AM_DIR) || !n || n >= sizeof(app_data.bin_name)) return 0;
+    for(i = 0; i < n; i++) if((uint8_t)name[i] >= 0x7F || (uint8_t)name[i] < 0x20) return 0;
+    if(n >= 8)
+    {
+        for(i = 0; i < 8; i++) { char ch = name[n - 8 + i]; tail[i] = ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch; }
+        tail[8] = 0;
+        if(!strcmp(tail, "_opt.bin")) return 0;
+    }
+    return 1;
+}
+
+static void select_next_firmware(void)
+{
+    char first[32] = {0}, next[32] = {0}, path[80];
+    const char *dot;
+    uint32_t size, done, request, received, checksum, i;
+    uint8_t found = 0, ret;
+    if(custombulk_is_busy()) return;
+    if(f_opendir(&DirInfo, "0:/download/bin") != FR_OK)
+    {
+        g_ui_state = UI_PROGRESS_FAILED;
+        strcpy(g_last_status, "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return;
+    }
+    while((ret = f_readdir(&DirInfo, &FileInfo)) == FR_OK && FileInfo.fname[0])
+    {
+        if(!selectable_firmware(FileInfo.fname, FileInfo.fattrib)) continue;
+        if(!first[0]) strcpy(first, FileInfo.fname);
+        if(found) { strcpy(next, FileInfo.fname); break; }
+        if(!strcmp((char *)app_data.bin_name, FileInfo.fname)) found = 1;
+    }
+    f_closedir(&DirInfo);
+    if(ret != FR_OK)
+    { g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return; }
+    if(!next[0]) strcpy(next, first);
+    if(!next[0])
+    {
+        app_data.bin_name[0] = 0; app_data.opt_enable = 0;
+        invalidate_program_checksum(); g_burn_done = 0; reset_feedback(); return;
+    }
+    if(!strcmp(next, (char *)app_data.bin_name) && !g_selection_save_failed) return;
+    sprintf(path, "0:/download/bin/%s", next);
+    if(f_open(&fd, path, FA_READ) != FR_OK) goto invalid_file;
+    size = f_size(&fd); done = checksum = 0;
+    while(done < size)
+    {
+        request = size - done; if(request > sizeof(DATA_BUFFER)) request = sizeof(DATA_BUFFER);
+        ret = f_read(&fd, DATA_BUFFER, request, &received);
+        if(ret != FR_OK || received != request) break;
+        for(i = 0; i < received; i++) checksum += DATA_BUFFER[i];
+        done += received;
+    }
+    ret = f_close(&fd);
+    if(!size || done != size || ret != FR_OK) goto invalid_file;
+    strcpy((char *)app_data.bin_name, next);
+    g_program_checksum = checksum; g_program_checksum_valid = 1;
+    dot = strrchr(next, '.');
+    if(dot && dot - next < 30) sprintf(path, "0:/download/bin/%.*s_opt.bin", (int)(dot-next), next);
+    else strcpy(path, "0:/download/bin/default_opt.bin");
+    app_data.opt_enable = 0;
+    ret = f_open(&fd, path, FA_READ);
+    if(ret == FR_OK)
+    {
+        size = f_size(&fd); ret = f_close(&fd);
+        if(!size || ret != FR_OK) goto invalid_opt;
+        app_data.opt_enable = 1;
+    }
+    else if(ret != FR_NO_FILE && ret != FR_NO_PATH) goto invalid_opt;
+    mark_selection_dirty(); g_burn_done = 0; reset_feedback(); return;
+invalid_opt:
+    strcpy((char *)app_data.bin_name, next); app_data.opt_enable = 1;
+    g_program_checksum_valid = 0; mark_selection_dirty(); g_selection_save_failed = 1;
+    g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return;
+invalid_file:
+    /* 保留当前坏文件名作为轮选位置，但禁止保存/烧录；下一次中键可以到后续文件。 */
+    strcpy((char *)app_data.bin_name, next); app_data.opt_enable = 0;
+    g_program_checksum_valid = 0; mark_selection_dirty(); g_selection_save_failed = 1;
+    g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xB9\xCC\xBC\xFE\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
+}
+
+/* 接收上位机导入的算法、固件与OPT开关，更新主界面并保持USB后台连接。
  * 上位机在提交前已为此固件重设次数；本函数只复制选择，关中断区外再绑定其额度。
  * algorithm_name - 算法文件名（不含路径），长度不超过app_data.firmware_name容量
  * program_name   - 主固件文件名（不含路径），长度不超过app_data.bin_name容量
@@ -310,6 +486,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     /* 导入完成后主任务绑定本固件额度并保存选择，再开始芯片检测。 */
     g_auto_st = AUTO_ST_WAIT; g_present_seen = 0; g_absent_seen = 0;
     g_auto_tprobe = auto_now_ms();
+    g_burn_done = 0; reset_feedback();
     oled.Refresh_flag = 1;
 }
 
@@ -327,43 +504,25 @@ void INTX_ENABLE(void)
 	__ASM volatile("cpsie i");		  
 }
 
-/* 启动界面：先恢复掉电保存的次数，再挂载文件系统和加载开机图标。
+/* 启动时恢复选择和次数，直接进入同一个竖屏界面。
  * 返回 - 无 */
 void start_page(void)
 {
     uint8_t ret;
-    uint32_t ulReadNum;
-    const char *status;
     program_selection_t legacy_selection;
-    burn_quota_init();
-    selection_store_init();
+    burn_quota_init(); selection_store_init();
     ret = f_mount(&fs, "0:", 1);
-    status = "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3"; /* 显示文字：文件系统异常 */
     if(ret == FR_OK)
     {
         restore_program_selection();
-        /* 旧全局额度只迁移给曾保存的固件；之后手选文件不再继承全局次数。 */
-        if(selection_store_load(&legacy_selection))
-            burn_quota_migrate_legacy(legacy_selection.program_name);
-        else
-            burn_quota_migrate_legacy((const uint8_t *)"");
+        if(selection_store_load(&legacy_selection)) burn_quota_migrate_legacy(legacy_selection.program_name);
+        else burn_quota_migrate_legacy((const uint8_t *)"");
         burn_quota_select(app_data.bin_name);
-        status = "\xCD\xBC\xB1\xEA\xBC\xD3\xD4\xD8\xCA\xA7\xB0\xDC"; /* 显示文字：图标加载失败 */
-        if(f_open(&fd, "0:/system/logo.bin", FA_READ) == FR_OK)
-        {
-            /* 复用已有的4096字节Flash工作区，不额外分配logo帧缓存。 */
-            ret = f_read(&fd, DATA_BUFFER, 1024, &ulReadNum);
-            if(ret == FR_OK && ulReadNum == 1024)
-            {
-                UI_BootLogo(DATA_BUFFER);
-                status = "\xCD\xBC\xB1\xEA\xD2\xD1\xBC\xD3\xD4\xD8"; /* 显示文字：图标已加载 */
-            }
-            f_close(&fd);
-        }
     }
-    UI_Text(8, 196, status, 32, 1);
-    vTaskDelay(1000);
-    OLED_Clear();
+    app_data.mode = 2; app_data.head = 2; g_ui_ready = 0;
+    reset_feedback();
+    if(ret != FR_OK) { g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3"); }
+    draw_main();
 }
 
 /* 原模式菜单和文件传输页面已移除；文件传输保留为烧录页的USB后台服务。 */
@@ -395,135 +554,82 @@ static void power_down(void)
  * 返回 - 无 */
 void mode2(void)
 {
-	/* 自动模式始终烧录已加载的算法/固件组合；选文件在手动模式下进行
-	   （长按右键切换自动/手动） */
-	if(g_auto_en)
-		app_data.head = 2;
-	else if(app_data.head != 1 && app_data.head != 2)
-		app_data.head = 1; /* 修正旧算法焦点或异常值，禁止进入算法选择。 */
-
-	if(key_val.mesg == 1)
-	{
-		switch(key_val.key)
-		{
-            case key_l_mid: /* 一级菜单已删除，在待机页长按中键直接关机。 */
+    if(g_auto_en) app_data.head = 2;
+    else if(app_data.head != 1 && app_data.head != 2) app_data.head = 1;
+    if(key_val.mesg)
+    {
+        switch(key_val.key)
+        {
+            case key_l_mid:
                 if(!custombulk_is_busy()) power_down();
                 key_val.mesg = 0; return;
-            case key_d_mid: /* 双击留在烧录选择页，不再返回已删除的菜单。 */
-                key_val.mesg = 0; return;
-			case key_left:                      /* 上一个(循环) */
-			case key_l_left:
-			case key_rep_left:
-				if(g_auto_en)                   /* 自动模式下不切换焦点 */
-					break;
-				app_data.head = app_data.head == 1 ? 2 : 1; /* 仅固件/开始两项循环。 */
-				break;
-			case key_right:                     /* 下一个(循环) */
-				if(g_auto_en)
-					break;
-				app_data.head = app_data.head == 1 ? 2 : 1; /* 两项时左右方向均切换到另一项。 */
-				break;
-			case key_l_right:                   /* 长按右键 -> 自动/手动 切换 */
-				g_auto_en = g_auto_en ? 0 : 1;
-				g_auto_st = AUTO_ST_WAIT;
-				g_present_seen = 0;
-				g_absent_seen = 0;
-				g_auto_tprobe = auto_now_ms() - AUTO_PROBE_MS;
-				oled.Refresh_flag = 1;
-				key_val.mesg = 0;
-				return;
-			case key_mid:
-                /* 传输尚未完成时禁止选择/开始，避免使用正在改写的文件。 */
-                if(custombulk_is_busy()) { key_val.mesg = 0; return; }
-				if(app_data.head == 1)          /* 仅进入固件文件选择，芯片型号只读。 */
-				{
-					app_data.mode = 3;
-					oled.Refresh_flag = 1;
-					key_val.mesg = 0;
-					return;
-				}
-				else if(g_auto_en)              /* 自动模式: 中键 = 立刻烧录 */
-				{
-					if(auto_has_files())
-						auto_start_burn();
-					key_val.mesg = 0;
-					return;
-				}
-				else                            /* 开始烧录 -> 进度界面 */
-				{
-					g_burn_done = 0;        /* 重新开始, 不受上一次结果页影响 */
-					app_data.mode = 4;
-					oled.Refresh_flag = 1;
-					key_val.mesg = 0;
-					return;
-				}
-			default:
-				break;
-		}
-
-		oled.Refresh_flag = 1;
-		key_val.mesg = 0;
-	}
-
-	/* 自动模式：监视座子，一检测到芯片就开始烧录 */
-	if(g_auto_en && !custombulk_is_busy())
-	{
-		auto_standby_tick();
-		if(app_data.mode != 2)
-			return;
-	}
-
-	if(oled.Refresh_flag == 1)
-	{
-        UI_EnterPage(g_auto_en ? 2 : 6); /* 自动/手动布局切换才清屏。 */
-		if(g_auto_en)
-		{
-			auto_draw();
-		}
-		else
-		{
-            UI_Field(1, 8, 8, 256, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
-            UI_Field(2, 8, 48, 304, 16, selected_chip_name(), 16, 1);
-            UI_Field(3, 8, 72, 256, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
-            UI_Field(5, 8, 112, 304, 16, (const char *)app_data.bin_name, 16, 1);
-            UI_Field(6, 8, 176, 256, 32, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1); /* 显示文字：开始烧录 */
-            /* 芯片型号为只读信息，不显示箭头；焦点仅在固件和开始之间切换。 */
-            UI_Field(8, 272, 72, 32, 32, app_data.head == 1 ? "<-" : "", 32, 1);
-            UI_Field(14, 272, 176, 32, 32, app_data.head == 2 ? "<-" : "", 32, 1);
-            show_quota(136);
-            UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1); /* 显示文字：长按右键:自动 */
-		}
-		OLED_Refresh();
-		oled.Refresh_flag = 0;
-	}
-    show_quota(g_auto_en ? 112 : 136);
-    show_checksum(g_auto_en ? 130 : 156); /* 次数下方独立16像素校验行，保留全屏布局。 */
-    show_top(0);
+            case key_d_mid: break;
+            case key_left: case key_l_left: case key_rep_left: case key_right:
+                if(!g_auto_en) app_data.head = app_data.head == 1 ? 2 : 1;
+                break;
+            case key_l_right:
+                g_auto_en = !g_auto_en; g_auto_st = AUTO_ST_WAIT;
+                g_present_seen = g_absent_seen = 0;
+                g_auto_tprobe = auto_now_ms() - AUTO_PROBE_MS;
+                app_data.head = g_auto_en ? 2 : 1; g_burn_done = 0; reset_feedback();
+                break;
+            case key_mid:
+                if(custombulk_is_busy()) break;
+                if(!g_auto_en && app_data.head == 1) select_next_firmware();
+                else
+                {
+                    g_burn_done = 0;
+                    if(g_auto_en) auto_start_burn();
+                    else app_data.mode = 4;
+                    key_val.mesg = 0; return;
+                }
+                break;
+            default: break;
+        }
+        key_val.mesg = 0; oled.Refresh_flag = 1;
+    }
+    if(g_auto_en && !custombulk_is_busy())
+    { auto_standby_tick(); if(app_data.mode != 2) return; }
+    if(g_auto_en) auto_draw();
+    else { if(!g_last_status[0]) reset_feedback(); draw_main(); }
+    oled.Refresh_flag = 0;
 }
 
-/* 显示烧录进度条，使用320×240原生像素坐标。
+/* 更新竖屏第12行进度，主固件写入阶段映射为15%到85%。
  * percent - 进度百分比，0~100
  * 返回    - 无 */
 static void show_download_progress(uint8_t percent)
 {
-    UI_Progress(112, percent);
+    uint8_t next = (uint8_t)(15U + 70U * (percent > 100 ? 100 : percent) / 100U);
+    if(next > g_ui_percent) g_ui_percent = next;
+    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
 }
 
-/* 显示并保存烧录状态；长文字自动换行，下方同步显示剩余次数与校验值，供自动结果页复用。
- * status - 要显示的状态文字（UTF-8中文，最长不超过界面缓冲区）
+/* 保存反馈文字并叠加在第12行进度条内，自动和手动模式共用。
+ * status - 要显示的状态文字（GBK字节，最长不超过界面缓冲区）
  * 返回   - 无 */
 static void show_download_status(const char *status)
 {
-    uint16_t size = UI_TextWidth(status, 32) <= 576 ? 32 : 16;
-    UI_Field(0, 8, 144, 304, 64, status, (uint8_t)size, 1); /* 状态只更新变化字及缩短的尾部。 */
+    uint8_t next = g_ui_percent;
     strncpy(g_last_status, status, sizeof(g_last_status) - 1);
-    g_last_status[sizeof(g_last_status) - 1] = '\0';
-    show_quota(208);
-    show_checksum(224); /* 烧录及结果页底行显示主固件校验值，避免与两行状态重叠。 */
+    g_last_status[sizeof(g_last_status) - 1] = 0;
+    if(g_ui_state == UI_PROGRESS_RUNNING)
+    {
+        if(strstr(status, "\xC1\xAC\xBD\xD3")) next = 2;
+        else if(strstr(status, "\xBC\xD3\xD4\xD8")) next = 5;
+        else if(strstr(status, "\xB2\xC1\xB3\xFD")) next = 10;
+        else if(strstr(status, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE")) next = 15;
+        else if(strstr(status, "\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE")) next = 85;
+        else if(strstr(status, "\xD0\xB4\xC8\xEB\x4F\x50\x54")) next = 90;
+        else if(strstr(status, "\xD0\xA3\xD1\xE9\x4F\x50\x54") || strstr(status, "\xB6\xC1\xC8\xA1\x4F\x50\x54") || strstr(status, "\xBC\xEC\xB2\xE9\x4F\x50\x54")) next = 95;
+        if(next > g_ui_percent) g_ui_percent = next;
+    }
+    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
+    show_counts();
 }
 
 /* 显示烧录失败原因、步骤、地址和SWD诊断寄存器，底部显示剩余次数。
- * 原生LCD错误页：32像素标题自动换行，16像素完整显示寄存器值。
+ * 原生LCD错误页：全页16像素，标题蓝色、诊断值黄色。
  * status - 失败原因文字，形如“ER2a:复位暂停失败”
  * diag   - 诊断值：失败步骤读回的R0或DP/DHCSR快照
  * step   - 失败步骤编号，0xFFFF表示未执行到算法阶段
@@ -531,23 +637,10 @@ static void show_download_status(const char *status)
  * 返回   - 无 */
 static void show_download_error(const char *status, uint32_t diag, uint32_t step, uint32_t addr)
 {
-    OLED_Clear();
-    UI_TextBox(8, 8, 304, 64, status, 32, 1);
-    sprintf((char *)D, "\xB2\xBD\xD6\xE8\x3D\x25\x30\x32\x6C\x58\x20\x72\x30\x3D\x25\x6C\x58", (unsigned long)step, (unsigned long)diag); /* 显示文字：步骤=%02lX r0=%lX */
-    UI_Text(8, 88, (char *)D, 16, 1);
-    strncpy(g_last_status, status, sizeof(g_last_status) - 1);
-    g_last_status[sizeof(g_last_status) - 1] = '\0';
-    if(addr)
-    {
-        sprintf((char *)D, "\xB5\xD8\xD6\xB7\x3D\x25\x30\x38\x6C\x58", (unsigned long)addr); /* 显示文字：地址=%08lX */
-        UI_Text(8, 116, (char *)D, 16, 1);
-    }
-    sprintf((char *)D, "CTRL/STAT=%08lX", (unsigned long)g_diag_ctrl_stat);
-    UI_Text(8, 144, (char *)D, 16, 1);
-    sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
-    UI_Text(8, 172, (char *)D, 16, 1);
-    show_quota(208);
-    show_checksum(224); /* 诊断页保留主固件Checksum，独立于OPT与诊断寄存器。 */
+    /* 底层仍保存诊断寄存器；屏幕在第12行保留错误码和原因。 */
+    (void)diag; (void)step; (void)addr;
+    g_ui_state = UI_PROGRESS_FAILED;
+    show_download_status(status);
 }
 
 /* 尽快连接并暂停内核：最多重试50次，抢在目标程序关闭调试口之前停下CPU。
@@ -624,7 +717,7 @@ static void auto_start_burn(void)
 	g_present_seen = 0;
 	g_absent_seen = 0;
 	g_auto_st = AUTO_ST_BURN;
-	app_data.mode = 4; /* 烧录页首次进入时统一清屏，避免转换时重复清屏。 */
+	app_data.mode = 4; /* 仅切内部执行状态，主界面保持原位。 */
 	oled.Refresh_flag = 1;
 	key_val.mesg = 0;
 }
@@ -688,6 +781,7 @@ static void auto_standby_tick(void)
 					g_absent_seen = 0;
 					g_present_seen = 0;
 					g_auto_st = AUTO_ST_WAIT;
+                    reset_feedback();
 					oled.Refresh_flag = 1;
 				}
 			}
@@ -696,49 +790,12 @@ static void auto_standby_tick(void)
 	}
 }
 
-/* 绘制整屏320×240的自动烧录页：算法名/固件名各占一行16像素，
- * 其余中文与手动菜单一致使用细32像素字模。
+/* 绘制240×320自动烧录固定页，结果保持到取出芯片或开始新任务。
  * 返回 - 无 */
 static void auto_draw(void)
 {
-	const char *st, *detail;
-
-	if(!auto_has_files())
-	{
-		st = "\xD7\xD4\xB6\xAF\x3A\xCE\xB4\xD1\xA1\xCE\xC4\xBC\xFE"; /* 显示文字：自动:未选文件 */
-		detail = "";
-	}
-	else if(g_auto_st == AUTO_ST_WAIT)
-	{
-		st = "\xD7\xD4\xB6\xAF\x3A\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC"; /* 显示文字：自动:等待芯片 */
-		detail = "";
-	}
-	else if(g_auto_st == AUTO_ST_BURN)
-	{
-		st = "\xD7\xD4\xB6\xAF\x3A\xD5\xFD\xD4\xDA\xC9\xD5\xC2\xBC"; /* 显示文字：自动:正在烧录 */
-		detail = "";
-	}
-	else if(g_burn_ok)
-	{
-		st = "\xD7\xD4\xB6\xAF\x3A\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6"; /* 显示文字：自动:烧录成功 */
-		detail = "\xC7\xEB\xC8\xA1\xB3\xF6\xD0\xBE\xC6\xAC"; /* 显示文字：请取出芯片 */
-	}
-	else
-	{
-		st = "\xD7\xD4\xB6\xAF\x3A\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC"; /* 显示文字：自动:烧录失败 */
-		detail = g_last_status[0] ? g_last_status : "\xC7\xEB\xC8\xA1\xB3\xF6\xD0\xBE\xC6\xAC"; /* 显示文字：请取出芯片 */
-	}
-
-    
-    UI_Field(0, 8, 8, 304, 32, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA", 32, 1); /* 显示文字：芯片型号： */
-    UI_Field(1, 8, 40, 304, 16, selected_chip_name(), 16, 1);
-    UI_Field(2, 8, 60, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
-    UI_Field(3, 8, 92, 304, 16, (const char *)app_data.bin_name, 16, 1);
-    show_quota(112);
-    show_checksum(130); /* 自动待机/结果页：校验行位于次数与失败原因之间。 */
-	UI_Field(5, 8, 150, 304, 32, st, 32, 1);
-    UI_Field(6, 8, 184, 304, 32, detail, UI_TextWidth(detail, 32) <= 304 ? 32 : 16, 1);
-    UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1); /* 显示文字：长按右键:手动 */
+    if(!g_last_status[0]) reset_feedback();
+    draw_main();
 }
 
 /* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；
@@ -756,84 +813,22 @@ void mode4(void)
 	uint32_t init_diag = 0;
 	uint32_t init_step = 0xFFFF;
 
-	/* 自动模式：mode4()每颗芯片只跑一次，因此从干净状态开始 */
-	if(g_auto_en)
-		g_burn_done = 0;
-
-	if(key_val.mesg == 1)
-	{
-		switch(key_val.key)
-		{
-			case key_left:
-			case key_l_left:
-			case key_rep_left:
-			case key_right:
-			case key_l_right:
-			case key_rep_right:
-			case key_mid:
-				if(g_burn_done)             /* 结果页: 单击任一键返回选择页 */
-				{
-					app_data.mode = 2;
-					g_burn_done = 0;
-						oled.Refresh_flag = 1;
-					key_val.mesg = 0;
-					return;
-				}
-				break;
-			case key_d_mid:                     /* 双击 -> 返回选择页 */
-				app_data.mode = 2;
-				g_burn_done = 0;
-				oled.Refresh_flag = 1;
-				key_val.mesg = 0;
-				return;
-			case key_l_mid:                     /* 长按 -> 烧录选择页 */
-				app_data.mode = 2;
-				app_data.head = 1; /* 返回固件焦点，不再恢复旧算法焦点。 */
-				g_burn_done = 0;
-				oled.Refresh_flag = 1;
-				key_val.mesg = 0;
-				return;
-			default:
-				break;
-		}
-		key_val.mesg = 0;
-	}
-
-    if(g_burn_done) /* 手动结果页允许后台设置次数，只刷新次数行。 */
-    { show_quota(208); show_checksum(224); return; } /* 结果页仅局刷次数与校验值。 */
-	g_burn_done = 1;
-	g_burn_ok = 0;
+    if(g_burn_done) { app_data.mode = 2; draw_main(); return; }
+    g_burn_done = 1; g_burn_ok = 0;
+    g_ui_state = UI_PROGRESS_RUNNING; g_ui_percent = 0;
+    strcpy(g_last_status, "\xD7\xBC\xB1\xB8\xC9\xD5\xC2\xBC"); draw_main();
+    key_val.mesg = 0;
     if(g_selection_dirty || g_selection_save_failed)
     {
-        show_download_status("\xD1\xA1\xD4\xF1\xB1\xA3\xB4\xE6\xCA\xA7\xB0\xDC"); /* 显示文字：选择保存失败 */
-        if(g_auto_en) app_data.mode = 2;
-        return;
+        show_download_status("\xD1\xA1\xD4\xF1\xB1\xA3\xB4\xE6\xCA\xA7\xB0\xDC"); finish_burn_ui(); return;
     }
-
-    /* USB响应完成可能插在主循环保存与本次烧录之间。此时禁止借用
-     * 上位机临时查询的另一固件额度，必须在目标上电前重新绑定当前文件。 */
     if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK ||
        burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
     {
 quota_rejected:
-        OLED_Clear();
-        UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC", 32, 1); /* 显示文字：烧录失败 */
-        show_download_status(burn_quota_fault() ? "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3" : "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3"); /* 显示文字：次数记录异常；或 剩余次数不足 */
-        if(g_auto_en)
-        {
-            g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms();
-            app_data.mode = 2; oled.Refresh_flag = 1;
-        }
-        return;
+        show_download_status(burn_quota_fault() ? "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3" : "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3");
+        finish_burn_ui(); return;
     }
-
-    OLED_Clear();
-    UI_Text(8, 8, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1); /* 显示文字：开始烧录 */
-    sprintf((char *)D, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\xA3\xBA%s", selected_chip_name()); /* 显示文字：芯片型号：%s */
-    UI_Text(8, 56, (char *)D, 16, 1);
-    sprintf((char *)D, "\xB9\xCC\xBC\xFE\x3A\x25\x73", app_data.bin_name); /* 显示文字：固件:%s */
-    UI_Text(8, 80, (char *)D, 16, 1);
-    show_download_progress(0);
 
 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
@@ -1255,136 +1250,25 @@ download_return:
             show_download_status("\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3"); /* 显示文字：次数记录异常 */
         }
         else
-            show_quota(208);
-		swd_off();
-		TARGET_PWR_OFF;
-		oled.Refresh_flag = 1;
-		if(g_auto_en)
-		{
-			/* 把结果交回待机页；由它判断芯片何时被取出、
-			   何时可以烧录下一颗 */
-			g_auto_st = AUTO_ST_RESULT;
-			g_auto_t0 = auto_now_ms();
-			app_data.mode = 2;
-		}
+            show_counts();
+        swd_off();
+        TARGET_PWR_OFF;
+        finish_burn_ui();
 	}
 	else
 	{
-		show_download_status("\xC7\xEB\xCF\xC8\xD1\xA1\xD4\xF1\xCE\xC4\xBC\xFE"); /* 显示文字：请先选择文件 */
-		OLED_Refresh();
+        show_download_status("\xC7\xEB\xCF\xC8\xD1\xA1\xD4\xF1\xCE\xC4\xBC\xFE");
+        finish_burn_ui();
 	}
 }
 
-/* 文件选择页：每页五项，文件名16像素完整显示，左右键循环选取。
+/* 兼容旧文件选择状态；实际选择在竖屏固件行内完成。
  * 返回 - 无 */
 void mode3(void)
 {
-	static uint32_t index = 0;
-	static uint32_t sum = 0;
-	uint32_t j;
-	uint8_t i, ret;
-	
-    /* 文件页固定浏览主固件；即使遗留状态传入算法焦点，也不能改写上位机配套算法。 */
-    app_data.head = 1;
-	if(key_val.mesg == 1)
-	{
-		switch(key_val.key)
-		{
-			case key_left:
-			case key_l_left:
-			case key_rep_left:
-				if(sum)
-					index = index == 0 ? sum - 1 : index - 1;
-				break;
-			case key_right:
-			case key_l_right:
-			case key_rep_right:
-				if(sum)
-					index = (index + 1) % sum;
-				break;
-			case key_mid:                   /* 选中文件 -> 返回选择页 */
-			case key_d_mid:                 /* 双击 -> 返回上一界面(选择页) */
-				index = 0;
-				app_data.mode = 2;
-				oled.Refresh_flag = 1;
-				key_val.mesg = 0;
-				return;
-			case key_l_mid:                 /* 长按 -> 烧录选择页 */
-				index = 0;
-				app_data.mode = 2;
-				app_data.head = 1; /* 返回固件焦点，不再恢复旧算法焦点。 */
-				oled.Refresh_flag = 1;
-				key_val.mesg = 0;
-				return;
-		}
-
-		oled.Refresh_flag = 1;
-		key_val.mesg = 0;
-	}
-
-	if(oled.Refresh_flag == 1 && !custombulk_is_busy())
-	{
-        UI_EnterPage(3); /* 文件列表布局首次进入才清屏。 */
-        UI_Field(0, 8, 8, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
-        sum = 0;
-		ret = f_opendir(&DirInfo, "0:/download/bin");
-		
-        i = 0;
-        if(ret == FR_OK)
-        {
-            while(f_readdir(&DirInfo, &FileInfo) == FR_OK && FileInfo.fname[0]) sum++;
-            if(index >= sum) index = sum ? sum - 1 : 0;
-            f_readdir(&DirInfo, NULL); /* 回到目录起点，统一按有效索引绘制。 */
-            sum = 0;
-			while(f_readdir(&DirInfo, &FileInfo) == FR_OK)
-			{
-				if(!FileInfo.fname[0])
-					break;
-				j = index / 5;
-				if(sum >= j*5 && sum < (j + 1)*5)
-				{	
-					if(i == index % 5)
-					{
-//						OLED_ShowString(i*8, 110, "<-", 8, 1);
-						{ /* 只更新固件，配套算法仍由上位机导入事务提交。 */
-							/* 手动切换固件名称后旧导入校验值失效，避免显示另一程序的SUM32。 */
-							if(strcmp((char *)app_data.bin_name, FileInfo.fname))
-								invalidate_program_checksum();
-							memset(app_data.bin_name, '\0', 32);
-							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
-							/* 设备上手动选文件：OPT文件存在就编程OPT（保持旧行为） */
-							app_data.opt_enable = 1;
-                            mark_selection_dirty();
-						}
-						/* 完整文件名在下面绘制。 */
-                        UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 0); /* 选中行反白显示。 */
-					}
-					else
-					{
-						/* 完整文件名在下面绘制。 */
-						UI_Field(1 + i, 8, 52 + i * 32, 304, 28, FileInfo.fname, 16, 1); /* 普通行只画变化文件名。 */
-					}		
-					i++;
-				}
-				sum ++;
-			}
-			f_closedir(&DirInfo);
-		}
-        while(i < 5) { UI_Field(1 + i, 8, 52 + i * 32, 304, 28, "", 16, 1); i++; }
-		if(!sum)
-		{
-			index = 0;
-            app_data.bin_name[0] = 0;
-            app_data.opt_enable = 0;
-            invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
-			UI_Field(1, 8, 52, 304, 32, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1); /* 显示文字：没有文件 */
-		}
-        sprintf((char *)D, "%lu/%lu", (unsigned long)(sum ? index + 1 : 0), (unsigned long)sum);
-        UI_Field(6, 8, 224, 160, 16, (char *)D, 16, 1);
-        OLED_Refresh();
-        oled.Refresh_flag = 0;
-    }
-    show_top(0); /* 温度、连接和电量各自刷新，不重画文件列表。 */
+    /* 兼容旧内部状态编号；文件现在直接在第6、7行切换。 */
+    app_data.mode = 2; app_data.head = 1;
+    draw_main();
 }
 
 /* 初始化硬件并创建任务；循环先处理上位机延后请求，再运行当前界面/烧录状态机。
@@ -1557,30 +1441,28 @@ void key_task(void *pvParameters)
 
 
 
-/* 底部连接、温度、电量独立更新；每秒采样一次，不触发菜单整体重画。
- * 布局保持左侧按键提示、右侧三个16像素信息字段。
+/* 顶行连接、温度、电量独立更新；每秒采样一次，恢复连接和电池图标。
  * force - 1=强制立即重新采样（页面切换时用），0=按1秒周期限频
  * 返回  - 无 */
 void show_top(uint8_t force)
 {
     static uint32_t sampled;
-    static uint8_t ready;
+    static uint8_t ready, last_power = 255, last_icon = 255;
     uint32_t now = auto_now_ms();
-    uint8_t power, battery;
+    uint8_t power, battery, icon;
     char temperature[16], percent[8];
-    /* 采样按时间限频；页面切换后立即恢复三个信息字段。 */
     if(force || !ready || now - sampled >= 1000)
-    {
-        sampled = now; ready = 1; adc_get_val(); adc_trigger();
-    }
+    { sampled = now; ready = 1; adc_get_val(); adc_trigger(); }
     power = bat_status_get();
     if(val.bat_vol <= 3.5f) battery = 0;
     else if(val.bat_vol >= 4.0f) battery = 100;
     else battery = (uint8_t)((val.bat_vol - 3.5f) * 200.0f);
     if(power) battery = 100;
-    sprintf(temperature, "%.1fC", val.chip_temp);
-    sprintf(percent, "%u%%", battery);
-    UI_Field(10, 176, 224, 32, 16, power ? "CON" : "DIS", 16, 1);
-    UI_Field(11, 208, 224, 64, 16, temperature, 16, 1);
-    UI_Field(12, 280, 224, 32, 16, percent, 16, 1);
+    icon = power == 1 ? 5 : battery <= 20 ? 0 : battery <= 40 ? 1 : battery <= 60 ? 2 : battery <= 80 ? 3 : 4;
+    if(force || last_power != power) { UI_Logo(8, 8, power ? 6 : 7); last_power = power; }
+    if(force || last_icon != icon) { UI_Logo(152, 8, icon); last_icon = icon; }
+    sprintf(temperature, "%.1fC", val.chip_temp); sprintf(percent, "%u%%", battery);
+    UI_FieldColor(10, 44, 8, 32, 16, power ? "CON" : "DIS", 16, 1, LCD_YELLOW);
+    UI_FieldColor(11, 84, 8, 64, 16, temperature, 16, 1, LCD_YELLOW);
+    UI_FieldColor(12, 192, 8, 40, 16, percent, 16, 1, LCD_YELLOW);
 }
