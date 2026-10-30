@@ -11,6 +11,7 @@
 #define CATALOG_PATH "0:/system/burnquota.dat"
 #define CATALOG_MAGIC 0x31435142UL /* BQC1 */
 #define CATALOG_STATS_MAGIC 0x32435142UL /* BQC2, same 48-byte record size */
+#define CATALOG_WIDE_MAGIC 0x33435142UL /* BQC3, full remaining/used */
 #define CATALOG_NAME_SIZE 32U
 #define CATALOG_RECORD_SIZE 48U
 #define CATALOG_AUTH_DOMAIN 2U
@@ -20,7 +21,7 @@ typedef struct {
     uint8_t name[CATALOG_NAME_SIZE];
     uint32_t enabled;
     uint32_t remaining;
-    uint32_t crc;
+    uint32_t crc; /* BQC1/2 CRC; BQC3 full successful-used, protected by HMAC. */
 } catalog_record_t;
 
 /* FIL and HMAC contexts stay off the small task stack. The retained prefix
@@ -70,19 +71,27 @@ static uint8_t record_valid(const catalog_record_t *record)
 {
     uint8_t normalized[CATALOG_NAME_SIZE];
     uint32_t state = record->enabled, remaining, total;
-    if(record->magic == CATALOG_STATS_MAGIC) {
+    if(record->magic == CATALOG_WIDE_MAGIC) {
+        total = state >> 2;
+        if(total > BURN_QUOTA_MAX || record->remaining > BURN_QUOTA_MAX ||
+           (!(state & 1U) && record->remaining) ||
+           (!(state & 2U) && (total || record->crc))) return 0;
+    } else if(record->magic == CATALOG_STATS_MAGIC) {
         /* 1 enabled + 1 known + 10 remaining + 10 total; full 32-bit used
          * replaces the old remaining field. CRC and the HMAC root remain. */
         remaining = (state >> 2) & 1023U; total = (state >> 12) & 1023U;
-        if(state >> 22 || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
+        if(state >> 22 || remaining > BURN_QUOTA_LEGACY_MAX || total > BURN_QUOTA_LEGACY_MAX ||
            (!(state & 1U) && remaining) ||
            (!(state & 2U) && (total || record->remaining))) return 0;
     } else if(record->magic != CATALOG_MAGIC || state > 1U ||
-              record->remaining > BURN_QUOTA_MAX || (!state && record->remaining)) return 0;
+              record->remaining > BURN_QUOTA_LEGACY_MAX || (!state && record->remaining)) return 0;
     return
            normalize_name(record->name, normalized) &&
            !memcmp(record->name, normalized, CATALOG_NAME_SIZE) &&
-           record->crc == (crc_step(0xFFFFFFFFUL, record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL);
+           /* BQC3 uses the old CRC word for used. scan authenticates every
+            * byte through the committed root, including this word. */
+           (record->magic == CATALOG_WIDE_MAGIC ||
+            record->crc == (crc_step(0xFFFFFFFFUL, record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL));
 }
 
 /* Read and validate the complete prefix, retaining its HMAC context. The CRC
@@ -121,7 +130,11 @@ static uint8_t read_prefix(uint32_t length, const uint8_t *name,
                 memset(&found_stats, 0, sizeof(found_stats));
                 found_enabled = (uint8_t)(record.enabled & 1U);
                 found_remaining = record.remaining;
-                if(record.magic == CATALOG_STATS_MAGIC) {
+                if(record.magic == CATALOG_WIDE_MAGIC) {
+                    found_stats.known = (uint8_t)((record.enabled >> 1) & 1U);
+                    found_stats.total = record.enabled >> 2;
+                    found_stats.used = record.crc;
+                } else if(record.magic == CATALOG_STATS_MAGIC) {
                     found_remaining = (record.enabled >> 2) & 1023U;
                     found_stats.known = (uint8_t)((record.enabled >> 1) & 1U);
                     found_stats.total = (record.enabled >> 12) & 1023U;
@@ -210,11 +223,11 @@ uint8_t burn_quota_catalog_save_stats(const burn_quota_catalog_t *catalog,
         return 1;
     }
     if(catalog->length > 0xFFFFFFFFUL - CATALOG_RECORD_SIZE) return 0;
-    record.magic = stats->known ? CATALOG_STATS_MAGIC : CATALOG_MAGIC;
+    record.magic = CATALOG_WIDE_MAGIC;
     memcpy(record.name, normalized, sizeof(record.name));
-    record.enabled = stats->known ? enabled | 2U | (remaining << 2) | (stats->total << 12) : enabled;
-    record.remaining = stats->known ? stats->used : remaining;
-    record.crc = crc_step(0xFFFFFFFFUL, &record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL;
+    record.enabled = enabled | ((uint32_t)stats->known << 1) | (stats->total << 2);
+    record.remaining = remaining;
+    record.crc = stats->used;
     next.length = catalog->length + sizeof(record);
     quota_auth_update(&catalog_auth, &record, sizeof(record));
     quota_auth_final(&catalog_auth, next.tag);

@@ -318,42 +318,42 @@ static void show_counts(void)
         else strcpy(total, "\xCE\xDE\xCF\xDE");
         sprintf(used, "%08lu", (unsigned long)burn_quota_used());
     }
-    UI_FieldColor(4, 80, 168, 152, 16, total, 16, 1, LCD_YELLOW);
-    UI_FieldColor(5, 80, 188, 152, 16, used, 16, 1, LCD_YELLOW);
-    show_quota(208);
+    UI_FieldColor(4, 80, 188, 152, 16, total, 16, 1, LCD_YELLOW);
+    UI_FieldColor(5, 80, 208, 152, 16, used, 16, 1, LCD_YELLOW);
+    show_quota(228);
 }
 
-/* 静态标题只画一次，16个缓存槽只分配给动态值和两个光标。 */
+/* 静态标题只画一次；状态栏下方与开始烧录上方各留一空行。 */
 static void draw_main(void)
 {
     if(!g_ui_ready)
     {
         UI_EnterPage(10);
-        UI_TextColor(8, 28, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
-        UI_TextColor(8, 48, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
-        UI_TextColor(8, 68, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
-        UI_TextColor(8, 88, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
-        UI_TextColor(8, 108, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
-        UI_TextColor(8, 128, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
-        UI_TextColor(8, 168, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
-        UI_TextColor(8, 188, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
-        UI_TextColor(8, 208, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
-        UI_TextColor(8, 248, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
-        UI_TextColor(8, 268, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
-        UI_TextColor(64, 28, "000", 16, 1, LCD_YELLOW);
-        UI_TextColor(80, 48, "3.3V", 16, 1, LCD_YELLOW);
+        UI_TextColor(8, 48, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
+        UI_TextColor(8, 68, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
+        UI_TextColor(8, 88, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
+        UI_TextColor(8, 108, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
+        UI_TextColor(8, 128, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
+        UI_TextColor(8, 148, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
+        UI_TextColor(8, 188, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
+        UI_TextColor(8, 208, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
+        UI_TextColor(8, 228, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
+        UI_TextColor(8, 268, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
+        UI_TextColor(8, 288, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
+        UI_TextColor(64, 48, "000", 16, 1, LCD_YELLOW);
+        UI_TextColor(80, 68, "3.3V", 16, 1, LCD_YELLOW);
         g_ui_ready = 1;
         show_top(1);
     }
-    show_chip_name(68);
-    show_firmware_name(128);
-    UI_FieldColor(2, 80, 88, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
-    show_checksum(108);
+    show_chip_name(88);
+    show_firmware_name(148);
+    UI_FieldColor(2, 80, 108, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
+    show_checksum(128);
     show_counts();
-    UI_FieldColor(7, 0, 128, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
-    UI_FieldColor(8, 0, 248, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
+    UI_FieldColor(7, 0, 148, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
+    UI_FieldColor(8, 0, 268, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
     show_top(0);
-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
 }
 
 static void reset_feedback(void)
@@ -587,7 +587,7 @@ static void show_download_progress(uint8_t percent)
 {
     uint8_t next = (uint8_t)(15U + 70U * (percent > 100 ? 100 : percent) / 100U);
     if(next > g_ui_percent) g_ui_percent = next;
-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
 }
 
 /* 保存反馈文字并叠加在底部进度条内，自动和手动模式共用。
@@ -609,7 +609,7 @@ static void show_download_status(const char *status)
         else if(strstr(status, "\xD0\xA3\xD1\xE9\x4F\x50\x54") || strstr(status, "\xB6\xC1\xC8\xA1\x4F\x50\x54") || strstr(status, "\xBC\xEC\xB2\xE9\x4F\x50\x54")) next = 95;
         if(next > g_ui_percent) g_ui_percent = next;
     }
-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
     show_counts();
 }
 

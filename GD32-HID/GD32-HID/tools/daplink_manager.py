@@ -56,6 +56,7 @@ EP_IN = 0x82
 PACKET_SIZE = 64
 MAX_DATA = 56
 TIMEOUT = 5000
+BURN_QUOTA_MAX = 100000  # 次数输入、设备响应和控件共用同一上限。
 PREPARE_TIMEOUT = 30000  # 设备需要回读主BIN计算SUM32，大文件准备响应允许等待30秒。
 
 CMD_LIST_DIR    = 0x01
@@ -249,8 +250,8 @@ class DAPLinkDevice:
         if resp[2] > 1 or resp[3] > 1:
             raise RuntimeError("设备次数响应无效。")
         remaining = struct.unpack('<I', resp[4:8])[0]
-        if remaining > 999 or (not resp[2] and remaining):
-            raise RuntimeError("设备剩余次数无效。")
+        if remaining > BURN_QUOTA_MAX or (not resp[2] and remaining):
+            raise RuntimeError(f"设备剩余次数无效（应为 0–{BURN_QUOTA_MAX}）。")
         return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
 
     @staticmethod
@@ -275,8 +276,8 @@ class DAPLinkDevice:
 
     # 发送0x0E指令设置次数并检查设备回传，取消限制时额度归零但恢复不限。
     def set_burn_quota(self, enabled, remaining, program_name=None):
-        if not isinstance(remaining, int) or not 0 <= remaining <= 999:
-            raise ValueError("烧录次数必须为 0–999。")
+        if not isinstance(remaining, int) or not 0 <= remaining <= BURN_QUOTA_MAX:
+            raise ValueError(f"烧录次数必须为 0–{BURN_QUOTA_MAX}。")
         remaining = remaining if enabled else 0
         request = (bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining) +
                    self._quota_name_bytes(program_name))
@@ -691,9 +692,10 @@ class DAPLinkManager(QMainWindow):
         quota_layout.setHorizontalSpacing(10)
         self.chk_quota = QCheckBox("启用次数限制")
         self.spin_quota = QSpinBox()
-        self.spin_quota.setRange(0, 999)
+        self.spin_quota.setRange(0, BURN_QUOTA_MAX)
         self.spin_quota.setValue(100)
         self.spin_quota.setSuffix(" 次")
+        self.spin_quota.setToolTip(f"次数范围：0–{BURN_QUOTA_MAX} 次；0 次表示额度已用尽，取消勾选为不限。")
         self.spin_quota.setMinimumWidth(100)
         self.btn_quota_save = QPushButton("保存当前固件")
         self.btn_quota_read = QPushButton("读取当前剩余")

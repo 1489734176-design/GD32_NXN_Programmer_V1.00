@@ -2,7 +2,9 @@
 #ifndef BURN_QUOTA_H
 #define BURN_QUOTA_H
 #include <stdint.h>
-#define BURN_QUOTA_MAX 999U
+#define BURN_QUOTA_MAX 100000U
+/* Historical encodings retain their original accepted range. */
+#define BURN_QUOTA_LEGACY_MAX 999U
 #define BURN_QUOTA_FLASH_BASE 0x0801F800UL
 #define BURN_QUOTA_PAGE_SIZE 1024U
 #define BURN_QUOTA_NAME_SIZE 32U

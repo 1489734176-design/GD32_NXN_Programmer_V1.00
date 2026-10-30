@@ -1,10 +1,11 @@
-/* 内外Flash保存相同BQT4记录；烧录前回读校验，确认成功后扣次；双写失败禁烧。 */
+/* 内外Flash保存相同BQT5记录；烧录前回读校验，确认成功后扣次；双写失败禁烧。 */
 #include "burn_quota.h"
 #include "burn_quota_mirror.h"
 #include "quota_auth.h"
 #include <string.h>
 
-#define QUOTA_MAGIC 0x34545142UL
+#define QUOTA_MAGIC 0x35545142UL
+#define V4_MAGIC 0x34545142UL
 #define V3_MAGIC 0x33545142UL
 #define V2_MAGIC 0x32545142UL
 #define V1_MAGIC 0x31545142UL
@@ -39,7 +40,7 @@ static uint8_t normalize_name(uint8_t *out, const uint8_t *in)
     return 0;
 }
 
-/* CRC只用于识别旧版，BQT3的授权依据始终是HMAC。 */
+/* CRC只用于识别旧版，BQT3及新版的授权依据始终是HMAC。 */
 static uint32_t checksum(const uint32_t *words, uint8_t count)
 {
     uint32_t crc = 0xFFFFFFFFUL;
@@ -57,12 +58,18 @@ static uint8_t record_valid(const uint32_t *r, uint8_t version)
     uint8_t name[BURN_QUOTA_NAME_SIZE], tag[16];
     uint32_t remaining = r[3] & 0xFFFFU, total = r[3] >> 16;
     if(version == 3 && r[0] == QUOTA_MAGIC) {
-        /* BQT4 keeps 96-byte slots: flags, packed total/remaining, used.
-         * HMAC protects all three words; the old redundant inverse is gone. */
-        if(r[2] > 3U || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
+        /* BQT5 retains the authenticated 96-byte slot. Total shares only
+         * the two flag bits; remaining and used each keep all 32 bits. */
+        total = r[2] >> 2;
+        if(total > BURN_QUOTA_MAX || r[3] > BURN_QUOTA_MAX ||
+           (!(r[2] & 1U) && r[3]) ||
+           (!(r[2] & 2U) && (total || r[4]))) return 0;
+    } else if(version == 3 && r[0] == V4_MAGIC) {
+        /* Decode BQT4 exactly as written by the 999-limit firmware. */
+        if(r[2] > 3U || remaining > BURN_QUOTA_LEGACY_MAX || total > BURN_QUOTA_LEGACY_MAX ||
            (!(r[2] & 1U) && remaining) ||
            (!(r[2] & 2U) && (total || r[4]))) return 0;
-    } else if(r[2] > 1 || r[3] > BURN_QUOTA_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
+    } else if(r[2] > 1 || r[3] > BURN_QUOTA_LEGACY_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
     if(version == 1)
         return r[0] == V1_MAGIC && r[5] == checksum(r, 5) && r[6] == ~r[1] && r[7] == QUOTA_COMMIT;
     if(!normalize_name(name, (const uint8_t *)&r[5]) ||
@@ -70,7 +77,7 @@ static uint8_t record_valid(const uint32_t *r, uint8_t version)
     if(version == 2)
         return r[0] == V2_MAGIC && r[15] == checksum(r, 15) && r[16] == ~r[1] &&
                r[17] == QUOTA_COMMIT && (r[13] || !r[14]);
-    if((r[0] != QUOTA_MAGIC && r[0] != V3_MAGIC) || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
+    if((r[0] != QUOTA_MAGIC && r[0] != V4_MAGIC && r[0] != V3_MAGIC) || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
        (!r[13] && (r[14] || r[15] || r[16] || r[17]))) return 0;
     quota_auth_tag(1, r, 18U * 4U, tag);
     return quota_auth_equal(tag, &r[18], sizeof(tag));
@@ -112,11 +119,12 @@ void burn_quota_init(void)
                 }
                 if(!quota_valid || (int32_t)(r[1] - quota_sequence) > 0) {
                     quota_valid = 1; quota_sequence = r[1]; quota_enabled = (uint8_t)(r[2] & 1U);
-                    quota_remaining = r[0] == QUOTA_MAGIC ? r[3] & 0xFFFFU : r[3];
+                    quota_remaining = r[0] == V4_MAGIC ? r[3] & 0xFFFFU : r[3];
                     memset(&quota_stats, 0, sizeof(quota_stats));
-                    if(r[0] == QUOTA_MAGIC) {
+                    if(r[0] == QUOTA_MAGIC || r[0] == V4_MAGIC) {
                         quota_stats.known = (uint8_t)((r[2] >> 1) & 1U);
-                        quota_stats.total = r[3] >> 16; quota_stats.used = r[4];
+                        quota_stats.total = r[0] == QUOTA_MAGIC ? r[2] >> 2 : r[3] >> 16;
+                        quota_stats.used = r[4];
                     }
                     quota_page = page; quota_address = address;
                     legacy_pending = version == 3 ? 0 : version;
@@ -171,8 +179,8 @@ static uint8_t append(const uint8_t *name, uint8_t enabled, uint32_t remaining,
     uint8_t i, page = quota_page, slot = occupied[quota_page], preserved = quota_page;
     memset(r, 0, sizeof(r));
     r[0] = QUOTA_MAGIC; r[1] = quota_sequence + 1U;
-    r[2] = enabled | ((uint32_t)stats->known << 1);
-    r[3] = remaining | (stats->total << 16); r[4] = stats->used;
+    r[2] = enabled | ((uint32_t)stats->known << 1) | (stats->total << 2);
+    r[3] = remaining; r[4] = stats->used;
     memcpy(&r[5], name, BURN_QUOTA_NAME_SIZE);
     r[13] = catalog->length; memcpy(&r[14], catalog->tag, 16);
     quota_auth_tag(1, r, 18U * 4U, (uint8_t *)&r[18]);
