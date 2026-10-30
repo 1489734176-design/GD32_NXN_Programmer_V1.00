@@ -9,6 +9,7 @@
 #include "burn_quota.h"
 #include "selection_store.h"
 #include "bsp_lcd.h"
+#include "ui_boot_logo.h"
 
 
 usb_dev usb_hid;
@@ -488,6 +489,34 @@ void INTX_ENABLE(void)
 
 /* 启动时恢复选择和次数，直接进入同一个竖屏界面。
  * 返回 - 无 */
+/* Draw the supplied NXN logo and caption as one centered group.
+ * Red antialias levels are stored in Flash as short horizontal spans.
+ * All writes complete synchronously before the 1000ms RTOS hold begins. */
+static void show_boot_logo(void)
+{
+    uint16_t logo_x = (LCD_WIDTH - BOOT_LOGO_WIDTH) / 2U;
+    uint16_t group_height = BOOT_LOGO_HEIGHT + 16U + BOOT_CAPTION_HEIGHT;
+    uint16_t logo_y = (LCD_HEIGHT - group_height) / 2U;
+    uint16_t i, row = 0, col = 0, span;
+    uint8_t token;
+    OLED_Clear();
+    for(i = 0; i < sizeof(boot_logo_rle); i++)
+    {
+        token = boot_logo_rle[i];
+        span = (token & 15U) + 1U;
+        if(token >> 4)
+            LCD_Fill(logo_x + col, logo_y + row, span, 1,
+                     boot_logo_palette[token >> 4]);
+        col += span;
+        if(col == BOOT_LOGO_WIDTH) { col = 0; row++; }
+    }
+    LCD_BlitMonoColor((LCD_WIDTH - BOOT_CAPTION_WIDTH) / 2U,
+                      logo_y + BOOT_LOGO_HEIGHT + 16U,
+                      BOOT_CAPTION_WIDTH, BOOT_CAPTION_HEIGHT,
+                      BOOT_CAPTION_STRIDE, boot_caption_bitmap, 0, 1, 1, LCD_RED);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
 void start_page(void)
 {
     uint8_t ret;
@@ -504,6 +533,7 @@ void start_page(void)
     app_data.mode = 2; app_data.head = 2; g_ui_ready = 0;
     reset_feedback();
     if(ret != FR_OK) { g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3"); }
+    show_boot_logo();
     draw_main();
 }
 
