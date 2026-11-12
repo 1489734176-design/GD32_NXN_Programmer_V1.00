@@ -17,6 +17,29 @@ import struct
 import threading
 import re
 
+# ─── Qt 平台插件路径修复（必须在 import PyQt5 之前执行）───────────────────────
+# 问题：工程路径含中文（6.烧录器）。Qt 5.15 的插件加载器使用 Win32 ANSI(非Unicode)
+# 文件系统 API，解析出的插件路径会把中文变成 "???"，导致 qwindows.dll 加载失败，
+# 弹出 "This application failed to start because no Qt platform plugin could be initialized"。
+# 方案：显式指定 QT_PLUGIN_PATH / QT_QPA_PLATFORM_PLUGIN_PATH 为真实 Unicode 路径。
+def _fix_qt_plugin_path():
+    try:
+        import PyQt5 as _pyqt5
+        _pkg_dir = os.path.dirname(os.path.abspath(_pyqt5.__file__))
+        _plugins = os.path.join(_pkg_dir, "Qt5", "plugins")
+        _platforms = os.path.join(_plugins, "platforms")
+        if os.path.isdir(_platforms):
+            os.environ.setdefault("QT_PLUGIN_PATH", _plugins)
+            os.environ.setdefault("QT_QPA_PLATFORM_PLUGIN_PATH", _platforms)
+            # Qt 会优先读这两个变量，覆盖它自己算出来的（被 ANSI 破坏的）路径
+            os.environ["QT_PLUGIN_PATH"] = _plugins
+            os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = _platforms
+    except Exception:
+        pass  # 交由 Qt 自己处理，不阻断启动
+
+
+_fix_qt_plugin_path()
+
 from intelhex import IntelHex
 
 import usb.core

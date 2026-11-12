@@ -7,6 +7,23 @@ Repeat with QT_SCALE_FACTOR=1.25 or 1.5 to check scaled layouts.
 import argparse
 from pathlib import Path
 
+# Qt 插件路径修复（必须在 import PyQt5 之前）：工程路径含中文时 Qt 的 ANSI 路径解析
+# 会变成 "???"，导致 "no Qt platform plugin could be initialized"。
+import os as _os
+def _fix_qt_plugin_path():
+    try:
+        import PyQt5 as _pyqt5
+        _pkg = _os.path.dirname(_os.path.abspath(_pyqt5.__file__))
+        _plugins = _os.path.join(_pkg, "Qt5", "plugins")
+        _platforms = _os.path.join(_plugins, "platforms")
+        if _os.path.isdir(_platforms):
+            _os.environ["QT_PLUGIN_PATH"] = _plugins
+            _os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = _platforms
+    except Exception:
+        pass
+
+_fix_qt_plugin_path()
+
 from PyQt5.QtCore import QPoint, Qt
 from PyQt5.QtGui import QFont, QPalette
 from PyQt5.QtTest import QTest
