@@ -1,0 +1,8 @@
+{
+  "executed": "actual compiled offline.axf Thumb status/quota code",
+  "checks": [
+    "Count/status refresh preserves pending OPT file path in limited and unlimited mode",
+    "Dynamic diagnostic in D survives quota display and is retained for automatic results"
+  ],
+  "hardware_tested": false
+}

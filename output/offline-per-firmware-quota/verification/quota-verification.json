@@ -1,0 +1,12 @@
+{
+  "passed": [
+    "A/B quotas independent across switch, case alias and restart",
+    "Reimport resets only destination; absent legacy firmware unlimited",
+    "Zero blocks, ordinary failure refunds, reboot preserves debit and reservation cannot switch",
+    "Empty selection cannot burn and invalid/aliasing names rejected",
+    "38 cut/error positions preserve source and destination quotas",
+    "Page rotations retain debit; lost committed catalog blocks rather than unlimited",
+    "BQT1 migration binds only last persisted firmware",
+    "17 torn first-initialization positions repair only through explicit quota setting"
+  ]
+}

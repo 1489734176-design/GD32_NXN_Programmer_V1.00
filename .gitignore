@@ -1,0 +1,32 @@
+# ===== Python 虚拟环境与缓存 =====
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# ===== 归档包（体积大，内容已由目录体现）=====
+*.zip
+
+# ===== 嵌套的独立 git 仓库（各自维护历史，主仓库不跟踪）=====
+Bootloader/Bootloader/
+资料/GD32-HID-标准FLM/GD32-HID/
+资料/_Template/
+资料/_Template-opt/
+资料/_Template-opt -0230/
+
+# ===== 本地工具与临时数据 =====
+.workbuddy-ai/
+.claude/
+.planning/
+
+# ===== 资料目录下的 Keil 编译中间产物 =====
+资料/**/Objects/
+资料/**/Listings/
+资料/**/GD32F10X_OBJ/
+资料/**/GD32F10X_EVAL/
+资料/**/*.o
+资料/**/*.crf
+资料/**/*.dep
+资料/**/*.lnp
+资料/**/*.htm
+资料/**/*.map
+资料/**/*.axf

@@ -1,0 +1,32 @@
+[
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.c",
+    "before": "fc943aa8cd524aff343ec14078941579af2122fb437c4f16a1c06c6e3050ca67",
+    "after": "7073938fa4cf23b30756675bb77ae4cc844d4cc4e7a04df32be9d07f96cf9306",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.h",
+    "before": "3d7b96d2192fc6197547abf8dc9d35768c8769f6af535f2b99859f2d3cf0b9d8",
+    "after": "3d7b96d2192fc6197547abf8dc9d35768c8769f6af535f2b99859f2d3cf0b9d8",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/tools/daplink_manager.py",
+    "before": "753964dddcc550bf779962fc3233d12b561fbde5920eba634b26f34f1e0c317f",
+    "after": "2db957a8786ed0fb6eaf2705b3bdd62185f371bd34e5d7953a7ed52d7f96628b",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c",
+    "before": "39c45d4c6a51649aa1916b9dfdf9ef36c6313307aff23c82df4ed2a8c180364d",
+    "after": "9ca6e64c1e7d0a989ecf60c63bf3c0078e1ec4e3f8b6064455d759a9c13e9671",
+    "encoding": "gbk"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h",
+    "before": "c879b1220ba86597998a464146fb0c9c3fb344ae8cc030a5ada819dc33140973",
+    "after": "42fbe0dfe3fb6004993eff008785bdffa4de4fac16e0b57c4c26e262c5ac7d51",
+    "encoding": "gbk"
+  }
+]

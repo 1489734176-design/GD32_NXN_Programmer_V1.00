@@ -1,0 +1,21 @@
+{
+  "product": {
+    "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\GD32-HID\\GD32-HID\\tools\\daplink_manager.py",
+    "original_sha256": "401868a69881aab9824f0939158511565b8e469bd6b3da69fefa0e8d384a1b0c",
+    "current_sha256": "3eea947d9d85b9875b32d0a4b798de1a00d0ef9a033f21bbb0b845619f24ded6",
+    "original_bytes": 74838,
+    "current_bytes": 75141,
+    "encoding": "UTF-8",
+    "original_crlf": 1635,
+    "current_crlf": 1637,
+    "original_lone_lf": 0,
+    "current_lone_lf": 0
+  },
+  "fixtures": {
+    "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-per-firmware-quota\\test_scoped_host.py": "17123f060a46c2ea08ab67f925a45cf7e190b19f959a20742ad8475c68f035e3",
+    "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-29-ui-optimizations\\host\\test_host_refresh.py": "2cc93a575cf13a30f7ac0e550226ff66c2731f364b89345becaaba004788d846",
+    "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-30-quota-100k-header-gap\\host\\scoped_host_fixture.py": "d9c11a03086892cf77d8f66064f59b158418eb8311d5b7e11b25e74dd391fe50",
+    "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-30-quota-100k-header-gap\\host\\refresh_fixture.py": "910673c1ff2b287d0258c16a8f9382da0a96d11fe2387ef2d0e22f3cdca787a5",
+    "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-30-quota-100k-header-gap\\host\\test_quota_100k.py": "3b54c896cd489e0a349042e3b0d015a43ed292d74bfdc6d44cc9f7811fa00236"
+  }
+}

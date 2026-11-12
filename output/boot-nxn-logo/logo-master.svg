@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 120 120" width="120" height="120">
+  <title>NXN geometric logo</title>
+  <desc>Approved N and X masters. Tapered reference-style arcs related by180-degree rotation.</desc>
+  <defs>
+    <clipPath id="letter-box"><rect width="32" height="34"/></clipPath>
+    <polygon id="diagonal" points="-0.896153423,0 8.896153423,0 32.896153423,34 23.103846577,34"/>
+    <g id="letter-n" clip-path="url(#letter-box)">
+      <rect width="8" height="34"/><rect x="24" width="8" height="34"/>
+      <use xlink:href="#diagonal"/>
+    </g>
+    <g id="letter-x" clip-path="url(#letter-box)">
+      <use xlink:href="#diagonal"/>
+      <use xlink:href="#diagonal" transform="translate(32 0) scale(-1 1)"/>
+    </g>
+  </defs>
+  <rect width="120" height="120" fill="#000"/>
+  <g fill="#f00">
+    <path id="tapered-arc" d="M8 36 C18 14 40 0 61 0 C85 0 107 16 112 38 C105 20 87 10 69 10 C49 10 34 19 23 36 Z"/>
+    <use xlink:href="#tapered-arc" transform="rotate(180 60 60)"/>
+  </g>
+  <g fill="#f00">
+    <use xlink:href="#letter-n" transform="translate(0 43)"/>
+    <use xlink:href="#letter-x" transform="translate(44 43)"/>
+    <use xlink:href="#letter-n" transform="translate(88 43)"/>
+  </g>
+</svg>

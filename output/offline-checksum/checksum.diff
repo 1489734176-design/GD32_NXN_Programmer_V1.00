@@ -1,0 +1,627 @@
+--- before/GD32-HID/GD32-HID/USER/APP/run.c
++++ after/GD32-HID/GD32-HID/USER/APP/run.c
+@@ -95,6 +95,17 @@
+    repeat the failure reason after mode4 has returned */
+ static char g_last_status[64] = {0};
+ 
++/* 当前成功导入的主固件SUM32；有效标记独立保存，校验值00000000也有效。 */
++static uint32_t g_program_checksum;
++static uint8_t g_program_checksum_valid;
++
++/* 固件被改写、取消或更换后清除旧校验值；下次只刷新Checksum文字行。 */
++static void invalidate_program_checksum(void)
++{
++    g_program_checksum_valid = 0;
++    oled.Refresh_flag = 1;
++}
++
+ /* Quota gets a full-width 32px row. Key hints move to a separate 16px footer. */
+ /* 显示剩余次数：三位数字补零或“不限”。独立栈缓冲区保护文件路径D，避免OPT校验打开错误文件。 */
+ static void show_quota(uint16_t y)
+@@ -110,6 +121,19 @@
+     UI_Field(5, 8, y, 304, 16, quota_text, 16, 1); /* 次数变化只覆盖变化数字。 */
+ }
+ 
++/* 显示文字：Checksum: 01234567。SUM32为最终BIN所有字节累加的32位值，
++ * 固件未成功导入或已更换时显示Checksum: --------；字号16像素，数字前补0。
++ * 独立栈缓冲保护OPT文件路径D；复用空闲字段13，只绘制变化字符。 */
++static void show_checksum(uint16_t y)
++{
++    char checksum_text[24];
++    if(g_program_checksum_valid && app_data.bin_name[0])
++        sprintf(checksum_text, "Checksum: %08lX", (unsigned long)g_program_checksum);
++    else
++        strcpy(checksum_text, "Checksum: --------");
++    UI_Field(13, 8, y, 304, 16, checksum_text, 16, 1);
++}
++
+ /* 接收上位机导入的算法、固件与OPT开关，切入烧录页并保持USB后台连接；不重置次数。 */
+ static void apply_prepare_download(const uint8_t *algorithm_name,
+                                    const uint8_t *program_name,
+@@ -122,6 +146,9 @@
+     strncpy((char *)app_data.bin_name, (const char *)program_name,
+             sizeof(app_data.bin_name) - 1);
+     app_data.bin_name[sizeof(app_data.bin_name) - 1] = '\0';
++    /* 仅在设备回读校验并确认导入后提交校验值；算法/OPT不计入SUM32。 */
++    g_program_checksum = custombulk_prepared_checksum();
++    g_program_checksum_valid = 1;
+     app_data.mode = 2;
+     app_data.head = 2;
+     key_val.mesg = 0;
+@@ -297,6 +324,7 @@
+ 		oled.Refresh_flag = 0;
+ 	}
+     show_quota(g_auto_en ? 148 : 136);
++    show_checksum(g_auto_en ? 166 : 156); /* 次数下方独立16像素校验行，保留全屏布局。 */
+     show_top(0);
+ }
+ 
+@@ -314,6 +342,7 @@
+     strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+     g_last_status[sizeof(g_last_status) - 1] = '\0';
+     show_quota(208);
++    show_checksum(224); /* 烧录及结果页底行显示主固件校验值，避免与两行状态重叠。 */
+ }
+ 
+ /* Native LCD error page: wrapped 32px title, complete 16px register values. */
+@@ -336,6 +365,7 @@
+     sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
+     UI_Text(8, 172, (char *)D, 16, 1);
+     show_quota(208);
++    show_checksum(224); /* 诊断页保留主固件Checksum，独立于OPT与诊断寄存器。 */
+ }
+ 
+ /* Connect and halt the core as fast as possible.
+@@ -518,6 +548,7 @@
+     UI_Field(3, 8, 96, 304, 32, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1); /* 显示文字：烧录固件 */
+     UI_Field(4, 8, 128, 304, 16, (const char *)app_data.bin_name, 16, 1);
+     show_quota(148);
++    show_checksum(166); /* 自动待机/结果页：校验行位于次数与失败原因之间。 */
+     UI_Field(6, 8, 184, 304, 32, detail, UI_TextWidth(detail, 32) <= 304 ? 32 : 16, 1);
+     UI_Field(7, 8, 224, 160, 16, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1); /* 显示文字：长按右键:手动 */
+ }
+@@ -579,7 +610,7 @@
+ 	}
+ 
+     if(g_burn_done) /* 手动结果页允许后台设置次数，只刷新次数行。 */
+-    { show_quota(208); return; }
++    { show_quota(208); show_checksum(224); return; } /* 结果页仅局刷次数与校验值。 */
+ 	g_burn_done = 1;
+ 	g_burn_ok = 0;
+ 
+@@ -1123,6 +1154,9 @@
+ 						}	
+ 						else if(app_data.head == 1)
+ 						{
++							/* 手动切换固件名称后旧导入校验值失效，避免显示另一程序的SUM32。 */
++							if(strcmp((char *)app_data.bin_name, FileInfo.fname))
++								invalidate_program_checksum();
+ 							memset(app_data.bin_name, '\0', 32);
+ 							strncpy((char *)app_data.bin_name, FileInfo.fname, sizeof(app_data.bin_name) - 1);
+ 							/* manual pick on device: program OPT if the file exists (old behaviour) */
+@@ -1146,6 +1180,7 @@
+ 		if(!sum)
+ 		{
+ 			index = 0;
++            if(app_data.head == 1) invalidate_program_checksum(); /* 固件目录为空，不能保留旧Checksum。 */
+ 			UI_Field(1, 8, 52, 304, 32, "\xC3\xBB\xD3\xD0\xCE\xC4\xBC\xFE", 32, 1); /* 显示文字：没有文件 */
+ 		}
+         sprintf((char *)D, "%lu/%lu", (unsigned long)(sum ? index + 1 : 0), (unsigned long)sum);
+@@ -1162,6 +1197,7 @@
+ 		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
+ 		uint8_t prepare_program[CB_MAX_NAME + 1];
+ 		uint8_t prepare_opt;
++        uint32_t prepare_irq_mask; /* 短临界区保护导入确认与界面提交，禁止复位插入二者之间。 */
+ 
+ 		pwr_init();
+ 		led_init();
+@@ -1219,6 +1255,11 @@
+             custombulk_file_service(&usb_hid); /* 所有文件系统访问集中到主任务。 */
+             custombulk_quota_service(&usb_hid);
+ 			custombulk_prepare_service(&usb_hid);
++            /* 文件读取已结束：下面只消费状态及拷贝名称，不在临界区读文件/刷新LCD。
++             * 保存并恢复原PRIMASK，确保高优先级USB复位也无法提交半个旧会话。 */
++            prepare_irq_mask = __get_PRIMASK();
++            __disable_irq();
++            if(custombulk_take_files_changed()) invalidate_program_checksum();
+ 			if(custombulk_take_prepare_complete(prepare_algorithm,
+ 			                                    prepare_program,
+ 			                                    &prepare_opt))
+@@ -1227,6 +1268,7 @@
+ 				                       prepare_program,
+ 				                       prepare_opt);
+ 			}
++            __set_PRIMASK(prepare_irq_mask);
+ //			vTaskDelay(1000);
+ 			switch(app_data.mode)
+ 			{
+--- before/GD32-HID/GD32-HID/tools/daplink_manager.py
++++ after/GD32-HID/GD32-HID/tools/daplink_manager.py
+@@ -56,6 +56,7 @@
+ PACKET_SIZE = 64
+ MAX_DATA = 56
+ TIMEOUT = 5000
++PREPARE_TIMEOUT = 30000  # 设备需要回读主BIN计算SUM32，大文件准备响应允许等待30秒。
+ 
+ CMD_LIST_DIR    = 0x01
+ CMD_OPEN_WRITE  = 0x02
+@@ -144,7 +145,8 @@
+     def _send_cmd(self, cmd_data):
+         with self._command_lock:
+             self.ep_out.write(cmd_data, timeout=TIMEOUT)
+-            data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
++            response_timeout = PREPARE_TIMEOUT if cmd_data and cmd_data[0] == CMD_PREPARE_DOWNLOAD else TIMEOUT
++            data = self.ep_in.read(PACKET_SIZE, timeout=response_timeout)  # 只延长0x0C准备响应，普通USB指令仍等待5秒。
+             return bytes(data)
+ 
+     def list_dir(self, path="/"):
+@@ -204,17 +206,34 @@
+         if not resp or resp[0] != STATUS_OK:
+             raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
+ 
+-    def prepare_download(self, program_name, opt_required):
++    # 0x0C准备指令：bit0表示OPT，bit1表示随后携带主BIN的SUM32（小端32位）。
++    def prepare_download(self, program_name, opt_required, checksum=None):
+         if not program_name or len(program_name.encode('ascii')) > 31:
+             raise ValueError("Program filename must be 1-31 ASCII characters")
+         flags = 1 if opt_required else 0
+-        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + program_name.encode('ascii'))
++        checksum_data = b''
++        if checksum is not None:
++            # 校验值0也是有效值，不能用真假判断；只接受无符号32位整数。
++            if type(checksum) is not int or not 0 <= checksum <= 0xFFFFFFFF:
++                raise ValueError("Checksum(SUM32) 必须为 0–FFFFFFFF 的整数。")
++            flags |= 2
++            checksum_data = struct.pack('<I', checksum)
++        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + checksum_data + program_name.encode('ascii'))
+         if not resp:
+-            raise RuntimeError("Prepare response was empty")
++            raise RuntimeError("设备准备响应为空，无法确认 Checksum(SUM32)。")
+         if resp[0] == STATUS_BUSY:
+-            raise RuntimeError("Device is busy")
++            raise RuntimeError("设备正在传输或烧录，请完成后再导入。")
+         if resp[0] != STATUS_OK:
+-            raise RuntimeError("Device rejected download preparation")
++            raise RuntimeError("设备拒绝导入准备，请检查程序、算法、OPT文件和 Checksum(SUM32)。")
++        # 旧调用允许旧固件仅返回OK；请求校验时必须收到完整5字节及匹配的值。
++        if len(resp) == 1 and checksum is None:
++            return None
++        if len(resp) != 5:
++            raise RuntimeError("设备未返回完整 Checksum(SUM32)，请更新固件后重试。")
++        actual_checksum = struct.unpack('<I', resp[1:5])[0]
++        if checksum is not None and actual_checksum != checksum:
++            raise RuntimeError(f"Checksum(SUM32) 不一致：上位机 {checksum:08X}，设备 {actual_checksum:08X}。")
++        return actual_checksum
+ 
+     @staticmethod
+     # 验证设备次数响应的状态、版本、长度与范围，返回启用/异常/剩余次数字段。
+@@ -383,9 +402,11 @@
+         self.program_path = program_path
+         self.algorithm_name = algorithm_name
+         self.opt_path = opt_path
++        self.checksum = None  # 只在设备确认主BIN的SUM32后保留值，供GUI显示。
+ 
+     # 后台导入固件、算法和可选OPT文件，确认准备完成后设备转入离线烧录。
+     def run(self):
++        self.checksum = None  # 每次导入开始清除此前结果，失败不能沿用旧校验值。
+         try:
+             try:
+                 self.device.mkdir("0:/download/bin/")
+@@ -395,6 +416,12 @@
+             # 先暂存算法名锁住整个导入过程，防止固件与OPT两次上传间隙自动开始。
+             self.device.stage_algorithm(self.algorithm_name)
+             prog_name = os.path.basename(self.program_path)
++            # 只累加最终上传主BIN的全部字节；HEX填洞已在转换时写入BIN，OPT/算法和尾页填充不计。
++            # 上传前确定期望值；若本地文件或传输内容变化，由设备prepare校验拒绝提交。
++            expected_checksum = 0
++            with open(self.program_path, 'rb') as program_file:
++                for chunk in iter(lambda: program_file.read(65536), b''):
++                    expected_checksum = (expected_checksum + sum(chunk)) & 0xFFFFFFFF
+             self.log.emit("Uploading program: " + prog_name)
+             written = self.device.push(
+                 self.program_path,
+@@ -416,7 +443,8 @@
+ 
+             self.log.emit("Preparing offline programming")
+             self.device.stage_algorithm(self.algorithm_name)
+-            self.device.prepare_download(prog_name, opt_required)
++            self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum)
++            self.log.emit(f"Checksum(SUM32): {self.checksum:08X}")  # 已由设备确认，按8位大写十六进制显示。
+             self.finished.emit(True, "Device ready for offline programming")
+         except Exception as e:
+             # 导入失败取消暂存，恢复设备待机；断线时取消失败交由设备断线清理。
+@@ -536,12 +564,19 @@
+         row1.addWidget(self.lbl_status_text)
+         row1.addStretch()
+         status_layout.addLayout(row1)
+-        # Row 2: path
++        # 第二行显示路径与最近成功导入主BIN的校验值，共用一行以适应小窗口和OPT布局。
++        row2 = QHBoxLayout()
+         self.lbl_path = QLabel("路径: /")
+         self.lbl_path.setFont(QFont("Consolas", 9))
+         self.lbl_path.setStyleSheet("color: #555;")
+         self.lbl_path.setWordWrap(True)
+-        status_layout.addWidget(self.lbl_path)
++        row2.addWidget(self.lbl_path, 1)
++        self.lbl_checksum = QLabel("Checksum(SUM32): --------")  # 横线表示尚无成功导入，避免误认成有效的零校验值。
++        self.lbl_checksum.setFont(QFont("Consolas", 10))
++        self.lbl_checksum.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
++        self.lbl_checksum.setToolTip("最近成功导入主BIN的全部字节相加，取低32位；HEX填洞计入，OPT和算法不计。")
++        row2.addWidget(self.lbl_checksum)
++        status_layout.addLayout(row2)
+         layout.addWidget(self.status_frame)
+ 
+         # ── Chip & OPT Selection Bar ──
+@@ -549,7 +584,7 @@
+         self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
+         self.chip_opt_frame.setProperty("panel", True)
+         chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
+-        chip_opt_layout.setContentsMargins(12, 12, 12, 12)
++        chip_opt_layout.setContentsMargins(12, 8, 12, 8)  # 减少竖向留白，900×600时芯片框不能覆盖配额框。
+         chip_opt_layout.setSpacing(12)
+         chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
+ 
+@@ -598,7 +633,7 @@
+         self.opt_scroll = QScrollArea()
+         self.opt_scroll.setObjectName("optScroll")
+         self.opt_scroll.setWidgetResizable(True)
+-        self.opt_scroll.setMinimumHeight(100)
++        self.opt_scroll.setMinimumHeight(48)  # 小窗口及上传进度条出现时允许滚动查看OPT，保持配额控件完整尺寸。
+         self.opt_scroll.setMaximumHeight(350)
+         self.opt_scroll.setVisible(True)
+         self.opt_content = QWidget()
+@@ -650,6 +685,7 @@
+         local_layout.addWidget(lbl_local)
+ 
+         self.local_tree = QTreeWidget()
++        self.local_tree.setMinimumHeight(32)  # 文件区可在小窗口收缩，给OPT和配额区域留出空间。
+         self.local_tree.setHeaderLabels(["名称", "大小", "类型"])
+         self.local_tree.setRootIsDecorated(False)
+         self.local_tree.setAlternatingRowColors(True)
+@@ -681,6 +717,7 @@
+         remote_layout.addWidget(lbl_remote)
+ 
+         self.remote_tree = QTreeWidget()
++        self.remote_tree.setMinimumHeight(32)  # 保持两侧文件区一致，不再以默认最小高度挤压上方配置框。
+         self.remote_tree.setHeaderLabels(["名称", "大小", "类型"])
+         self.remote_tree.setRootIsDecorated(False)
+         self.remote_tree.setAlternatingRowColors(True)
+@@ -861,6 +898,8 @@
+ 
+     def _set_import_state(self, active):
+         self.import_in_progress = active
++        if active:
++            self.lbl_checksum.setText("Checksum(SUM32): --------")  # 新导入开始即清除旧值，上传期间不显示未验证值。
+         self.remote_tree.setEnabled(not active)
+         self.remote_path_input.setEnabled(not active)
+         self._update_toolbar_state()
+@@ -1407,6 +1446,8 @@
+         if not file_path:
+             return
+ 
++        self.lbl_checksum.setText("Checksum(SUM32): --------")  # 已选定新文件；HEX转换或文件检查失败也不能沿用旧值。
++
+         # Convert .hex to .bin if needed
+         if file_path.lower().endswith('.hex'):
+             try:
+@@ -1509,6 +1550,10 @@
+     def _import_done(self, ok, msg):
+         self.progress.setVisible(False)
+         if ok:
++            # 兼容既有完成回调；只有新导入线程保留的已验证校验值才显示。
++            checksum = getattr(self.worker, 'checksum', None)
++            if checksum is not None:
++                self.lbl_checksum.setText(f"Checksum(SUM32): {checksum:08X}")
+             # 新固件留在烧录页继续USB通信，导入完成后保持连接状态和远端列表。
+             self.statusBar().showMessage("导入完成，设备已准备烧录，USB保持连接。")
+             QMessageBox.information(self, "导入完成",
+@@ -1516,6 +1561,7 @@
+                                     "自动模式检测到芯片后开始烧录；手动模式按中键开始。\n"
+                                     "上位机仍保持连接，可继续设置次数和传输文件。")
+         else:
++            self.lbl_checksum.setText("Checksum(SUM32): --------")  # 导入失败不得保留此前成功值。
+             self.statusBar().showMessage(f"导入失败: {msg}")
+             QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")
+         self._set_import_state(False)
+--- before/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c
++++ after/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c
+@@ -22,6 +22,12 @@
+ static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
+ static uint8_t prepare_program[CB_MAX_NAME + 1];
+ static uint8_t prepare_opt_required;
++/* 主BIN按字节累加SUM32；已准备的值供LCD提交时读取。 */
++static uint8_t prepare_has_checksum;
++static uint32_t prepare_expected_checksum;
++static uint32_t prepared_checksum;
++/* 变更事件由主任务消费；只读及mkdir不使LCD校验值失效。 */
++static volatile uint8_t files_changed_pending;
+ static volatile uint8_t prepare_request_pending;
+ static volatile uint8_t prepare_response_pending;
+ static volatile uint8_t prepare_complete_pending;
+@@ -153,7 +159,12 @@
+ void custombulk_reset(void)
+ {
+     if(cb_handler.file_opened == 2 || staged_algorithm[0])
+-        app_data.bin_name[0] = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
++    {
++        app_data.bin_name[0] = 0;
++        files_changed_pending = 1; /* 中断导入时清选择，普通完成会话重连保留LCD值。 */
++    }
++    prepared_checksum = 0;
++    prepare_expected_checksum = 0; prepare_has_checksum = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
+     file_cleanup_pending = 1; file_request_pending = 0;
+     cb_handler.transfer_active = 0;
+     prepare_request_pending = 0; prepare_response_pending = 0;
+@@ -259,6 +270,7 @@
+         return;
+     }
+ 
++    files_changed_pending = 1; /* CREATE_ALWAYS已创建/截断，旧LCD校验值失效。 */
+     cb_handler.file_opened = 2;  /* write mode */
+     cb_handler.file_size = file_size;
+     cb_handler.bytes_transferred = 0;
+@@ -298,18 +310,29 @@
+ static void cmd_close_file(usb_dev *udev)
+ {
+     FRESULT res;
++    uint8_t writing = (cb_handler.file_opened == 2); /* 只对写上传错误撤销导入，读取关闭不影响已有Checksum。 */
+ 
+     if (cb_handler.file_opened == 0 ||
+         (cb_handler.file_opened == 2 &&
+          cb_handler.bytes_transferred != cb_handler.file_size)) {
+         if (cb_handler.file_opened)
+             f_close(&cb_fd);
++        if(writing) {
++            /* 未传够声明长度的文件不可prepare，即使随后已能正常读回也必须重新导入。 */
++            staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
++            files_changed_pending = 1; oled.Refresh_flag = 1;
++        }
+         cb_handler.file_opened = 0;
+         send_response(udev, STATUS_ERR, NULL, 0);
+         return;
+     }
+ 
+     res = f_close(&cb_fd);
++    if(writing && res != FR_OK) {
++        /* CLOSE失败说明上传未可靠落盘；清会话与旧校验值，禁止故障恢复后误提交。 */
++        staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
++        files_changed_pending = 1; oled.Refresh_flag = 1;
++    }
+     cb_handler.file_opened = 0;
+     oled.Refresh_flag = 1; /* 文件完成后重新比较列表/文件字段。 */
+     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
+@@ -393,7 +416,7 @@
+ 
+ 
+     res = f_unlink((const TCHAR *)path);
+-    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
++    if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
+     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
+ }
+ 
+@@ -443,7 +466,7 @@
+     uint8_t *new_path = &buf[1 + old_len + 1];
+ 
+     res = f_rename((const TCHAR *)old_path, (const TCHAR *)new_path);
+-    if(res == FR_OK) oled.Refresh_flag = 1; /* 上位机目录变更后只比较列表字段。 */
++    if(res == FR_OK) { files_changed_pending = 1; oled.Refresh_flag = 1; } /* 上位机目录变更后只比较列表字段。 */
+     send_response(udev, (res == FR_OK) ? STATUS_OK : STATUS_ERR, NULL, 0);
+ }
+ 
+@@ -504,92 +527,142 @@
+     {
+         if(cb_handler.file_opened) f_close(&cb_fd); /* 取消写入失败的导入，关闭尚未完成的文件。 */
+         cb_handler.file_opened = 0; staged_algorithm[0] = 0;
++        prepare_request_pending = 0; prepare_response_pending = 0; prepare_complete_pending = 0;
++        prepare_has_checksum = 0; prepare_expected_checksum = 0; prepared_checksum = 0;
++        files_changed_pending = 1;
+         app_data.bin_name[0] = 0; oled.Refresh_flag = 1; /* 残缺上传必须重新导入/选择后才可烧录。 */
+         send_response(udev, STATUS_OK, NULL, 0); return;
+     }
+ 
+     if (len < 2 || !valid_file_name(&buf[1], name_len) ||
+-        prepare_request_pending || prepare_response_pending) {
++        prepare_request_pending || prepare_response_pending || prepare_complete_pending) {
+         send_response(udev, STATUS_ERR, NULL, 0);
+         return;
+     }
+     memcpy(staged_algorithm, &buf[1], name_len);
+     staged_algorithm[name_len] = '\0';
++    files_changed_pending = 1; /* 新导入使旧LCD值失效，成功准备后才重新显示。 */
+     send_response(udev, STATUS_OK, NULL, 0);
+ }
+ 
+-/* PREPARE_DOWNLOAD: [CMD][flags][program file name] */
++/* PREPARE_DOWNLOAD: flags bit0=OPT，bit1=携带期望SUM32。
++ * bit1置位时[2..5]为LE32，文件名从6开始；否则旧格式文件名从2开始。
++ * 成功应答为[STATUS_OK][SUM32 LE32]，旧上位机可忽略追加的四字节。 */
+ static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
+ {
+-    uint16_t name_len;
+-
+-    if (len < 3 || (buf[1] & (uint8_t)~1U) != 0 ||
+-        !valid_file_name(&buf[2], len - 2) ||
++    uint16_t name_offset, name_len;
++    if (len < 3 || (buf[1] & (uint8_t)~3U) != 0) {
++        send_response(udev, STATUS_ERR, NULL, 0);
++        return;
++    }
++    name_offset = (buf[1] & 2U) ? 6U : 2U;
++    if (len <= name_offset || !valid_file_name(&buf[name_offset], len - name_offset) ||
+         staged_algorithm[0] == '\0' || prepare_request_pending ||
+-        prepare_response_pending) {
+-        send_response(udev, STATUS_ERR, NULL, 0);
+-        return;
+-    }
+-    if (g_programming_active) {
++        prepare_response_pending || prepare_complete_pending) {
++        send_response(udev, STATUS_ERR, NULL, 0);
++        return;
++    }
++    /* 必须等待成功CLOSE，不能对仍在上传的文件重复打开并误提交。 */
++    if (g_programming_active || cb_handler.file_opened) {
+         send_response(udev, STATUS_BUSY, NULL, 0);
+         return;
+     }
+-
+-    name_len = len - 2;
++    name_len = len - name_offset;
+     memcpy(prepare_algorithm, staged_algorithm, sizeof(prepare_algorithm));
+-    memcpy(prepare_program, &buf[2], name_len);
++    memcpy(prepare_program, &buf[name_offset], name_len);
+     prepare_program[name_len] = '\0';
+     prepare_opt_required = buf[1] & 1U;
++    prepare_has_checksum = (buf[1] & 2U) ? 1U : 0U;
++    prepare_expected_checksum = prepare_has_checksum ?
++        (uint32_t)buf[2] | ((uint32_t)buf[3] << 8) |
++        ((uint32_t)buf[4] << 16) | ((uint32_t)buf[5] << 24) : 0U;
+     prepare_request_pending = 1;
+ }
+ 
+-/* 在主任务中完成文件检查和导入确认，避免USB中断中执行耗时文件操作。 */
++/* 局部FIL和64字节栈缓冲回读主BIN；不复用烧录/OPT工作区或USB文件对象。
++ * USB复位只标记清理，所有读/关闭仍由当前主任务完成。 */
++static uint8_t file_sum32(const uint8_t *path, uint32_t *checksum)
++{
++    FIL sum_fd;
++    uint8_t buffer[64];
++    UINT br, request, i;
++    FRESULT res;
++    uint32_t size, done = 0, sum = 0;
++    if (file_cleanup_pending || f_open(&sum_fd, (const TCHAR *)path, FA_READ) != FR_OK)
++        return 0;
++    size = f_size(&sum_fd);
++    while (!file_cleanup_pending && done < size) {
++        request = (size - done > sizeof(buffer)) ? sizeof(buffer) : (UINT)(size - done);
++        res = f_read(&sum_fd, buffer, request, &br);
++        if (file_cleanup_pending || res != FR_OK || br != request)
++            break; /* FR_OK也可能短读，残缺固件不能接受。 */
++        for (i = 0; i < br; i++) sum += buffer[i]; /* uint32按模2^32溢出。 */
++        done += br;
++    }
++    res = f_close(&sum_fd); /* 成功open后的每条出口恰好close一次。 */
++    if (file_cleanup_pending || res != FR_OK || !size || done != size)
++        return 0;
++    *checksum = sum;
++    return 1;
++}
++
++/* 主任务检查算法/OPT存在并回读主固件，成功后才排队确认应答。 */
+ void custombulk_prepare_service(usb_dev *udev)
+ {
+     uint8_t algorithm[CB_MAX_NAME + 1];
+     uint8_t program[CB_MAX_NAME + 1];
+     uint8_t opt_name[64];
+-    uint8_t path[80];
+-
++    uint8_t path[80], response[4];
++    uint8_t status = STATUS_ERR;
++    uint32_t checksum, irq_mask;
+     if (!prepare_request_pending)
+         return;
+-
+     prepare_request_pending = 0;
+     memcpy(algorithm, prepare_algorithm, sizeof(algorithm));
+     memcpy(program, prepare_program, sizeof(program));
+-
+-    if (g_programming_active) {
+-        staged_algorithm[0] = '\0';
+-        send_response(udev, STATUS_BUSY, NULL, 0);
+-        return;
+-    }
+-
++    if (g_programming_active || cb_handler.file_opened) {
++        status = STATUS_BUSY;
++        goto prepare_error;
++    }
+     strcpy((char *)path, "0:/download/firmware/");
+     strcat((char *)path, (char *)algorithm);
+-    if (!file_available(path))
++    if (file_cleanup_pending || !file_available(path))
+         goto prepare_error;
+-
+     strcpy((char *)path, "0:/download/bin/");
+     strcat((char *)path, (char *)program);
+-    if (!file_available(path))
++    if (!file_sum32(path, &checksum))
+         goto prepare_error;
+-
++    if (prepare_has_checksum && checksum != prepare_expected_checksum)
++        goto prepare_error;
+     if (prepare_opt_required) {
+         if (!make_opt_name(program, opt_name))
+             goto prepare_error;
+         strcpy((char *)path, "0:/download/bin/");
+         strcat((char *)path, (char *)opt_name);
+-        if (!file_available(path))
++        if (file_cleanup_pending || !file_available(path))
+             goto prepare_error;
+     }
+-
+-    prepare_response_pending = 1;
+-    send_response(udev, STATUS_OK, NULL, 0);
++    response[0] = (uint8_t)checksum; response[1] = (uint8_t)(checksum >> 8);
++    response[2] = (uint8_t)(checksum >> 16); response[3] = (uint8_t)(checksum >> 24);
++    /* 最后有效性判断、置pending和排队应答不可被reset插入；临界区没有FatFs。 */
++    irq_mask = __get_PRIMASK(); __disable_irq();
++    if (!file_cleanup_pending && staged_algorithm[0]) {
++        prepared_checksum = checksum;
++        prepare_response_pending = 1;
++        send_response(udev, STATUS_OK, response, sizeof(response));
++    }
++    __set_PRIMASK(irq_mask);
+     return;
+-
+ prepare_error:
+-    staged_algorithm[0] = '\0';
+-    send_response(udev, STATUS_ERR, NULL, 0);
++    irq_mask = __get_PRIMASK(); __disable_irq();
++    if (!file_cleanup_pending) {
++        staged_algorithm[0] = '\0'; prepare_algorithm[0] = '\0'; prepare_program[0] = '\0';
++        prepare_response_pending = 0; prepare_complete_pending = 0;
++        prepare_has_checksum = 0; prepare_expected_checksum = 0;
++        app_data.bin_name[0] = 0; files_changed_pending = 1; oled.Refresh_flag = 1;
++        send_response(udev, status, NULL, 0); /* 复位后不发旧应答或重新置busy。 */
++    }
++    __set_PRIMASK(irq_mask);
+ }
+ 
+ /* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
+@@ -611,6 +684,23 @@
+     return 1;
+ }
+ 
++/* take_prepare_complete保留原三参数；run.c提交文件名时读取确认的SUM32。 */
++uint32_t custombulk_prepared_checksum(void)
++{
++    return prepared_checksum;
++}
++
++/* 消费一次文件变更事件，兼容调用者已处于短临界区。 */
++uint8_t custombulk_take_files_changed(void)
++{
++    uint8_t changed;
++    uint32_t irq_mask = __get_PRIMASK();
++    __disable_irq();
++    changed = files_changed_pending; files_changed_pending = 0;
++    __set_PRIMASK(irq_mask);
++    return changed;
++}
++
+ /* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:
+  * [status][version=1][enabled][fault][remaining LE32]. Writes run in task context. */
+ /* 验证上位机次数指令并暂存；USB中断内不写Flash，交由主任务延后执行。 */
+--- before/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h
++++ after/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h
+@@ -70,6 +70,11 @@
+                                          uint8_t *program_name,
+                                          uint8_t *opt_required);
+ 
++/* 成功准备的主固件SUM32，保持到下一成功prepare、reset或取消；值0也合法。 */
++uint32_t custombulk_prepared_checksum(void);
++/* 主任务消费文件变更标记使LCD旧值失效；只读和mkdir不产生标记。 */
++uint8_t custombulk_take_files_changed(void);
++
+ /* Send response to host */
+ uint8_t custombulk_send_response(usb_dev *udev, uint8_t *data, uint16_t len);
+ 

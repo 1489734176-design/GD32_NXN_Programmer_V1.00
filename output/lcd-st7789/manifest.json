@@ -1,0 +1,16 @@
+{
+  "Bootloader-ST7789": {
+    "start": "0x8000000",
+    "bytes": 31852,
+    "initial_sp": "0x20003ff0",
+    "reset": "0x8000125",
+    "sha256": "31989f5a48679b85e78744e7568bc0d7edb081e6ce7f0c60ee990d58e3a7c240"
+  },
+  "DAPlink-ST7789": {
+    "start": "0x800c000",
+    "bytes": 60872,
+    "initial_sp": "0x20004dd0",
+    "reset": "0x800c1b5",
+    "sha256": "672fdd8d0bf652c664c194a6f55e893301f974f9f7a257eb3018bf69c59f431c"
+  }
+}

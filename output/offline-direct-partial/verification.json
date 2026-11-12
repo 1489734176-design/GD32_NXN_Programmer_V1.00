@@ -1,0 +1,121 @@
+{
+  "baseline": {
+    "code": 49468,
+    "ro": 11068,
+    "rw": 852,
+    "zi": 19212,
+    "ram": 20064,
+    "rom": 60908
+  },
+  "offline": {
+    "code": 44180,
+    "ro": 12064,
+    "rw": 772,
+    "zi": 16988,
+    "ram": 17760,
+    "rom": 56572
+  },
+  "online": {
+    "code": 52556,
+    "ro": 12136,
+    "rw": 880,
+    "zi": 19440,
+    "ram": 20320,
+    "rom": 65064
+  },
+  "boot": {
+    "code": 26432,
+    "ro": 6380,
+    "rw": 456,
+    "zi": 15040,
+    "ram": 15496,
+    "rom": 33012
+  },
+  "ram_saved": 2304,
+  "rom_saved": 4336,
+  "image_size": 56572,
+  "sha256": "1c29e0c7e71f978162c5ab50325008fe888531260476cf97b4bd5243d5042f83",
+  "config_descriptor_size": 115,
+  "interface_numbers": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "online_symbols_removed": [
+    "DAP_ProcessCommand",
+    "DAP_ExecuteCommand",
+    "DAP_Thread",
+    "DAP_TransferAbort",
+    "USB_Request",
+    "USB_Response",
+    "USB_Request_len",
+    "USB_Response_len",
+    "USBD_HID0_SetReport",
+    "custom_hid_class",
+    "customhid_report_descriptor",
+    "hid_handler",
+    "UsbTask_Handler",
+    "EventGroupHandle",
+    "xEventGroupCreate",
+    "xEventGroupWaitBits",
+    "xTimerCreateTimerTask",
+    "prvTimerTask"
+  ],
+  "offline_symbols_preserved": [
+    "DAP_Data",
+    "DAP_Setup",
+    "SWD_Transfer",
+    "SWJ_Sequence",
+    "swd_init",
+    "target_opt_program_ext",
+    "custombulk_class",
+    "custombulk_file_service",
+    "custombulk_is_busy",
+    "UI_Field",
+    "UI_EnterPage",
+    "custombulk_prepare_service",
+    "custombulk_take_prepare_complete",
+    "custombulk_quota_service",
+    "burn_quota_init",
+    "burn_quota_set",
+    "burn_quota_begin",
+    "burn_quota_finish",
+    "cdc_class",
+    "mode2",
+    "mode3",
+    "mode4",
+    "run_task",
+    "key_task"
+  ],
+  "heap": {
+    "size": 6144,
+    "tcb_size": 92,
+    "initial_task_allocations": 5576,
+    "estimated_initial_free": 560,
+    "note": "Calculated from compiled structure size and task allocations, not measured on hardware."
+  },
+  "vectors": {
+    "initial_sp": "0x200044d0",
+    "reset": "0x800c1b5"
+  },
+  "hardware_tested": false,
+  "partial_refresh": {
+    "text_cache_bytes": 1216,
+    "framebuffer": false,
+    "removed_pages": [
+      "page",
+      "mode1"
+    ],
+    "ram_added": 1224
+  },
+  "quota": {
+    "flash_base": "0x0801F800",
+    "reserved_bytes": 2048,
+    "maximum": 999,
+    "default": "unlimited",
+    "normal_failure": "refund",
+    "interrupted_power": "consume reserved attempt",
+    "ram_added": 1248
+  }
+}

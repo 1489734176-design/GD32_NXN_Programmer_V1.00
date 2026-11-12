@@ -1,0 +1,99 @@
+{
+  "release": "compact-numbered-ui",
+  "hardware_tested": false,
+  "application_base": "0x800c000",
+  "image_end_exclusive": "0x801cce0",
+  "rw_iram1_bytes": 19928,
+  "ram_limit_bytes": 20480,
+  "axf_sha256": "0756aa8fd4735d752dbf6a4981ec672f56cf2e5126c4e0e80209166283e7dfd3",
+  "main_screen_groups": 7,
+  "application_groups": 14,
+  "chooser_groups": 6,
+  "build_errors": 0,
+  "build_warnings": 0,
+  "alignment_passed": true,
+  "source_files": {
+    "GD32-HID/GD32-HID/USER/APP/run.c": "f6cf65221444f2074ca77a7fe1e5d450fa387cea745b75e70c88ec0a66722d7a",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.c": "2a7e68337598f4ade13fd38c62ef20f48e88425ef3ee3ce45c07989af5fac013",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.h": "ecba65927c3438d62c0571e8ed18211def1621bf115270e117bd917540de3e7f"
+  },
+  "preserved_prior_release_sources": {
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.c": "85e493f38ce69099e3325395a0b44f3352f70ee6d1457de97925441c3bc6a63f",
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.h": "d701317a652fa458536293a5393f7f0368af854aa7109677a2ac9512f9f71776",
+    "GD32-HID/GD32-HID/USER/APP/run.h": "46cd0c31a14e30e0229cd32b44c84160f1088e32084dc081da8186fe024ff4a9",
+    "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h": "f5390c3ab9bcaf721a86ebe84a1aff4523f86eb8fc74a294596679bb6bb4b9e2",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c": "d44ece33a68b84030c138b9c1d85e0be8bb513d19c4fd0edfd0e95be12c41d99",
+    "GD32-HID/GD32-HID/tools/daplink_manager.py": "401868a69881aab9824f0939158511565b8e469bd6b3da69fefa0e8d384a1b0c",
+    "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c": "302140df0e645111feb562dd12121a3506c342738aa26ea01f479aa6d7b985e2"
+  },
+  "files": {
+    "chooser-preview.png": {
+      "bytes": 18343,
+      "sha256": "c2af14b66671173e47a044fd07e80c80b6a8b8d7ef8a69ec8a9b9f8a6826343e"
+    },
+    "DAPlink.bin": {
+      "bytes": 68832,
+      "sha256": "a3aa023c89159243105ce522b1289da5f091255cc3fc66e50f8f18dbbd30d28a"
+    },
+    "DAPlink.hex": {
+      "bytes": 193658,
+      "sha256": "40b1f3e0d04598dad9e0998800bcba499db650472056f0621d81fb14e2da417e"
+    },
+    "README.txt": {
+      "bytes": 1584,
+      "sha256": "421d1c18cf45cc408f381bd8fc675cd534211c14695ca101d1ed1545d1c42e23"
+    },
+    "screen-preview.png": {
+      "bytes": 15038,
+      "sha256": "ba77256d70bfd81052a639d1710f11a15c23fe9bb46ac2c74ad31ac9c9cef60a"
+    },
+    "verification/alignment.json": {
+      "bytes": 857,
+      "sha256": "b9fed0b3c990c26843796fd06048e3e32f8179e33edb5e51778a7b5abd83d7c2"
+    },
+    "verification/application.json": {
+      "bytes": 1548,
+      "sha256": "1f38fe82dbc9552c35c85804c278577b64e01d390cc7bcedcd48ee8f2ccb8e0a"
+    },
+    "verification/build.log": {
+      "bytes": 2654,
+      "sha256": "b844b20bf9805dcc5a671473b20f6b5af00fe84331a88acdae637b70a6598462"
+    },
+    "verification/chooser-red.json": {
+      "bytes": 851,
+      "sha256": "d62c18583dc0a0625b27494577347b9d607db25335ea306c453c7109ecdc7ec6"
+    },
+    "verification/chooser.json": {
+      "bytes": 509,
+      "sha256": "0f28203e6227ca5bdfc024933075cdce909ee60ca91b64f67714dd7da08b6f97"
+    },
+    "verification/implementation.md": {
+      "bytes": 3903,
+      "sha256": "ea86f7494983b829527e8384074313e13254eb808a3a886afde8aeec51aff8ae"
+    },
+    "verification/independent.json": {
+      "bytes": 390,
+      "sha256": "2569811c5cb0ceaf3b4932373e1da2a82725f28d9ac599d181804e6c65685eaf"
+    },
+    "verification/main-screen-red.json": {
+      "bytes": 937,
+      "sha256": "84dcf628187240a3086aa0a0270a1c7b7878638712cabdd3fc95c1ea6367617b"
+    },
+    "verification/main-screen.json": {
+      "bytes": 444,
+      "sha256": "f02dd76e43c12e942bf8cd140c14a99387bb239d90909aee7bb9d889f1c9c7ce"
+    },
+    "verification/review.md": {
+      "bytes": 5505,
+      "sha256": "731bcae9d4aebe632baf2631663b11bc76bdb29837e98bd3abee484e9535b8ec"
+    },
+    "verification/ui-sources.json": {
+      "bytes": 965,
+      "sha256": "10257607701d6f60f3bd89e2dc0fea3431babf7283d38e2acde486d0731af214"
+    },
+    "verification/ui.diff": {
+      "bytes": 19267,
+      "sha256": "8bc8dfc864836dbeae032d6257f98bf213bb53da3ff36cbea93565019782766d"
+    }
+  }
+}

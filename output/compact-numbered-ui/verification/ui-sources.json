@@ -1,0 +1,22 @@
+[
+  {
+    "path": "GD32-HID\\GD32-HID\\USER\\APP\\run.c",
+    "original_sha256": "67bb0d9d4c2356c35b5e91599c3b57dbcb5d85f902ccc90b5bd75ba41f9a64c3",
+    "sha256": "f6cf65221444f2074ca77a7fe1e5d450fa387cea745b75e70c88ec0a66722d7a"
+  },
+  {
+    "path": "GD32-HID\\GD32-HID\\USER\\APP\\run.h",
+    "original_sha256": "46cd0c31a14e30e0229cd32b44c84160f1088e32084dc081da8186fe024ff4a9",
+    "sha256": "46cd0c31a14e30e0229cd32b44c84160f1088e32084dc081da8186fe024ff4a9"
+  },
+  {
+    "path": "GD32-HID\\GD32-HID\\USER\\BSP\\bsp_oled.c",
+    "original_sha256": "fafcb941882acb1f2f57a67c37176531c6ea22e634e813eed9799d7396611267",
+    "sha256": "2a7e68337598f4ade13fd38c62ef20f48e88425ef3ee3ce45c07989af5fac013"
+  },
+  {
+    "path": "GD32-HID\\GD32-HID\\USER\\BSP\\bsp_oled.h",
+    "original_sha256": "17b4d5b7e2cca0b4a517b08bae576d9cf507fa3cb2287bd050bb9b05e736b34a",
+    "sha256": "ecba65927c3438d62c0571e8ed18211def1621bf115270e117bd917540de3e7f"
+  }
+]

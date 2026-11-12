@@ -1,0 +1,16 @@
+{
+  "metrics": {
+    "different_pixels_between_Ns": 0,
+    "X_horizontal_asymmetry": 0,
+    "X_vertical_asymmetry": 0,
+    "arc_rotation_asymmetry": 0,
+    "top_left_coverage": 7416,
+    "top_right_coverage": 7416,
+    "coverage_levels": 16
+  },
+  "failed": [
+    "top_arc_must_taper_from_thick_left_to_thin_right"
+  ],
+  "passed": false,
+  "header_sha256": "9c35960bc3daab2e04afaf750ca38caf294b689a2d3c54a397e6fadd48db0ea8"
+}

@@ -1,0 +1,22 @@
+{
+  "DAPlink.bin": {
+    "size": 52816,
+    "sha256": "e28210a1040048a84dcde42007ae130cc5115f6325275ea0ea26ab6e3908d3b7"
+  },
+  "DAPlink.hex": {
+    "size": 148613,
+    "sha256": "9109a640bfc6921f5e23879ce576af00eebd0f4cc554b62e3023878bf8edf5f6"
+  },
+  "Bootloader-Chinese.bin": {
+    "size": 32716,
+    "sha256": "75c1efaf2e77591bfe7c6afa651624760f24c2a4c99845ad80399d7a17cd8644"
+  },
+  "Bootloader-Chinese.hex": {
+    "size": 92068,
+    "sha256": "ab57c2c0c383929ff6f00196e127add5da3f54025375b3826b22cdf883966886"
+  },
+  "DAPlink-Chinese-full.hex": {
+    "size": 240630,
+    "sha256": "a860b2a43cc23fe7108d4e098afa2c43d8b889d877cd48fd76d8b4f3c24b1c1d"
+  }
+}

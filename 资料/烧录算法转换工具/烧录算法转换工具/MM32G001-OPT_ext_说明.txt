@@ -1,0 +1,41 @@
+==================================================================
+MM32G001 16kB Flash  Flash + OPT 烧录算法 — 离线烧录器使用说明
+==================================================================
+
+1. 基本信息
+   芯片型号:      MM32G001 16kB Flash
+   算法 RAM 基址:  0x20000000
+   算法大小:      700B (175 words)
+   BIN 总大小:    768B = 头 68B + 算法 700B
+
+2. 主 Flash
+   基址 0x08000000   大小 16KB   页 1024B
+
+3. OPT (选项字)
+   基址 0x1FFFF800   长度 16B (8 个半字)
+   ProgramOpt = 0x20000233  (内部: 解锁->擦 OPT 块->逐半字写入)
+
+   半字布局 (MM32G0001):
+   偏移    名称     说明
+   0x00    RDP      读保护: 0x807F=加密, 0x5AA5=不加密
+   0x02    USER     nRST_STOP / WDG_SW
+   0x04    DATA0    用户数据 0
+   0x06    DATA1    用户数据 1
+   0x08    WRP0     写保护 0
+   0x0A    WRP1     写保护 1
+   0x0C    WRP2     写保护 2
+   0x0E    WRP3     写保护 3
+
+4. 烧录器上的文件约定
+   0:/download/firmware/MM32G001-OPT.bin      本算法 (17 字段)
+   0:/download/bin/<固件名>.bin              待烧固件
+   0:/download/bin/<固件名>_opt.bin          OPT 数据 (16B, 小端)
+
+   _opt.bin 必须是原始二进制、小端:
+     加密   -> 7F 80 FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+     不加密 -> A5 5A FF FF FF FF FF FF FF FF FF FF FF FF FF FF
+   注意 RDP=0x807F 存成文件是 7F 80, 不是 80 7F。
+
+5. 烧录顺序
+   初始化算法 -> 全片擦除 -> 写主 Flash -> 校验 -> 写 OPT -> 校验 OPT
+   OPT 必须最后写: 写 RDP 后调试口可能被锁, 再擦再写都会失败。

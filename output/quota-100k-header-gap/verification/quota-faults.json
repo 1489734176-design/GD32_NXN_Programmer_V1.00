@@ -1,0 +1,101 @@
+{
+  "passed": true,
+  "source_sha256": {
+    "burn_quota.c": "7f785934d630db23e5895eb0e46da55bdb6fa4d7e2f2e527360e313d96907c34",
+    "burn_quota_catalog.c": "8ee732b8ae53ad2aeb2abce6856ee32a9635a107522e2981771126cfee5a45a6",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad"
+  },
+  "details": [
+    {
+      "scenario": "100000 successful commit",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "write_error": 26,
+        "fatfs_error": 14,
+        "short_io": 2,
+        "readback_corruption": 1
+      },
+      "provenance": "First-run completed PASS receipt in fault-first-run-output-receipts.txt"
+    },
+    {
+      "scenario": "100000 success across journal page rollover",
+      "mutations": 27,
+      "cases": {
+        "power_cut": 27,
+        "write_error": 27,
+        "fatfs_error": 14,
+        "short_io": 2,
+        "readback_corruption": 1
+      },
+      "provenance": "First-run completed PASS receipt in fault-first-run-output-receipts.txt"
+    },
+    {
+      "scenario": "First BQT4 success becomes BQT5 preserving old history/catalog",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "write_error": 26,
+        "fatfs_error": 20,
+        "short_io": 2,
+        "readback_corruption": 1
+      },
+      "provenance": "First-run completed PASS receipt in fault-first-run-output-receipts.txt"
+    },
+    {
+      "scenario": "Wide catalog append and A/B root commit",
+      "mutations": 27,
+      "cases": {
+        "power_cut": 27,
+        "write_error": 27,
+        "fatfs_error": 42,
+        "short_io": 18,
+        "readback_corruption": 1
+      },
+      "provenance": "First-run completed PASS receipt in fault-first-run-output-receipts.txt"
+    },
+    {
+      "scenario": "First BQC2/BQT4 switch appends BQC3 and commits BQT5",
+      "mutations": 27,
+      "cases": {
+        "power_cut": 27,
+        "write_error": 27,
+        "fatfs_error": 37,
+        "short_io": 13,
+        "readback_corruption": 1
+      },
+      "provenance": "First-run completed PASS receipt in fault-first-run-output-receipts.txt"
+    },
+    {
+      "scenario": "Reimport wide total commits reset tuple atomically",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "write_error": 26,
+        "fatfs_error": 14,
+        "short_io": 4,
+        "readback_corruption": 1
+      }
+    },
+    {
+      "scenario": "Begin read errors cannot create success session",
+      "cases": {
+        "fatfs_error": 3
+      }
+    }
+  ],
+  "binary_sha256": {
+    "wide-fault-fixture\\dual-fixture\\current\\quota.axf": "a4a8aedd6d43c6f2285c10f2f22ca9f79da71aa0fe8ab4fe9bcea129e58317fb",
+    "reimport-tail-fixture\\dual-fixture\\current\\quota.axf": "e68c6cd861cadb0af865d2c9c05f1264a1221a52b6ce558fb2463bd4cb6754e4"
+  },
+  "provenance": {
+    "first_five": "Recovered successful per-scenario receipts, original process stopped in sixth scenario.",
+    "receipts_file": "fault-first-run-output-receipts.txt",
+    "receipts_sha256": "9eeaec88034becc355a568513897c7c51e8c36635b481c21540fb513eb71f9a0",
+    "initial_report": "wide-fault-initial-results.json",
+    "final_two": "Fresh test_reimport_tail.py after independently reviewed narrow fixture correction.",
+    "production_changed_after_first_run": false,
+    "correction": "Explicit reimport initial mirror validation may recover only with exact authenticated new tuple."
+  }
+}

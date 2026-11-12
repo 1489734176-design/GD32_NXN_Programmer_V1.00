@@ -1,0 +1,29 @@
+[
+  {
+    "window": [
+      1000,
+      760
+    ],
+    "spin_width": 150,
+    "usable_text_width": 130,
+    "text_width": 112
+  },
+  {
+    "window": [
+      900,
+      600
+    ],
+    "spin_width": 150,
+    "usable_text_width": 130,
+    "text_width": 112
+  },
+  {
+    "window": [
+      1200,
+      900
+    ],
+    "spin_width": 150,
+    "usable_text_width": 130,
+    "text_width": 112
+  }
+]

@@ -1,0 +1,384 @@
+--- original/APP/run.c
++++ USER/APP/run.c
+@@ -48,9 +48,9 @@
+ extern void DAP_Setup(void);
+ /* 离线选择页：芯片型号只读，手动选择固件或开始烧录；长按右键切换自动与手动。 */
+ void mode2(void);
+-/* 兼容旧文件选择状态；实际选择在竖屏固件行内完成。 */
++/* 手动固件列表：左右上下移动，中键确认，长中取消。 */
+ void mode3(void);
+-/* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；成功扣一次，正常失败退回一次。 */
++/* 统一烧录流程：先检查额度并开启RAM会话，完整成功才扣一次；失败或中断不扣。 */
+ void mode4(void);
+ /* 显示USB连接CON/DIS、电池图标和电量；按用户要求连接状态保留英文缩写。 */
+ void show_top(uint8_t status);
+@@ -104,13 +104,18 @@
+ static uint8_t g_selection_dirty;
+ static uint8_t g_selection_save_failed;
+ 
+-/* 竖屏固定页：内部状态变化仅重绘字段，不切换可见页面。 */
++/* 主界面与列表页独立缓存；烧录过程和结果仍在主界面。 */
+ static uint8_t g_ui_ready, g_ui_percent, g_ui_state;
++#define FILE_LIST_ROWS 6U
++static char g_file_list[FILE_LIST_ROWS][32];
++static uint32_t g_file_count, g_file_index, g_file_first;
++static uint8_t g_file_list_ready;
++static const char *g_file_error;
+ static void draw_main(void);
+ static void show_counts(void);
+ static void reset_feedback(void);
+ static void finish_burn_ui(void);
+-static void select_next_firmware(void);
++static uint8_t select_firmware(const char *name);
+ 
+ static void mark_selection_dirty(void)
+ {
+@@ -243,6 +248,7 @@
+ static void invalidate_program_checksum(void)
+ {
+     g_program_checksum_valid = 0;
++    g_file_list_ready = 0; /* USB更改目录后，下次浏览重新枚举。 */
+     mark_selection_dirty();
+     reset_feedback();
+     oled.Refresh_flag = 1;
+@@ -375,7 +381,7 @@
+     draw_main();
+ }
+ 
+-/* 在固件行内循环选择，排除目录和OPT数据；文件内容与校验由主任务串行读取。 */
++/* 列表排除目录、OPT数据和无法安全存入选择记录的文件名。 */
+ static uint8_t selectable_firmware(const char *name, uint8_t attr)
+ {
+     unsigned int i, n = strlen(name);
+@@ -391,38 +397,17 @@
+     return 1;
+ }
+ 
+-static void select_next_firmware(void)
+-{
+-    char first[32] = {0}, next[32] = {0}, path[80];
++/* 仅确认候选时读取SUM32/OPT，全部成功才提交；错误不破坏旧有效选择。 */
++static uint8_t select_firmware(const char *name)
++{
++    char path[80];
+     const char *dot;
+     uint32_t size, done, request, received, checksum, i;
+-    uint8_t found = 0, ret;
+-    if(custombulk_is_busy()) return;
+-    if(f_opendir(&DirInfo, "0:/download/bin") != FR_OK)
+-    {
+-        g_ui_state = UI_PROGRESS_FAILED;
+-        strcpy(g_last_status, "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return;
+-    }
+-    while((ret = f_readdir(&DirInfo, &FileInfo)) == FR_OK && FileInfo.fname[0])
+-    {
+-        if(!selectable_firmware(FileInfo.fname, FileInfo.fattrib)) continue;
+-        if(!first[0]) strcpy(first, FileInfo.fname);
+-        if(found) { strcpy(next, FileInfo.fname); break; }
+-        if(!strcmp((char *)app_data.bin_name, FileInfo.fname)) found = 1;
+-    }
+-    f_closedir(&DirInfo);
+-    if(ret != FR_OK)
+-    { g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return; }
+-    if(!next[0]) strcpy(next, first);
+-    if(!next[0])
+-    {
+-        app_data.bin_name[0] = 0; app_data.opt_enable = 0;
+-        invalidate_program_checksum(); g_burn_done = 0; reset_feedback(); return;
+-    }
+-    if(!strcmp(next, (char *)app_data.bin_name) && !g_selection_save_failed) return;
+-    sprintf(path, "0:/download/bin/%s", next);
++    uint8_t ret, opt_enabled = 0;
++    if(custombulk_is_busy()) return 0;
++    sprintf(path, "0:/download/bin/%s", name);
+     if(f_open(&fd, path, FA_READ) != FR_OK) goto invalid_file;
+-    size = f_size(&fd); done = checksum = 0;
++    size = f_size(&fd); done = checksum = 0; ret = FR_OK;
+     while(done < size)
+     {
+         request = size - done; if(request > sizeof(DATA_BUFFER)) request = sizeof(DATA_BUFFER);
+@@ -431,32 +416,27 @@
+         for(i = 0; i < received; i++) checksum += DATA_BUFFER[i];
+         done += received;
+     }
+-    ret = f_close(&fd);
++    if(f_close(&fd) != FR_OK) ret = FR_DISK_ERR;
+     if(!size || done != size || ret != FR_OK) goto invalid_file;
+-    strcpy((char *)app_data.bin_name, next);
+-    g_program_checksum = checksum; g_program_checksum_valid = 1;
+-    dot = strrchr(next, '.');
+-    if(dot && dot - next < 30) sprintf(path, "0:/download/bin/%.*s_opt.bin", (int)(dot-next), next);
++    dot = strrchr(name, '.');
++    if(dot && dot - name < 30) sprintf(path, "0:/download/bin/%.*s_opt.bin", (int)(dot-name), name);
+     else strcpy(path, "0:/download/bin/default_opt.bin");
+-    app_data.opt_enable = 0;
+     ret = f_open(&fd, path, FA_READ);
+     if(ret == FR_OK)
+     {
+         size = f_size(&fd); ret = f_close(&fd);
+         if(!size || ret != FR_OK) goto invalid_opt;
+-        app_data.opt_enable = 1;
++        opt_enabled = 1;
+     }
+     else if(ret != FR_NO_FILE && ret != FR_NO_PATH) goto invalid_opt;
+-    mark_selection_dirty(); g_burn_done = 0; reset_feedback(); return;
++    strcpy((char *)app_data.bin_name, name);
++    app_data.opt_enable = opt_enabled;
++    g_program_checksum = checksum; g_program_checksum_valid = 1;
++    mark_selection_dirty(); g_burn_done = 0; reset_feedback(); return 1;
+ invalid_opt:
+-    strcpy((char *)app_data.bin_name, next); app_data.opt_enable = 1;
+-    g_program_checksum_valid = 0; mark_selection_dirty(); g_selection_save_failed = 1;
+-    g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return;
++    g_file_error = "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"; return 0;
+ invalid_file:
+-    /* 保留当前坏文件名作为轮选位置，但禁止保存/烧录；下一次中键可以到后续文件。 */
+-    strcpy((char *)app_data.bin_name, next); app_data.opt_enable = 0;
+-    g_program_checksum_valid = 0; mark_selection_dirty(); g_selection_save_failed = 1;
+-    g_ui_state = UI_PROGRESS_FAILED; strcpy(g_last_status, "\xB9\xCC\xBC\xFE\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
++    g_file_error = "\xB9\xCC\xBC\xFE\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"; return 0;
+ }
+ 
+ /* 接收上位机导入的算法、固件与OPT开关，更新主界面并保持USB后台连接。
+@@ -480,6 +460,7 @@
+     g_program_checksum = custombulk_prepared_checksum();
+     g_program_checksum_valid = 1;
+     mark_selection_dirty();
++    g_ui_ready = 0; g_file_list_ready = 0; /* 导入可从列表页返回，主界面必须重画。 */
+     app_data.mode = 2;
+     app_data.head = 2;
+     key_val.mesg = 0;
+@@ -575,7 +556,11 @@
+                 break;
+             case key_mid:
+                 if(custombulk_is_busy()) break;
+-                if(!g_auto_en && app_data.head == 1) select_next_firmware();
++                if(!g_auto_en && app_data.head == 1)
++                {
++                    g_ui_ready = 0; g_file_list_ready = 0;
++                    app_data.mode = 3; key_val.mesg = 0; return;
++                }
+                 else
+                 {
+                     g_burn_done = 0;
+@@ -583,7 +568,6 @@
+                     else app_data.mode = 4;
+                     key_val.mesg = 0; return;
+                 }
+-                break;
+             default: break;
+         }
+         key_val.mesg = 0; oled.Refresh_flag = 1;
+@@ -798,8 +782,8 @@
+     draw_main();
+ }
+ 
+-/* 统一烧录流程：先检查并预扣次数，再烧录和校验主固件/OPT；
+- * 成功扣一次，正常失败退回一次。
++/* 统一烧录流程：先检查额度并开启RAM会话，再烧录和校验主固件/OPT；
++ * 完整成功才提交扣次，失败或未完成时断电均不扣。
+  * 返回 - 无 */
+ void mode4(void)
+ {
+@@ -1262,13 +1246,101 @@
+ 	}
+ }
+ 
+-/* 兼容旧文件选择状态；实际选择在竖屏固件行内完成。
+- * 返回 - 无 */
++/* 目录仅缓存当前页的六个名称；浏览不读取文件正文，也不更改有效选择。
++ * locate非0时定位当前文件；后续跨页按g_file_first填充，文件数不受缓存大小限制。 */
++static uint8_t scan_firmware_page(uint8_t locate)
++{
++    uint8_t ret;
++    g_file_count = 0;
++    memset(g_file_list, 0, sizeof(g_file_list));
++    if(locate) { g_file_index = 0; g_file_first = 0; }
++    if(f_opendir(&DirInfo, "0:/download/bin") != FR_OK) goto directory_error;
++    while((ret = f_readdir(&DirInfo, &FileInfo)) == FR_OK && FileInfo.fname[0])
++    {
++        if(!selectable_firmware(FileInfo.fname, FileInfo.fattrib)) continue;
++        if(locate && !strcmp((const char *)app_data.bin_name, FileInfo.fname))
++            g_file_index = g_file_count;
++        if(g_file_count >= g_file_first && g_file_count - g_file_first < FILE_LIST_ROWS)
++            strcpy(g_file_list[g_file_count - g_file_first], FileInfo.fname);
++        g_file_count++;
++    }
++    if(f_closedir(&DirInfo) != FR_OK) ret = FR_DISK_ERR;
++    if(ret != FR_OK) goto directory_error;
++    g_file_error = NULL;
++    return 1;
++directory_error:
++    g_file_count = 0;
++    memset(g_file_list, 0, sizeof(g_file_list));
++    g_file_error = "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC";
++    return 0;
++}
++
++static void leave_firmware_list(void)
++{
++    app_data.mode = 2; app_data.head = 1;
++    key_val.mesg = 0; g_file_list_ready = 0; g_ui_ready = 0;
++    oled.Refresh_flag = 1;
++    draw_main();
++}
++
++/* 独立手动列表：短按移动一项，左右长按及100ms连发继续移动；长右不切模式。
++ * 只有中键确认时读取候选，失败留在列表；长中随时取消，恢复旧有效选择。 */
+ void mode3(void)
+ {
+-    /* 兼容旧内部状态编号；文件现在直接在第6、7行切换。 */
+-    app_data.mode = 2; app_data.head = 1;
+-    draw_main();
++    uint8_t row;
++    uint32_t first;
++    char page[32];
++    if(key_val.mesg && key_val.key == key_l_mid)
++    { leave_firmware_list(); return; }
++    if(!g_file_list_ready)
++    {
++        if(custombulk_is_busy()) { key_val.mesg = 0; return; }
++        scan_firmware_page(1);
++        if(g_file_count && g_file_index >= FILE_LIST_ROWS)
++        {
++            g_file_first = (g_file_index / FILE_LIST_ROWS) * FILE_LIST_ROWS;
++            scan_firmware_page(0);
++        }
++        UI_EnterPage(11);
++        UI_TextColor(8, 28, "\xB9\xCC\xBC\xFE\xD1\xA1\xD4\xF1", 16, 1, LCD_BLUE); /* 固件选择 */
++        g_ui_ready = 0; g_file_list_ready = 1;
++        show_top(1);
++    }
++    if(key_val.mesg)
++    {
++        if(!custombulk_is_busy() && g_file_count)
++        {
++            first = g_file_first;
++            switch(key_val.key)
++            {
++                case key_left: case key_l_left: case key_rep_left:
++                    g_file_index = g_file_index ? g_file_index - 1 : g_file_count - 1;
++                    g_file_error = NULL; break;
++                case key_right: case key_l_right: case key_rep_right:
++                    g_file_index = g_file_index + 1 < g_file_count ? g_file_index + 1 : 0;
++                    g_file_error = NULL; break;
++                case key_mid:
++                    if(select_firmware(g_file_list[g_file_index - g_file_first]))
++                    { leave_firmware_list(); return; }
++                    break;
++                default: break;
++            }
++            g_file_first = (g_file_index / FILE_LIST_ROWS) * FILE_LIST_ROWS;
++            if(first != g_file_first) scan_firmware_page(0);
++        }
++        key_val.mesg = 0;
++    }
++    for(row = 0; row < FILE_LIST_ROWS; row++)
++        UI_FieldColor(row, 8, 48 + row * 40, 224, 36, g_file_list[row], 16,
++                      g_file_count && g_file_first + row == g_file_index ? 0 : 1, LCD_YELLOW);
++    sprintf(page, "%lu/%lu", (unsigned long)(g_file_count ? g_file_first / FILE_LIST_ROWS + 1 : 0),
++            (unsigned long)((g_file_count + FILE_LIST_ROWS - 1) / FILE_LIST_ROWS));
++    UI_FieldColor(6, 128, 28, 104, 16, page, 16, 1, LCD_YELLOW);
++    UI_FieldColor(7, 8, 288, 224, 16, g_file_error ? g_file_error :
++                  g_file_count ? "\xD6\xD0\xBC\xFC\xC8\xB7\xC8\xCF \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8" :
++                  "\xCE\xDE\xB9\xCC\xBC\xFE \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8",
++                  16, 1, g_file_error ? LCD_RED : LCD_BLUE);
++    show_top(0); oled.Refresh_flag = 0;
+ }
+ 
+ /* 初始化硬件并创建任务；循环先处理上位机延后请求，再运行当前界面/烧录状态机。
+@@ -1458,11 +1530,16 @@
+     else if(val.bat_vol >= 4.0f) battery = 100;
+     else battery = (uint8_t)((val.bat_vol - 3.5f) * 200.0f);
+     if(power) battery = 100;
+-    icon = power == 1 ? 5 : battery <= 20 ? 0 : battery <= 40 ? 1 : battery <= 60 ? 2 : battery <= 80 ? 3 : 4;
+-    if(force || last_power != power) { UI_Logo(8, 8, power ? 6 : 7); last_power = power; }
++    icon = battery <= 20 ? 0 : battery <= 40 ? 1 : battery <= 60 ? 2 : battery <= 80 ? 3 : 4;
++    if(force || last_power != power)
++    {
++        UI_Logo(8, 8, power ? 6 : 7);
++        UI_ChargingBolt(140, 8, power == 1 || power == 2);
++        last_power = power;
++    }
+     if(force || last_icon != icon) { UI_Logo(152, 8, icon); last_icon = icon; }
+     sprintf(temperature, "%.1fC", val.chip_temp); sprintf(percent, "%u%%", battery);
+     UI_FieldColor(10, 44, 8, 32, 16, power ? "CON" : "DIS", 16, 1, LCD_YELLOW);
+-    UI_FieldColor(11, 84, 8, 64, 16, temperature, 16, 1, LCD_YELLOW);
++    UI_FieldColor(11, 84, 8, 56, 16, temperature, 16, 1, LCD_YELLOW);
+     UI_FieldColor(12, 192, 8, 40, 16, percent, 16, 1, LCD_YELLOW);
+ }
+--- original/APP/run.h
++++ USER/APP/run.h
+@@ -1,4 +1,4 @@
+-/* 应用状态：2为固定竖屏界面、3为旧状态兼容入口、4为内部烧录执行；可见界面始终不变。 */
++/* 应用状态：2为竖屏主界面、3为手动固件列表、4为内部烧录执行；烧录和结果留在主界面。 */
+ #ifndef __RUN_H__
+ #define __RUN_H__
+ 
+@@ -8,7 +8,7 @@
+ 
+ typedef struct
+ {	
+-	uint8_t mode; //状态2:固定主界面（USB后台通信），3:兼容入口，4:执行烧录；0/1不再使用
++	uint8_t mode; //状态2:主界面（USB后台通信），3:固件列表，4:执行烧录；0/1不再使用
+ 	uint8_t head;
+ 	
+ 	uint8_t bin_name[32];					//用于记录bin文件名
+--- original/BSP/bsp_oled.c
++++ USER/BSP/bsp_oled.c
+@@ -237,6 +237,17 @@
+ #else
+     (void)x; (void)y; (void)index;
+ #endif
++}
++
++/* 电池左侧独立竖闪电，8x16行式单色点阵；拔掉充电器时只清除此矩形。 */
++void UI_ChargingBolt(uint16_t x, uint16_t y, uint8_t visible)
++{
++    static const uint8_t bolt[16] = {
++        0x06, 0x0C, 0x0C, 0x18, 0x18, 0x30, 0x3E, 0x7C,
++        0x1C, 0x18, 0x18, 0x30, 0x30, 0x60, 0x60, 0x40
++    };
++    if(visible) LCD_BlitMonoColor(x, y, 8, 16, 1, bolt, 0, 1, 1, LCD_YELLOW);
++    else LCD_Fill(x, y, 8, 16, LCD_BLACK);
+ }
+ 
+ /* 将128×64单色开机图标放大两倍显示在320×240屏幕中央偏上位置。
+--- original/BSP/bsp_oled.h
++++ USER/BSP/bsp_oled.h
+@@ -103,6 +103,8 @@
+  * index - 图标序号，对应font.h中的logo表；越界不绘制
+  * 返回  - 无 */
+ void UI_Logo(uint16_t x, uint16_t y, uint8_t index);
++/* 8x16竖闪电：visible非0画黄色闪电，0清黑；供充电和充满两种状态使用。 */
++void UI_ChargingBolt(uint16_t x, uint16_t y, uint8_t visible);
+ /* 将128×64单色开机图标放大两倍显示。
+  * data - 128×64点阵数据，列页式存储（每行128字节、共8页）
+  * 返回 - 无 */
+--- original/BSP/ui_chinese_font.h
++++ USER/BSP/ui_chinese_font.h
+@@ -41,6 +41,7 @@
+     {0xB6C8, {0x01,0x00,0x00,0x80,0x3F,0xFE,0x22,0x20,0x22,0x20,0x3F,0xFC,0x22,0x20,0x22,0x20,0x23,0xE0,0x20,0x00,0x2F,0xF0,0x24,0x10,0x42,0x20,0x41,0xC0,0x86,0x30,0x38,0x0E}}, /* U+5EA6 */ /* 字模：度；竖屏单页新增 */
+     {0xB6CF, {0x04,0x00,0x04,0x04,0x55,0x78,0x4E,0x40,0x44,0x40,0x7F,0x40,0x44,0x7E,0x4E,0x48,0x55,0x48,0x65,0x48,0x44,0x48,0x44,0x48,0x40,0x48,0x7F,0x88,0x00,0x88,0x01,0x08}}, /* U+65AD */ /* 字模：断 */
+     {0xB7A8, {0x00,0x40,0x20,0x40,0x10,0x40,0x10,0x40,0x87,0xFC,0x40,0x40,0x40,0x40,0x10,0x40,0x1F,0xFE,0x20,0x40,0xE0,0x80,0x21,0x00,0x22,0x10,0x24,0x08,0x2F,0xFC,0x04,0x04}}, /* U+6CD5 */ /* 字模：法 */
++    {0xB7B5, {0x00,0x08,0x20,0x3C,0x13,0xC0,0x12,0x00,0x02,0x00,0x03,0xFC,0xF2,0x04,0x12,0x88,0x12,0x50,0x12,0x20,0x12,0x50,0x14,0x88,0x15,0x04,0x28,0x00,0x47,0xFE,0x00,0x00}}, /* U+8FD4 */ /* chooser help */
+     {0xB7C2, {0x08,0x80,0x08,0x40,0x08,0x40,0x17,0xFE,0x11,0x00,0x31,0x00,0x31,0x00,0x51,0xF8,0x91,0x08,0x11,0x08,0x11,0x08,0x11,0x08,0x12,0x08,0x12,0x08,0x14,0x50,0x18,0x20}}, /* U+4EFF */ /* 字模：仿 */
+     {0xB8B4, {0x10,0x00,0x10,0x00,0x1F,0xFC,0x20,0x00,0x5F,0xF0,0x90,0x10,0x1F,0xF0,0x10,0x10,0x1F,0xF0,0x04,0x00,0x0F,0xF0,0x18,0x20,0x64,0x40,0x03,0x80,0x1C,0x70,0xE0,0x0E}}, /* U+590D */ /* 字模：复 */
+     {0xB9A6, {0x00,0x40,0x00,0x40,0x00,0x40,0xFE,0x40,0x11,0xFC,0x10,0x44,0x10,0x44,0x10,0x44,0x10,0x44,0x10,0x84,0x10,0x84,0x1E,0x84,0xF1,0x04,0x41,0x04,0x02,0x28,0x04,0x10}}, /* U+529F */ /* 字模：功 */
+@@ -48,6 +49,7 @@
+     {0xB9FD, {0x00,0x10,0x20,0x10,0x10,0x10,0x17,0xFE,0x00,0x10,0x00,0x10,0xF2,0x10,0x11,0x10,0x11,0x10,0x10,0x10,0x10,0x10,0x10,0x50,0x10,0x20,0x28,0x00,0x47,0xFE,0x00,0x00}}, /* U+8FC7 */ /* 字模：过 */
+     {0xBAC5, {0x00,0x00,0x1F,0xF0,0x10,0x10,0x10,0x10,0x10,0x10,0x1F,0xF0,0x00,0x00,0xFF,0xFE,0x08,0x00,0x10,0x00,0x1F,0xF0,0x00,0x10,0x00,0x10,0x00,0x10,0x00,0xA0,0x00,0x40}}, /* U+53F7 */ /* 字模：号；芯片型号只读显示新增 */
+     {0xBBAF, {0x08,0x80,0x08,0x80,0x08,0x84,0x10,0x88,0x10,0x90,0x30,0xA0,0x30,0xC0,0x50,0x80,0x91,0x80,0x12,0x80,0x14,0x80,0x10,0x82,0x10,0x82,0x10,0x82,0x10,0x7E,0x10,0x00}}, /* U+5316 */ /* 字模：化 */
++    {0xBBD8, {0x00,0x00,0x3F,0xF8,0x20,0x08,0x20,0x08,0x27,0xC8,0x24,0x48,0x24,0x48,0x24,0x48,0x24,0x48,0x24,0x48,0x27,0xC8,0x20,0x08,0x20,0x08,0x3F,0xF8,0x20,0x08,0x00,0x00}}, /* U+56DE */ /* chooser help */
+     {0xBCC7, {0x00,0x00,0x20,0x00,0x11,0xF8,0x10,0x08,0x00,0x08,0x00,0x08,0xF0,0x08,0x11,0xF8,0x11,0x08,0x11,0x00,0x11,0x00,0x11,0x00,0x15,0x02,0x19,0x02,0x10,0xFE,0x00,0x00}}, /* U+8BB0 */ /* 字模：记 */
+     {0xBCD3, {0x10,0x00,0x10,0x00,0x10,0x00,0x10,0x7C,0xFE,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x22,0x44,0x22,0x7C,0x4A,0x44,0x84,0x00}}, /* U+52A0 */ /* 字模：加 */
+     {0xBCEC, {0x10,0x40,0x10,0x40,0x10,0xA0,0x10,0xA0,0xFD,0x10,0x12,0x08,0x35,0xF6,0x38,0x00,0x54,0x88,0x50,0x48,0x92,0x48,0x11,0x50,0x11,0x10,0x10,0x20,0x17,0xFE,0x10,0x00}}, /* U+68C0 */ /* 字模：检 */
+@@ -69,6 +71,8 @@
+     {0xC7EB, {0x00,0x40,0x40,0x40,0x27,0xFC,0x20,0x40,0x03,0xF8,0x00,0x40,0xE7,0xFE,0x20,0x00,0x23,0xF8,0x22,0x08,0x23,0xF8,0x22,0x08,0x2B,0xF8,0x32,0x08,0x22,0x28,0x02,0x10}}, /* U+8BF7 */ /* 字模：请 */
+     {0xC8A1, {0x00,0x00,0xFF,0x80,0x22,0xFC,0x22,0x44,0x3E,0x44,0x22,0x44,0x22,0x44,0x3E,0x44,0x22,0x28,0x22,0x28,0x27,0xA8,0xFA,0x10,0x42,0x10,0x02,0x28,0x02,0x44,0x02,0x82}}, /* U+53D6 */ /* 字模：取 */
+     {0xC8B1, {0x20,0x20,0x20,0x20,0x3C,0x20,0x51,0xFC,0x90,0x24,0x10,0x24,0xFE,0x24,0x10,0x24,0x13,0xFE,0x54,0x20,0x54,0x50,0x54,0x50,0x5C,0x88,0x64,0x88,0x05,0x04,0x02,0x02}}, /* U+7F3A */ /* 字模：缺 */
++    {0xC8B7, {0x00,0x40,0x00,0x40,0xFC,0x7C,0x10,0x84,0x11,0x08,0x22,0xFE,0x3C,0x92,0x64,0x92,0x64,0xFE,0xA4,0x92,0x24,0x92,0x24,0xFE,0x3C,0x92,0x25,0x12,0x21,0x0A,0x02,0x04}}, /* U+786E */ /* chooser help */
++    {0xC8CF, {0x00,0x40,0x20,0x40,0x10,0x40,0x10,0x40,0x00,0x40,0x00,0x40,0xF0,0x40,0x10,0x40,0x10,0xA0,0x10,0xA0,0x10,0xA0,0x15,0x10,0x19,0x10,0x12,0x08,0x04,0x04,0x08,0x02}}, /* U+8BA4 */ /* chooser help */
+     {0xC8EB, {0x04,0x00,0x02,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x02,0x80,0x02,0x80,0x02,0x80,0x04,0x40,0x04,0x40,0x08,0x20,0x08,0x20,0x10,0x10,0x20,0x10,0x40,0x08,0x80,0x06}}, /* U+5165 */ /* 字模：入 */
+     {0xC9D5, {0x20,0x80,0x20,0x80,0x20,0xBC,0x23,0xC0,0xA8,0x50,0xB0,0x24,0xA0,0xD4,0xA3,0x0C,0x20,0x00,0x27,0xFE,0x20,0x90,0x20,0x90,0x51,0x12,0x49,0x12,0x42,0x0E,0x84,0x00}}, /* U+70E7 */ /* 字模：烧 */
+     {0xC9D9, {0x01,0x00,0x01,0x00,0x01,0x00,0x09,0x20,0x09,0x10,0x11,0x08,0x11,0x04,0x21,0x14,0x41,0x10,0x01,0x20,0x00,0x40,0x00,0x80,0x01,0x00,0x02,0x00,0x0C,0x00,0x70,0x00}}, /* U+5C11 */ /* 字模：少 */

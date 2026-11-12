@@ -1,0 +1,8 @@
+{
+  "passed": [
+    "startup_centered_logo_then_1000ms_then_clean_main"
+  ],
+  "failed": [],
+  "image_sha256": "16564517b980cd4298ead2d9aa2d24858e66f573f00d77eac60c8231b5776cc1",
+  "hardware_tested": false
+}

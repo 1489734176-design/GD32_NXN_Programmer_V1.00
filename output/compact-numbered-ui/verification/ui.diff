@@ -1,0 +1,386 @@
+--- original/APP/run.c
++++ USER/APP/run.c
+@@ -106,11 +106,12 @@
+ 
+ /* 主界面与列表页独立缓存；烧录过程和结果仍在主界面。 */
+ static uint8_t g_ui_ready, g_ui_percent, g_ui_state;
+-#define FILE_LIST_ROWS 6U
++#define FILE_LIST_ROWS 12U
+ static char g_file_list[FILE_LIST_ROWS][32];
+ static uint32_t g_file_count, g_file_index, g_file_first;
+-static uint8_t g_file_list_ready;
++static uint8_t g_file_list_ready, g_file_visible;
+ static const char *g_file_error;
++static const char *g_file_footer_drawn;
+ static void draw_main(void);
+ static void show_counts(void);
+ static void reset_feedback(void);
+@@ -317,9 +318,9 @@
+         else strcpy(total, "\xCE\xDE\xCF\xDE");
+         sprintf(used, "%08lu", (unsigned long)burn_quota_used());
+     }
+-    UI_FieldColor(4, 80, 148, 152, 16, total, 16, 1, LCD_YELLOW);
+-    UI_FieldColor(5, 80, 168, 152, 16, used, 16, 1, LCD_YELLOW);
+-    show_quota(188);
++    UI_FieldColor(4, 80, 168, 152, 16, total, 16, 1, LCD_YELLOW);
++    UI_FieldColor(5, 80, 188, 152, 16, used, 16, 1, LCD_YELLOW);
++    show_quota(208);
+ }
+ 
+ /* 静态标题只画一次，16个缓存槽只分配给动态值和两个光标。 */
+@@ -329,30 +330,30 @@
+     {
+         UI_EnterPage(10);
+         UI_TextColor(8, 28, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
+-        UI_TextColor(96, 28, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
+-        UI_TextColor(8, 48, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
+-        UI_TextColor(8, 68, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
+-        UI_TextColor(8, 88, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
+-        UI_TextColor(8, 108, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
+-        UI_TextColor(8, 148, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
+-        UI_TextColor(8, 168, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
+-        UI_TextColor(8, 188, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
+-        UI_TextColor(8, 208, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
+-        UI_TextColor(8, 228, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
++        UI_TextColor(8, 48, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
++        UI_TextColor(8, 68, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
++        UI_TextColor(8, 88, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
++        UI_TextColor(8, 108, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
++        UI_TextColor(8, 128, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
++        UI_TextColor(8, 168, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
++        UI_TextColor(8, 188, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
++        UI_TextColor(8, 208, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
++        UI_TextColor(8, 248, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
++        UI_TextColor(8, 268, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
+         UI_TextColor(64, 28, "000", 16, 1, LCD_YELLOW);
+-        UI_TextColor(168, 28, "3.3V", 16, 1, LCD_YELLOW);
++        UI_TextColor(80, 48, "3.3V", 16, 1, LCD_YELLOW);
+         g_ui_ready = 1;
+         show_top(1);
+     }
+-    show_chip_name(48);
+-    show_firmware_name(108);
+-    UI_FieldColor(2, 80, 68, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
+-    show_checksum(88);
++    show_chip_name(68);
++    show_firmware_name(128);
++    UI_FieldColor(2, 80, 88, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
++    show_checksum(108);
+     show_counts();
+-    UI_FieldColor(7, 0, 108, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
+-    UI_FieldColor(8, 0, 208, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
++    UI_FieldColor(7, 0, 128, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
++    UI_FieldColor(8, 0, 248, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
+     show_top(0);
+-    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
++    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
+ }
+ 
+ static void reset_feedback(void)
+@@ -363,7 +364,7 @@
+                          (g_auto_en ? "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC" : "\xB5\xC8\xB4\xFD\xB2\xD9\xD7\xF7"));
+ }
+ 
+-/* 成功色只在整体烧录和次数提交都成功后显示。结果仍保留在原来的第12行。 */
++/* 成功色只在整体烧录和次数提交都成功后显示，结果保留在主界面底部进度行。 */
+ static void finish_burn_ui(void)
+ {
+     if(g_burn_ok)
+@@ -579,17 +580,17 @@
+     oled.Refresh_flag = 0;
+ }
+ 
+-/* 更新竖屏第12行进度，主固件写入阶段映射为15%到85%。
++/* 更新主界面底部进度，主固件写入阶段映射为15%到85%。
+  * percent - 进度百分比，0~100
+  * 返回    - 无 */
+ static void show_download_progress(uint8_t percent)
+ {
+     uint8_t next = (uint8_t)(15U + 70U * (percent > 100 ? 100 : percent) / 100U);
+     if(next > g_ui_percent) g_ui_percent = next;
+-    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
+-}
+-
+-/* 保存反馈文字并叠加在第12行进度条内，自动和手动模式共用。
++    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
++}
++
++/* 保存反馈文字并叠加在底部进度条内，自动和手动模式共用。
+  * status - 要显示的状态文字（GBK字节，最长不超过界面缓冲区）
+  * 返回   - 无 */
+ static void show_download_status(const char *status)
+@@ -608,7 +609,7 @@
+         else if(strstr(status, "\xD0\xA3\xD1\xE9\x4F\x50\x54") || strstr(status, "\xB6\xC1\xC8\xA1\x4F\x50\x54") || strstr(status, "\xBC\xEC\xB2\xE9\x4F\x50\x54")) next = 95;
+         if(next > g_ui_percent) g_ui_percent = next;
+     }
+-    UI_ProgressStatus(80, 228, 152, g_ui_percent, g_ui_state, g_last_status);
++    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
+     show_counts();
+ }
+ 
+@@ -621,7 +622,7 @@
+  * 返回   - 无 */
+ static void show_download_error(const char *status, uint32_t diag, uint32_t step, uint32_t addr)
+ {
+-    /* 底层仍保存诊断寄存器；屏幕在第12行保留错误码和原因。 */
++    /* 底层仍保存诊断寄存器；屏幕在底部进度行保留错误码和原因。 */
+     (void)diag; (void)step; (void)addr;
+     g_ui_state = UI_PROGRESS_FAILED;
+     show_download_status(status);
+@@ -1246,30 +1247,52 @@
+ 	}
+ }
+ 
+-/* 目录仅缓存当前页的六个名称；浏览不读取文件正文，也不更改有效选择。
+- * locate非0时定位当前文件；后续跨页按g_file_first填充，文件数不受缓存大小限制。 */
++/* 目录仅缓存当前页最多十二个名称；短项16px、长项36px，间隔4px。
++ * 首次枚举计数并定位旧选择，再按高度找到所在页；跨页重放相同分页规则。
++ * 所有目录访问仍在主任务内，浏览不读取文件正文，也不更改有效选择。 */
+ static uint8_t scan_firmware_page(uint8_t locate)
+ {
+     uint8_t ret;
+-    g_file_count = 0;
++    uint32_t ordinal = 0;
++    uint16_t used = 0, height;
++    UI_ClearFields(0, FILE_LIST_ROWS);
++    g_file_visible = 0; g_file_first = 0;
+     memset(g_file_list, 0, sizeof(g_file_list));
+-    if(locate) { g_file_index = 0; g_file_first = 0; }
++    if(locate)
++    {
++        g_file_count = 0; g_file_index = 0;
++        if(f_opendir(&DirInfo, "0:/download/bin") != FR_OK) goto directory_error;
++        while((ret = f_readdir(&DirInfo, &FileInfo)) == FR_OK && FileInfo.fname[0])
++        {
++            if(!selectable_firmware(FileInfo.fname, FileInfo.fattrib)) continue;
++            if(!strcmp((const char *)app_data.bin_name, FileInfo.fname)) g_file_index = g_file_count;
++            g_file_count++;
++        }
++        if(f_closedir(&DirInfo) != FR_OK) ret = FR_DISK_ERR;
++        if(ret != FR_OK) goto directory_error;
++    }
++    if(!g_file_count) { g_file_error = NULL; return 1; }
+     if(f_opendir(&DirInfo, "0:/download/bin") != FR_OK) goto directory_error;
+     while((ret = f_readdir(&DirInfo, &FileInfo)) == FR_OK && FileInfo.fname[0])
+     {
+         if(!selectable_firmware(FileInfo.fname, FileInfo.fattrib)) continue;
+-        if(locate && !strcmp((const char *)app_data.bin_name, FileInfo.fname))
+-            g_file_index = g_file_count;
+-        if(g_file_count >= g_file_first && g_file_count - g_file_first < FILE_LIST_ROWS)
+-            strcpy(g_file_list[g_file_count - g_file_first], FileInfo.fname);
+-        g_file_count++;
++        height = UI_NumberedItemHeight(ordinal + 1, FileInfo.fname);
++        if(used + height > 236)
++        {
++            if(g_file_index < ordinal) break; /* 选中项所在页已经完整装入。 */
++            g_file_first = ordinal; g_file_visible = 0; used = 0;
++            memset(g_file_list, 0, sizeof(g_file_list));
++        }
++        strcpy(g_file_list[g_file_visible++], FileInfo.fname);
++        used += height + UI_LINE_GAP;
++        ordinal++;
+     }
+     if(f_closedir(&DirInfo) != FR_OK) ret = FR_DISK_ERR;
+-    if(ret != FR_OK) goto directory_error;
++    if(ret != FR_OK || g_file_index >= g_file_first + g_file_visible) goto directory_error;
+     g_file_error = NULL;
+     return 1;
+ directory_error:
+-    g_file_count = 0;
++    g_file_count = 0; g_file_visible = 0;
+     memset(g_file_list, 0, sizeof(g_file_list));
+     g_file_error = "\xC4\xBF\xC2\xBC\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC";
+     return 0;
+@@ -1288,29 +1311,25 @@
+ void mode3(void)
+ {
+     uint8_t row;
+-    uint32_t first;
++    uint16_t y;
+     char page[32];
++    const char *footer;
+     if(key_val.mesg && key_val.key == key_l_mid)
+     { leave_firmware_list(); return; }
+     if(!g_file_list_ready)
+     {
+         if(custombulk_is_busy()) { key_val.mesg = 0; return; }
++        UI_EnterPage(11);
+         scan_firmware_page(1);
+-        if(g_file_count && g_file_index >= FILE_LIST_ROWS)
+-        {
+-            g_file_first = (g_file_index / FILE_LIST_ROWS) * FILE_LIST_ROWS;
+-            scan_firmware_page(0);
+-        }
+-        UI_EnterPage(11);
+         UI_TextColor(8, 28, "\xB9\xCC\xBC\xFE\xD1\xA1\xD4\xF1", 16, 1, LCD_BLUE); /* 固件选择 */
+         g_ui_ready = 0; g_file_list_ready = 1;
++        g_file_footer_drawn = NULL;
+         show_top(1);
+     }
+     if(key_val.mesg)
+     {
+         if(!custombulk_is_busy() && g_file_count)
+         {
+-            first = g_file_first;
+             switch(key_val.key)
+             {
+                 case key_left: case key_l_left: case key_rep_left:
+@@ -1325,21 +1344,28 @@
+                     break;
+                 default: break;
+             }
+-            g_file_first = (g_file_index / FILE_LIST_ROWS) * FILE_LIST_ROWS;
+-            if(first != g_file_first) scan_firmware_page(0);
++            if(g_file_index < g_file_first || g_file_index >= g_file_first + g_file_visible)
++                scan_firmware_page(0);
+         }
+         key_val.mesg = 0;
+     }
+-    for(row = 0; row < FILE_LIST_ROWS; row++)
+-        UI_FieldColor(row, 8, 48 + row * 40, 224, 36, g_file_list[row], 16,
+-                      g_file_count && g_file_first + row == g_file_index ? 0 : 1, LCD_YELLOW);
+-    sprintf(page, "%lu/%lu", (unsigned long)(g_file_count ? g_file_first / FILE_LIST_ROWS + 1 : 0),
+-            (unsigned long)((g_file_count + FILE_LIST_ROWS - 1) / FILE_LIST_ROWS));
+-    UI_FieldColor(6, 128, 28, 104, 16, page, 16, 1, LCD_YELLOW);
+-    UI_FieldColor(7, 8, 288, 224, 16, g_file_error ? g_file_error :
+-                  g_file_count ? "\xD6\xD0\xBC\xFC\xC8\xB7\xC8\xCF \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8" :
+-                  "\xCE\xDE\xB9\xCC\xBC\xFE \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8",
+-                  16, 1, g_file_error ? LCD_RED : LCD_BLUE);
++    y = 48;
++    for(row = 0; row < g_file_visible; row++)
++        y += UI_NumberedItem(row, y, g_file_first + row + 1, g_file_list[row],
++                            g_file_first + row == g_file_index) + UI_LINE_GAP;
++    /* 十二个列表槽0..11、当前项/总数槽12，顶栏独占13..15。 */
++    sprintf(page, "%lu/%lu", (unsigned long)(g_file_count ? g_file_index + 1 : 0),
++            (unsigned long)g_file_count);
++    UI_FieldColor(12, 128, 28, 104, 16, page, 16, 1, LCD_YELLOW);
++    footer = g_file_error ? g_file_error : g_file_count ?
++             "\xD6\xD0\xBC\xFC\xC8\xB7\xC8\xCF \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8" :
++             "\xCE\xDE\xB9\xCC\xBC\xFE \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8";
++    if(footer != g_file_footer_drawn)
++    {
++        UI_Fill(8, 288, 224, 16, 0);
++        UI_TextColor(8, 288, footer, 16, 1, g_file_error ? LCD_RED : LCD_BLUE);
++        g_file_footer_drawn = footer;
++    }
+     show_top(0); oled.Refresh_flag = 0;
+ }
+ 
+@@ -1539,7 +1565,7 @@
+     }
+     if(force || last_icon != icon) { UI_Logo(152, 8, icon); last_icon = icon; }
+     sprintf(temperature, "%.1fC", val.chip_temp); sprintf(percent, "%u%%", battery);
+-    UI_FieldColor(10, 44, 8, 32, 16, power ? "CON" : "DIS", 16, 1, LCD_YELLOW);
+-    UI_FieldColor(11, 84, 8, 56, 16, temperature, 16, 1, LCD_YELLOW);
+-    UI_FieldColor(12, 192, 8, 40, 16, percent, 16, 1, LCD_YELLOW);
+-}
++    UI_FieldColor(13, 44, 8, 32, 16, power ? "CON" : "DIS", 16, 1, LCD_YELLOW);
++    UI_FieldColor(14, 84, 8, 56, 16, temperature, 16, 1, LCD_YELLOW);
++    UI_FieldColor(15, 192, 8, 40, 16, percent, 16, 1, LCD_YELLOW);
++}
+--- original/BSP/bsp_oled.c
++++ USER/BSP/bsp_oled.c
+@@ -4,6 +4,7 @@
+ #include "font.h"
+ #include "ui_chinese_font.h"
+ #include <string.h>
++#include <stdio.h>
+ 
+ /* 直接使用原生像素坐标，MCU侧不分配帧缓存，显示像素由LCD掌管。
+  * 中文使用同一套细宋体16×16点阵，按1倍或整数2倍放大。
+@@ -233,7 +234,7 @@
+ {
+ #ifndef LCD_BAREMETAL
+     if(index < sizeof(logo) / sizeof(logo[0]))
+-        LCD_BlitMono(x, y, 18, 8, 18, logo[index], 1, 2, 1);
++        LCD_BlitMonoColor(x, y, 18, 8, 18, logo[index], 1, 2, 1, LCD_YELLOW);
+ #else
+     (void)x; (void)y; (void)index;
+ #endif
+@@ -491,6 +492,61 @@
+     ui_text_color = previous;
+ }
+ 
++/* 几何布局变化前统一清旧字段，避免逐项清理擦到已按新位置画出的内容。 */
++void UI_ClearFields(uint8_t first, uint8_t count)
++{
++    uint8_t i;
++    for(i = first; i < 16 && i - first < count; i++)
++    {
++        ui_field_t *field = &ui_fields[i];
++        if(field->valid) UI_Fill(field->x, field->y, field->width, field->height, 0);
++        field->valid = 0;
++    }
++}
++
++/* 编号与名称紧接；续行对齐名称，最长31字节名称最多占两行。 */
++uint16_t UI_NumberedItemHeight(uint32_t number, const char *name)
++{
++    char prefix[16];
++    uint16_t indent;
++    sprintf(prefix, "%lu.", (unsigned long)number);
++    indent = (uint16_t)strlen(prefix) * 8U;
++    return UI_TextWidth(name, 16) > 224U - indent ? 36U : 16U;
++}
++
++/* 列表沿用ui_fields缓存，不分配新文字表或帧缓冲；只重画内容/选中态改变的项。
++ * 同页上下移动只更新原选中项和新选中项；跨页先由调用方UI_ClearFields清旧几何。 */
++uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
++                         const char *name, uint8_t selected)
++{
++    char prefix[16], text[64];
++    const char *next;
++    uint16_t indent, height, previous;
++    uint8_t mode = selected ? 0 : 1;
++    ui_field_t *field;
++    if(id >= 16 || !name || !name[0]) return 0;
++    sprintf(prefix, "%lu.", (unsigned long)number);
++    sprintf(text, "%s%.31s", prefix, name);
++    indent = (uint16_t)strlen(prefix) * 8U;
++    height = UI_TextWidth(name, 16) > 224U - indent ? 36U : 16U;
++    field = &ui_fields[id];
++    if(field->valid && field->x == 8 && field->y == y && field->width == 224 &&
++       field->height == height && field->mode == mode && field->color == LCD_YELLOW &&
++       !strcmp(field->text, text)) return height;
++    previous = ui_text_color; ui_text_color = LCD_YELLOW;
++    if(field->valid && (field->y != y || field->height != height))
++        UI_Fill(field->x, field->y, field->width, field->height, 0);
++    UI_Fill(8, y, 224, height, selected);
++    UI_TextLine(8, y, indent, prefix, 16, mode);
++    next = UI_TextLine(8 + indent, y, 224 - indent, name, 16, mode);
++    if(height > 16) UI_TextLine(8 + indent, y + 20, 224 - indent, next, 16, mode);
++    ui_text_color = previous;
++    strcpy(field->text, text);
++    field->x = 8; field->y = y; field->width = 224; field->height = height;
++    field->size = 16; field->mode = mode; field->color = LCD_YELLOW; field->valid = 1;
++    return height;
++}
++
+ /* 兼容旧OLED行列坐标接口：在128×64虚拟坐标系中画一个点，放大两倍显示。
+  * row  - 虚拟行坐标，0~63；越界不绘制
+  * col  - 虚拟列坐标，0~127；越界不绘制
+--- original/BSP/bsp_oled.h
++++ USER/BSP/bsp_oled.h
+@@ -43,6 +43,13 @@
+  * mode=1为彩字黑底，mode=0为黑字彩底。颜色变化也触发缓存更新。 */
+ void UI_FieldColor(uint8_t id, uint16_t x, uint16_t y, uint16_t width, uint16_t height,
+                    const char *text, uint8_t size, uint8_t mode, uint16_t color);
++/* 清除一段缓存字段及其旧像素，适用于列表跨页/高度变化前；不影响其他字段。 */
++void UI_ClearFields(uint8_t first, uint8_t count);
++/* 224px宽编号列表项的实际文字高度（16/36），编号后紧接名称，续行对齐名称。 */
++uint16_t UI_NumberedItemHeight(uint32_t number, const char *name);
++/* 绘制x=8的编号列表项，返回实际高度；使用指定字段缓存，选中项为黄底黑字。 */
++uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
++                         const char *name, uint8_t selected);
+ /* 彩色单行文本，参数与UI_Text相同；超出右边界截断。 */
+ void UI_TextColor(uint16_t x, uint16_t y, const char *text, uint8_t size,
+                   uint8_t mode, uint16_t color);
+@@ -97,7 +104,7 @@
+  * on     - 1=白色，0=黑色
+  * 返回   - 无 */
+ void UI_Fill(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t on);
+-/* 显示状态小图标（18×8点阵放大两倍）。
++/* 显示黄色状态小图标（18×8点阵放大两倍）。
+  * x     - 左上角列坐标
+  * y     - 左上角行坐标
+  * index - 图标序号，对应font.h中的logo表；越界不绘制

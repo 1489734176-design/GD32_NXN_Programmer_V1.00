@@ -1,0 +1,22 @@
+{
+  "DAPlink.bin": "498fec04f012e486b9d48ab2c41bb592c003c3d4d97455628f98d9f1162c5b5d",
+  "DAPlink.hex": "44eea51aaa50af158b8589e1a95b6abc83f83107bbce952e6bb65dd22ebdb9b1",
+  "modified-source.zip": "f619338e165931ba3bfba6d5e45dbcf3f87a783f658685c10f8fbe48d29320ef",
+  "README.md": "8fb55d06960b82bb8d86e2424e4630281894958dc72e000edbc7d423498556f1",
+  "verification/auth-verification.json": "90d2e05f948f870cbb487820ed028d3e58b79bc7a639c389c0be4b23bc4d3353",
+  "verification/build-info.json": "916ad9fec721d9603ba2919ad90eae1ff84308639f3c7673d49c9a9effdb08a9",
+  "verification/catalog-verification.json": "88de94e2ec009f73af2e49836ad350547d2f0f95b27befca75dd0bf294a78cb8",
+  "verification/changes.diff": "116dbb72dfc04cd19f724e2eec29b92f12f16fc25a1513c4f51b5ceae3444c50",
+  "verification/dual-faults-verification.json": "4a123805e51e3c3ce8d81b93d9a636eba8ada6ad617450575959cbaf61c77f05",
+  "verification/dual-verification.json": "c428c929b8359beb71a8e42d9a3c5863f6bc58e712e815dae430897be48ae0cd",
+  "verification/final-review.md": "229519d4541d6689c6949a3a9975c4ea4de3ed473402dd9f10b4658328ebb290",
+  "verification/idle-verification.json": "b7b2ad86951eeee5864822dcd851ce5977730d1b82a29b41537b9db8d84496c0",
+  "verification/integration-test-report.md": "7787ab68d8fed352d10e2044c7edb96383924566ea3b3b942c227616c67192fe",
+  "verification/offline-build.log": "ad28f4ad0a591e09426b36745025adaac0371eda6a59028bd6261c44649d8997",
+  "verification/power-restore-verification.json": "70db59cc6134b41218cf0a023d8a698e7469c0288c36d2177b6f9afd23f13c8f",
+  "verification/regression-application.log": "7afc7ca4721d7f6107898a8c265850bad0da508e701a5607febaa14cde146cdc",
+  "verification/regression-guard.log": "3a2d0f2b5fbee186b1da2c953581a83fdbf849be55ecfee7167e64ddfb44f494",
+  "verification/regression-host.log": "e998bc2515fcf8cc2a857c9ca3ede4214fb6bae767c948718d4b1a1daf464dc7",
+  "verification/regression-usb.log": "76d55153ace7decc32322c60b95d46b05857a0ec8309d92e359bb1fcbb5b9bf3",
+  "verification/source-manifest.json": "2bbb1edfd70c0d914826e250cdd88e32172232581a1a63e75f85f7caa727357d"
+}

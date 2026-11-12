@@ -1,0 +1,20 @@
+{
+  "executed": "actual ARMCC selection_store.c Thumb code",
+  "checks": [
+    "Fresh storage and complete chip/firmware/checksum/OPT survive reboot",
+    "Unchanged and normalized ignored checksum/name padding avoid Flash wear",
+    "Explicit empty tombstone and partial selections replace older runnable records",
+    "Invalid/path/unterminated names and flag combinations never modify safe state",
+    "Every data/CRC/complement/commit word power cut preserves old or complete new selection",
+    "Program/readback errors block load and explicit retry safely repairs torn slots",
+    "Rollover including partial stale-page erase preserves latest or fails closed",
+    "Any committed field/CRC damage blocks rollback and successful explicit save clears reboot fault",
+    "Recovery target erase/commit/old-page cleanup interruption never revives corrupted selection",
+    "Sequence wrap uses serial ordering and saves through FFFFFFFF -> 00000000",
+    "250 configuration changes with reboots/page rotations retain exact latest selection",
+    "Older committed corruption cannot be hidden by a valid newer record"
+  ],
+  "fault_injection_cases": 189,
+  "quota_region_untouched": true,
+  "hardware_tested": false
+}

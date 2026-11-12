@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-23",
+  "project": "GD32-HID/GD32-HID",
+  "start": "0x0800C000",
+  "bin_bytes": 60908,
+  "sha256": "667464945b3d5fdb5500fda5e3eb4bdee51ab8801f519e977bf9a3b9f982bbf2",
+  "initial_sp": "0x20004dd0",
+  "reset_vector": "0x800c1b5",
+  "build_errors": 0,
+  "build_warnings": 0,
+  "ram_bytes": 20064,
+  "ram_capacity": 20480,
+  "source_flow_checks": {
+    "long_event_one_shot": true,
+    "repeat_event_is_distinct": true,
+    "no_short_event_on_long_release": true,
+    "existing_event_numbers_preserved": true,
+    "mode2_toggles_on_right_long": true,
+    "mode2_ignores_right_repeats": true,
+    "file_picker_handles_long_and_repeats": true
+  },
+  "hardware_tested": false
+}

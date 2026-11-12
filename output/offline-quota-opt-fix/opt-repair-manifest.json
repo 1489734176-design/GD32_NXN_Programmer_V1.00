@@ -1,0 +1,276 @@
+[
+  {
+    "file": "Bootloader/Bootloader/USER/APP/run.c",
+    "before": "dc49fa4a9f796eaf7798271ef980c2239569c5b064dfdaf2660f97e52d847b6f",
+    "after": "acb2f726486655297ee79533e8b7fc938481f2828381b0c971d69586c5aeda40",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_gd25qxx.c",
+    "before": "7f58b9cc65ea4a46b83aa8e17bed78dcda6ebd1c1f0fa2935b5bc0a129bef2c8",
+    "after": "2777cb6d7bf08e9c9a4edf2d10d65327711fdefc29c9ec575f9f601917865a49",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_gd25qxx.h",
+    "before": "b8ddc3f8058ec44e8e9907f684f712d668e6d2ef463c4488015956d6ff98ce1d",
+    "after": "f697d0538b5f820aa88da5d44fffac4dd041989d4dff25103ab32296df62df28",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_led.c",
+    "before": "9c6ab9437baeb57cdf35edfd1a685de79e2f52adbdfdcc6cdc7e701d9dc38dc3",
+    "after": "d725beb59832bdb1420b46f016912c3cd32444e2df621ad803ce9fa3754b177b",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_led.h",
+    "before": "1430f91640e9cce3a46c7e96d21dc3b650ee41428570bb55446524f2d9d498e3",
+    "after": "b4efafd7f728f06c621cdcd3d39719ab6be30c3a86d43fbafbeb2c197fc57412",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_oled.c",
+    "before": "97c90df848ebb8364f315d7a1cf21f7364e4e436ffc0ca79bcf72bac09bb6a2f",
+    "after": "021897e71c02208ccf64cc6df45243cc6d1892dae135ed3b8fc5f5b26685d555",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_oled.h",
+    "before": "2e134691c05c795d4fc1514470b11dfecfd943a66f9bdb3e87c09568f80d5729",
+    "after": "835729000fff23475e2c1721db4b06aa175ffcfe4a47e42a3d82314c1156c5f9",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/font.h",
+    "before": "e396009fd594e79187dfe505d1008c79aefeda16c40882e9f7cc92f8da405fb4",
+    "after": "9d4df0620b18c30f98315b44713e306c11ca9f8f4bd8f6c9b910e462d1b0376c",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/ui_chinese_font.h",
+    "before": "ac879901310eff6a5fc15f4bcdc61ddb1dd303e49dc60c839c9629d3a7be4991",
+    "after": "9e80c9595d283b4ce3cac2a3fcc62609491bb27c1a746dbb92df3ee992bddbad",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h",
+    "before": "5f38b3516e5ce9206bc79688fd73dffd5858b3e4784f933e2fdc33f46531720e",
+    "after": "d44acec18816e9b6582b70e67216d4620e402a13aaa1e0ae336d031d0de37c15",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c",
+    "before": "7e9169360d4bca1b85a6808d528919241e9ca44750b50981f4cc51f6e3ce73c5",
+    "after": "4fb5e7e0e008c06d02f0e70c32f4e41e38273549f3852385f8488a708b45be0b",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/hid/Source/custom_hid_core.c",
+    "before": "8993b640e96d86c96a3813c4c54cf74c4122dc834890c1839c908e3b3eab6498",
+    "after": "a3cf1fa588d5a7c6d6915aeacc2f79ddcf034834402f91f54201b292b5840607",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/hidmsccdc/usbd_composite.c",
+    "before": "0e57293d8a5acc1005daed5d45ce4d9ddbc206a713ecd3c08fafbf5d012f6b99",
+    "after": "548377656287946365357ff67e70d313e97597b76201eb027d06d6be3aa69bb3",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/hidmsccdc/usbd_composite.h",
+    "before": "1af40ee4a9ebef662756de090c1b1a4a35c57fc2a7146bf9b87d1318af7e85fe",
+    "after": "696b55aa03d48fd9d425ff2b61041fa5119b8766639586715a8470c75bfd2a77",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.c",
+    "before": "50f708d4a6955e8ae7e9c670694c79a2f40d3d4fbe86c67bd50c9acc1a07063c",
+    "after": "6fa4fda5d14abe1a09d826e64df54eb4b5a5a4e0a13e046febcaaa969637a125",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.h",
+    "before": "987aca0ef581515e31d8deacaa734b4c6ebe7e534c81ae3837a703133b364e77",
+    "after": "bf6c12bd4f850ba795df094023c883c446384260702f75893f0db1b3d51b9f92",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_port.c",
+    "before": "ed6dcda0c659166ce280e3ca1f1c04ddb43141e2ea1bd6b595f06b20f79c1f5b",
+    "after": "d0fe7cd0676fe5e2250db95ae96354833c3c474f2885a0650f02bc343cbbd505",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/firmware_features.h",
+    "before": "c4c89e9a2a4c38d0249b53c4df5af452809ad73de96fb984fda7e6bed09fdd1e",
+    "after": "9f48e850e908f576b84affa3fd4893949bce669336b958072c1031144635f181",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.c",
+    "before": "3cf3f6401041656eb800696278a75388b5d959730200b121b65bad7d7d221f82",
+    "after": "08ba24aae2d7dc34d001dd1c54374d74afd8c56963ae7711694bc3b11332d97b",
+    "encoding": "utf-8",
+    "comments_only": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.h",
+    "before": "e1c652928843b05126d92fdb0794fe17fba59096e9afa0f23c980ce952fdf0b2",
+    "after": "a3da9e3391685bfb62c830fa37ffc75ca7a2de728b877d39e4091472ac8adb30",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c",
+    "before": "19064827878dda1656df8cc43600e3a6958cfd734d037d531ee98ad50d5aac78",
+    "after": "36c66368de79342cdd85132e8cd2b25a3e4f818941b96005465f2bae68dee67f",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.h",
+    "before": "28b25eeaa946e0372d6817e67bd848f45ea77db1f194f29e2f04783ebba03f6b",
+    "after": "2214122242cf58375e2ee6056c5950993f3d4597f43684b53eab1fc224be2c4e",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_key.c",
+    "before": "a55384751cc9fe32ab0b99a1e8c1bc0bd00e41c5b7932994360560d2c861fe3b",
+    "after": "0dfd52178679e812ebb39352ea1b881115e8ad040106e9c8eb397605bef06b1c",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_key.h",
+    "before": "fae6f9ef06275d12df4611b2268717ea8e7549933ad56ede92d71d072b60c693",
+    "after": "5c2500bb9923de83be78b957d0e8a0e42aa94883834a11041f4bc2c723b56829",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_lcd.c",
+    "before": "53c66f961e0d325b2a97458507bf18a7954d467d9c006410122e3441c80900c8",
+    "after": "798a00aa65d6da3c76bfb1b6ad66c4736f989c11e0bd69264423f1259ef3d25f",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_lcd.h",
+    "before": "581d63a982120f016edf1da5cca77f947ce3742d11ef3b4816b0e5a6d5fee984",
+    "after": "bdc755c2e50cccb7823c159581d544d6c30cc5e5919311903a7373b86f03aca2",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_oled.c",
+    "before": "97c90df848ebb8364f315d7a1cf21f7364e4e436ffc0ca79bcf72bac09bb6a2f",
+    "after": "021897e71c02208ccf64cc6df45243cc6d1892dae135ed3b8fc5f5b26685d555",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_oled.h",
+    "before": "2e134691c05c795d4fc1514470b11dfecfd943a66f9bdb3e87c09568f80d5729",
+    "after": "835729000fff23475e2c1721db4b06aa175ffcfe4a47e42a3d82314c1156c5f9",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_spi0_bus.c",
+    "before": "64ea6d97820563cb3678e53f3b3bffb201674202ac157577c7adeffa0b3f7341",
+    "after": "71dddf01d97cd3f1b93fb9b4473d61fe7767d11ff49069ab715e4381fa6ec107",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_spi0_bus.h",
+    "before": "edb5164f4d1f331a5802e4db7f85144ccacfca2f6f65a7484bb40f9af956de40",
+    "after": "47934d908333377aa6548a7e3e1d346541e883100f8ebf27e3cfee54a4ad91f0",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/font.h",
+    "before": "e815f8bc04f27f058c85789ddc2b04118ed0580d6fd79eb23c050b0ba6b093b2",
+    "after": "e49d4be53972094fce12bb997842756a0c50847db378ddc59aa050bccbf62cfe",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h",
+    "before": "b15e8ed63dd493c7703f1ae79f8e90dee4eceab71e83d2855aacff9b2b34cd18",
+    "after": "a6d1449f0fef7583d2e4f47b730538cd79f9930bd2f90747550848284156b879",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/DAPlink/DAP.c",
+    "before": "b284d4935d1d37a26d57e422ffc904809928e9bcdcf5976d3bbf5df1ad2edc0e",
+    "after": "c7a73eeba4f03dc4f14892dd89777fd554d1c05b027427502a58e7fe5e4af489",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/DAPlink/DAP_config.h",
+    "before": "dbd24f014f6429fac64b0706439cb54bda0da0885ba846046048d976fe16fd64",
+    "after": "94869e479f1b40f3f422a01d61071dc737ba6e1bd2ef136dc3c2782e48af11a9",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/DAPlink/DAP_vendor.c",
+    "before": "b83b7ffae17e05519fe89c5881b82f1ab19c920aa0db06545fbecd0f4402023a",
+    "after": "09cdaf1d68edb545d07961cab50ae9eae30d588a1c0e6524d62912c723202df0",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/DAPlink/USBD_User_HID_0.c",
+    "before": "f34df338ee9572f833fbf7f3860817fe3b135db3c5f4dabf2459e9bb56198468",
+    "after": "f046de545d88fb2231b2c6b23be8167326beac2074924abd6df365099d3f2aac",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/FREERTOS/include/FreeRTOSConfig.h",
+    "before": "5c66ae914b660b6a653852fc83d689c14f9f44e3ddae2d91130f5b3cd3104d48",
+    "after": "4b35e85bf5afe5618123c2f800989fa6514d6a14f4eedfeb5928891d65b89b87",
+    "encoding": "gbk",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/tools/daplink_manager.py",
+    "before": "0eab543df6343d566e425e4eea7708f637f03e3542cdb8bffa017788a0bbdd21",
+    "after": "dce606e1b336a8ed415ef45314f20b28631b770d2594e7f6ff5b32bdbd3511e0",
+    "encoding": "utf-8",
+    "comments_only": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx",
+    "before": "647f0d0656f5a0cc80422b9f138c2c4acbdc8c2481a92d0ef0a4fddced01f1cc",
+    "after": "140be9fa29b762daa9b908335619502e2dde5180d12cad697b4a3e3ba48ed128",
+    "encoding": "utf-8",
+    "comments_only": false,
+    "note": "Current quota project serialization; app partition and added source entries verified"
+  }
+]

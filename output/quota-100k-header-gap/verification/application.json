@@ -1,0 +1,22 @@
+{
+  "executed": "complete current Keil application Thumb image",
+  "checks": [
+    "Actual startup restores chip, firmware, OPT and multi-chunk SUM32",
+    "0/999/unlimited persist; starting or interrupting a burn does not debit100",
+    "Missing algorithm/BIN/required OPT, changed SUM32, short read, empty BIN and mount failure cannot auto-burn",
+    "Startup manual selections derive OPT from final extension and use default_opt.bin without an extension",
+    "Prepare marks dirty; main-task save commits once and unchanged loops do not wear Flash",
+    "Firmware list browse preserves old selection; confirmation computes SUM32 and persists on return",
+    "Actual long-middle shutdown commits dirty selection before powering down external peripherals",
+    "Durable invalidation blocks runnable RAM on failure and prevents old selection returning on reboot",
+    "Full app selection: A2 / B4 / unknown limited-zero remain independent",
+    "Actual USB named reimport resets only A; short request targets selected firmware",
+    "Actual manual and automatic burn entry both stop at the selected firmware zero quota",
+    "Staged import with empty current selection applies quota and restores it on reboot",
+    "Lost committed quota catalog blocks manual switch instead of granting unlimited burns",
+    "Actual failed burn keeps displayed100 and both media unchanged throughout the connection attempt",
+    "Full app USB32-bit boundary100000/reject100001, success99999, A/B switch and reboot remain exact"
+  ],
+  "image_sha256": "ebaba73fcc86ba933d35217e5ccb582e1cd82375937f8be6a123c69b4ff87f28",
+  "hardware_tested": false
+}

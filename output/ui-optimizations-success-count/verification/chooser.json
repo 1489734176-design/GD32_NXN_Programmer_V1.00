@@ -1,0 +1,14 @@
+{
+  "passed": [
+    "charger_bolt_persists_when_full_and_clears_when_unplugged",
+    "chooser_locates_current_and_browsing_does_not_read_contents",
+    "confirmation_commits_checksum_opt_and_restores_main_cache",
+    "cancellation_empty_and_directory_errors_preserve_valid_selection",
+    "invalid_names_filtered_long_names_wrap_and_cancel_clears",
+    "rejected_firmware_or_opt_never_commits_or_lowers_protection",
+    "usb_import_returns_to_main_and_reentry_reloads"
+  ],
+  "failed": [],
+  "image_sha256": "d6097d058f062597e0b5d660f8c8e88b702943136d21504ae6e003c148e13ca4",
+  "hardware_tested": false
+}

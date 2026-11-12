@@ -1,0 +1,74 @@
+[
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.c",
+    "sha256": "2596278686f1fc1459d700ae5874ebc4209f32b7b653f94f0c0bcbb3a75d7d49",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.h",
+    "sha256": "f0c402b9b17f720de6258426a015cac4703d5a90e2b414a46983e6e9e6e8611d",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_port.c",
+    "sha256": "7a9ea16f03f9cc3682e1633e40fdc08bf814b0d3779704ab7fef6bc1846968c9",
+    "encoding": "utf-8",
+    "changed": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_catalog.c",
+    "sha256": "5f5b40952258764bac85ff3a8aaa0c2763f5ef1c91d03d55f37a43c770563e11",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.c",
+    "sha256": "ac43937d64e06b7b7ae888f807cb39f58d03221a64dd22002a474cf279671ab8",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.h",
+    "sha256": "ba2465570630771bdedab2eff352ef8444c75e45c00cd0cd5047f856a06491f3",
+    "encoding": "utf-8",
+    "changed": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/selection_store.c",
+    "sha256": "5804be017a6937b1bfc86b6762a71d0dec92b3a145a1cec695d8861e3bb9232d",
+    "encoding": "gbk",
+    "changed": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/selection_store.h",
+    "sha256": "7f8aa3ad11bdcd0c49ee5e4ccdffd427f3a12d9f9f6626eb400b092f47b42310",
+    "encoding": "gbk",
+    "changed": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/selection_store_port.c",
+    "sha256": "2e4156394bbc5437a0afa723adb8ecafcf3c63b2d3e4d4eee9bafa874eac32c2",
+    "encoding": "gbk",
+    "changed": false
+  },
+  {
+    "file": "GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx",
+    "sha256": "7cc269f330987c0b5b88cab6b3bd1ad4c9be124a877ddaa9ef998960108f023c",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/tools/daplink_manager.py",
+    "sha256": "ff46ac0e09e6adbf577cce41816bdfe184a75b43d22fbeac0f122741c7c5bdd3",
+    "encoding": "utf-8",
+    "changed": true
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c",
+    "sha256": "c2324d67e6bc5298ba4b9d39769df005dea46c04b85a5fef454cb2bbdcd2cd41",
+    "encoding": "gbk",
+    "changed": true
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "passed": [],
+  "failed": [
+    {
+      "test": "charger_bolt_persists_when_full_and_clears_when_unplugged",
+      "error": "charging has no independent bolt left of battery"
+    },
+    {
+      "test": "chooser_locates_current_and_browsing_does_not_read_contents",
+      "error": "middle on firmware row did not enter chooser"
+    },
+    {
+      "test": "confirmation_commits_checksum_opt_and_restores_main_cache",
+      "error": "middle on firmware row did not enter chooser"
+    },
+    {
+      "test": "cancellation_empty_and_directory_errors_preserve_valid_selection",
+      "error": "middle on firmware row did not enter chooser"
+    },
+    {
+      "test": "invalid_names_filtered_long_names_wrap_and_cancel_clears",
+      "error": "middle on firmware row did not enter chooser"
+    },
+    {
+      "test": "rejected_firmware_or_opt_never_commits_or_lowers_protection",
+      "error": "middle on firmware row did not enter chooser"
+    },
+    {
+      "test": "usb_import_returns_to_main_and_reentry_reloads",
+      "error": "middle on firmware row did not enter chooser"
+    }
+  ],
+  "image_sha256": "319334b78174dfaefe7f51b871612b197bca11fa48506b0efe60a6e2942fc1d9",
+  "hardware_tested": false
+}

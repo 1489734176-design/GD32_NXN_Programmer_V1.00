@@ -1,0 +1,27 @@
+{
+  "release": "boot-nxn-logo",
+  "date": "2026-10-30",
+  "hardware_tested": false,
+  "bin_sha256": "16564517b980cd4298ead2d9aa2d24858e66f573f00d77eac60c8231b5776cc1",
+  "bin_bytes": 71804,
+  "application_base": "0x800c000",
+  "application_end_exclusive": "0x801d87c",
+  "bin_matches_hex": true,
+  "iram_bytes": 19928,
+  "iram_same_as_previous": true,
+  "boot_hold_ms": 1000,
+  "logo_and_caption_color": "red RGB565 0xF800",
+  "layout": "logo and caption centered together",
+  "caption_font": "Previous UI SimSun32",
+  "logo_geometry": "approved NXN letters; tapered crescents related by 180-degree rotation",
+  "antialias_coverage_levels": 16,
+  "source_sha256": {
+    "APP/run.c": "d60f61ef45b4f98dc46ca1ef14f9555a4b337e9e20ee46e791126b80d79d1753",
+    "BSP/ui_boot_logo.h": "8ae556ef08c99eec89e373969f935dec0c0648c1c51a67c93720d3a2585311e7"
+  },
+  "build_errors": 0,
+  "build_warnings": 0,
+  "compiled_main_test_groups": 8,
+  "preserved_existing_source_bytes": true,
+  "preserved_prior_sources": true
+}

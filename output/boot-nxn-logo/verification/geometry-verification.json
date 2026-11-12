@@ -1,0 +1,14 @@
+{
+  "metrics": {
+    "different_pixels_between_Ns": 0,
+    "X_horizontal_asymmetry": 0,
+    "X_vertical_asymmetry": 0,
+    "arc_rotation_asymmetry": 0,
+    "top_left_coverage": 10512,
+    "top_right_coverage": 5327,
+    "coverage_levels": 16
+  },
+  "failed": [],
+  "passed": true,
+  "header_sha256": "8ae556ef08c99eec89e373969f935dec0c0648c1c51a67c93720d3a2585311e7"
+}

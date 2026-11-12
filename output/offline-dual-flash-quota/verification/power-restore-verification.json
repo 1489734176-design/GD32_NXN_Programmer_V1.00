@@ -1,0 +1,20 @@
+{
+  "executed": "complete current Keil application Thumb image",
+  "checks": [
+    "Actual startup restores chip, firmware, OPT and multi-chunk SUM32",
+    "0/999/unlimited and interrupted burn 100->99 survive without quota reset",
+    "Missing algorithm/BIN/required OPT, changed SUM32, short read, empty BIN and mount failure cannot auto-burn",
+    "Startup manual selections derive OPT from final extension and use default_opt.bin without an extension",
+    "Prepare marks dirty; main-task save commits once and unchanged loops do not wear Flash",
+    "Actual next-file key retains chip, invalidates old SUM32 and persists manual firmware before reboot",
+    "Actual long-middle shutdown commits dirty selection before powering down external peripherals",
+    "Durable invalidation blocks runnable RAM on failure and prevents old selection returning on reboot",
+    "Full app selection: A2 / B4 / unknown limited-zero remain independent",
+    "Actual USB named reimport resets only A; short request targets selected firmware",
+    "Actual manual and automatic burn entry both stop at the selected firmware zero quota",
+    "Staged import with empty current selection applies quota and restores it on reboot",
+    "Lost committed quota catalog blocks manual switch instead of granting unlimited burns"
+  ],
+  "image_sha256": "498fec04f012e486b9d48ab2c41bb592c003c3d4d97455628f98d9f1162c5b5d",
+  "hardware_tested": false
+}

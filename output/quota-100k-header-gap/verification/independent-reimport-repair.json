@@ -1,0 +1,54 @@
+{
+  "passed": true,
+  "source_sha256": {
+    "burn_quota.c": "7f785934d630db23e5895eb0e46da55bdb6fa4d7e2f2e527360e313d96907c34",
+    "burn_quota_catalog.c": "8ee732b8ae53ad2aeb2abce6856ee32a9635a107522e2981771126cfee5a45a6",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad",
+    "burn_quota.h": "0e8eb55385d52305e0c12b6702699720d96214e77cf8e72f5820bbcb519c0c1c",
+    "quota_auth.h": "5252f0273baacb948ff9f46fa66cccb99a8b67b9c1998a93dbe4d15082e64175",
+    "burn_quota_mirror.h": "029b1072ae39e3d80298bb9685f983314acdd818a7d5ab6247c2735dcf901916"
+  },
+  "binary_sha256": "568292cb8d8103e0f0c64ec01417d57dc1a55a1d65dca9634ad6875600bdedc0",
+  "cases": [
+    {
+      "mode": "failure",
+      "operation": "f_open",
+      "occurrence": 1,
+      "result": "OK after verified repair",
+      "mutations": 28
+    },
+    {
+      "mode": "failure",
+      "operation": "f_read",
+      "occurrence": 1,
+      "result": "OK after verified repair",
+      "mutations": 28
+    },
+    {
+      "mode": "failure",
+      "operation": "f_close",
+      "occurrence": 1,
+      "result": "OK after verified repair",
+      "mutations": 28
+    },
+    {
+      "mode": "short",
+      "operation": "f_read",
+      "occurrence": 1,
+      "result": "OK after verified repair",
+      "mutations": 28
+    },
+    {
+      "mode": "persistent failure",
+      "operation": "f_read",
+      "result": "STORAGE and restart locked"
+    },
+    {
+      "mode": "committed catalog validation failure",
+      "operation": "f_open",
+      "occurrence": 1,
+      "result": "STORAGE without writes"
+    }
+  ]
+}

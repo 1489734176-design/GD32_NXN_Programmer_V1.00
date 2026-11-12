@@ -1,0 +1,11 @@
+--- original/tools/daplink_manager.py
++++ tools/daplink_manager.py
+@@ -710,7 +710,7 @@
+         quota_layout.addWidget(self.btn_quota_read, 0, 3)
+         quota_layout.addWidget(self.lbl_quota, 0, 4)
+         quota_layout.setColumnStretch(4, 1)
+-        self.quota_frame.setToolTip("每个主固件文件独立保存次数。导入按当前设置重新加载该文件的次数，设100次即恢复100次；取消勾选后该文件为不限，其他文件不受影响。单独保存/读取针对设备当前选择的固件；手动切换文件会恢复该文件自己的剩余次数。失败不扣次数，烧录中断电按一次计。")
++        self.quota_frame.setToolTip("每个主固件文件独立保存次数。每次导入程序（包括同名重新导入）都会按当前设置重新加载该文件的次数，并清零已用次数；设100次即恢复100次。取消勾选后该文件为不限，其他文件不受影响。单独保存/读取针对设备当前选择的固件；手动切换文件会恢复该文件自己的剩余次数。仅确认烧录成功后扣一次，失败或成功前断电均不扣，成功次数掉电保存。")
+         layout.addWidget(self.quota_frame)
+ 
+         # ── Splitter: Local + Remote ──

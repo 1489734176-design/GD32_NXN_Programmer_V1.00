@@ -1,0 +1,13 @@
+PASS Actual startup restores chip, firmware, OPT and multi-chunk SUM32
+PASS 0/999/unlimited and interrupted burn 100->99 survive without quota reset
+PASS Missing algorithm/BIN/required OPT, changed SUM32, short read, empty BIN and mount failure cannot auto-burn
+PASS Startup manual selections derive OPT from final extension and use default_opt.bin without an extension
+PASS Prepare marks dirty; main-task save commits once and unchanged loops do not wear Flash
+PASS Actual next-file key retains chip, invalidates old SUM32 and persists manual firmware before reboot
+PASS Actual long-middle shutdown commits dirty selection before powering down external peripherals
+PASS Durable invalidation blocks runnable RAM on failure and prevents old selection returning on reboot
+PASS Full app selection: A2 / B4 / legacy unlimited remain independent
+PASS Actual USB named reimport resets only A; short request targets selected firmware
+PASS Actual manual and automatic burn entry both stop at the selected firmware zero quota
+PASS Staged import with empty current selection applies quota and restores it on reboot
+PASS Lost committed quota catalog blocks manual switch instead of granting unlimited burns

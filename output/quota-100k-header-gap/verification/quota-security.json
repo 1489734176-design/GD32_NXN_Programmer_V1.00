@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "catalog_source_sha256": {
+    "burn_quota_catalog.c": "8ee732b8ae53ad2aeb2abce6856ee32a9635a107522e2981771126cfee5a45a6",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9"
+  },
+  "catalog_checks": [
+    "Same-length same-CRC historical record replay fails authentication",
+    "Empty/unknown state is limited zero; explicit unlimited gets an authenticated record",
+    "Append root equals independent Python HMAC; latest record wins and tail is ignored",
+    "Missing, short or corrupt committed data fails even for unknown names",
+    "Invalid schema, malformed lengths/tags, and later damaged records are rejected",
+    "All FatFs errors, short writes and full-prefix readback corruption keep output root unchanged",
+    "Partial appended record cannot supersede the authenticated committed prefix",
+    "Filename and quota boundaries reject invalid requests before file operations",
+    "Seventy distinct balances survive without an internal page-count cap",
+    "CRC migration retains all bytes/balances and rejects missing, corrupt or unreadable prefixes"
+  ],
+  "source_sha256": {
+    "burn_quota.c": "7f785934d630db23e5895eb0e46da55bdb6fa4d7e2f2e527360e313d96907c34",
+    "burn_quota_catalog.c": "8ee732b8ae53ad2aeb2abce6856ee32a9635a107522e2981771126cfee5a45a6",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad"
+  },
+  "journal_checks": [
+    "limited: RAM session, busy guards, failure/reboot no writes, exactly-once success",
+    "unlimited: RAM session, busy guards, failure/reboot no writes, exactly-once success",
+    "zero quota blocks without opening a session or writing",
+    "failure closes RAM session without touching media; next begin rejects tampering",
+    "Missing/short/replayed/tampered mirrors stay blocked across reboot; explicit SET repair preserves known history",
+    "Live begin and successful finish reauthenticate physical media; corrupted used cannot be committed",
+    "Erased internal quota cannot trust external copy; partial new page prevents CRC-format downgrade",
+    "New used/remaining word readback corruption blocks root publication and journal commit"
+  ]
+}

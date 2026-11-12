@@ -1,0 +1,20 @@
+{
+  "executed": "actual offline.axf Thumb code",
+  "checks": [
+    "Fresh device is unlimited",
+    "100 -> 099, durable success, duplicate begin/settings blocked",
+    "Detected programming failure refunds once",
+    "Repeated finish never refunds twice",
+    "Exactly 100 successes, 101st denied including after reboot",
+    "Unlimited/zero/max settings and invalid inputs",
+    "Power interruption after reservation retains deduction",
+    "Every word boundary/torn word during reserve: no extra credit",
+    "Rollover erase/program interruption preserves committed count or blocks",
+    "Storage write failures prevent target programming",
+    "Interrupted refund never increases above original count",
+    "CRC damage fails closed and explicit PC reset repairs journal",
+    "999 successes with failures/reboots/page rotations have exact accounting"
+  ],
+  "fault_injection_cases": 50,
+  "hardware_tested": false
+}

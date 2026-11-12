@@ -1,0 +1,21 @@
+{
+  "algorithms/MM32G001-OPT_ext.bin": "e57044eef0df86f37b894929260e94e0b990f1f0ff8e9664b11da109a3201012",
+  "algorithms/MM32SPIN0230-OPT_ext.bin": "d5f480439b4cf26c382ef92fd07fa48fe72317d8ddd84eaccbee4052c2043359",
+  "DAPlink.bin": "3cd183dc7551523e188091698c1632430e3b193e4bf75f4de9da52ddf38515f7",
+  "DAPlink.hex": "93cf9b4f7ce1b9b6cd5710f6f2897c3596dd8b772c08d23f93b14b1383d7d46d",
+  "modified-source.zip": "4982c418a4057232e3b7d7b5ba849cc1367dfcf6044531da11780c99b8f01741",
+  "README.md": "f257b7c7c49d865e937f06e05eb5e5b1e61ed65f3396bd6d46c6f7959a2e67b5",
+  "tools/chip_config.json": "54a2270d5efa45c26a7da78f9352baef1b9e1fc999329eda3d1ec469a4daecab",
+  "tools/daplink_manager.py": "ad9fc0f1977ce50f2fe166c168d3ea51e924f9d3e8627299f531ab2591a7575a",
+  "tools/file_transfer.py": "8eb65fca418519ad58315c7a06298c789ad71c5ec0788d248579d173f126f314",
+  "tools/opt_config.py": "4bf04ef054665b56b7b39bd42cd11944bd2960c2d47adab828e1be1da4e16980",
+  "tools/run.bat": "0aefda2d07ca6a65851f09e1c344a0f291772d4b0f8259756c76c807de5b119d",
+  "verification/build-info.json": "4297e07e7676570f1922990f42d9ef12c1fc9cdeef887c4395dec6558f656cb5",
+  "verification/device-chip-ui-verification.json": "c5026b57602b5a902e606dea10d43c60045b3c42a57395e3a10d771180428e92",
+  "verification/device-implementation.md": "91a03bad739d508ffad22ee80c2f72837664d50176126f82eb4ebdbd926f9df1",
+  "verification/final-review.md": "184cdb333fd19aeed209b8f4bf79366372a73291ab164b275dc28c03ade84185",
+  "verification/host-review.md": "a7835caecd494ddbb3c9286c46280c52398880009a645fd9e8cd0c8bbf563d70",
+  "verification/host-verification.json": "b2875a25e38a6b573eec73d9bb9bd2a3010713130ad4a5129d4ff5f136ea1815",
+  "verification/offline-build.log": "44d98235e8d1ec41de1734f3ece7e5cab1ae1dd952831552e54e659006c30219",
+  "verification/regressions.json": "79374ec9f9caf7a31c303fe5b23b1da3bf509bb4a8120d07133e381f5f5b6562"
+}

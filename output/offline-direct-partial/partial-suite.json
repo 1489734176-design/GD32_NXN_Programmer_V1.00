@@ -1,0 +1,75 @@
+{
+  "results": [
+    {
+      "test": "test_partial_startup.py",
+      "exit_code": 0,
+      "output": "PASS first page is automatic standby; USB connected before first page\r\n"
+    },
+    {
+      "test": "test_partial_refresh.py",
+      "exit_code": 0,
+      "output": "PASS repeated_standby\r\nPASS repeated_progress\r\nPASS busy_file_access\r\n"
+    },
+    {
+      "test": "test_partial_details.py",
+      "exit_code": 0,
+      "output": "PASS 16/32像素字符、变短/变长/换行/中英文交替的增量绘制与新页面逐像素一致\r\nPASS 空目录提示切换为16像素文件行时清除旧字段超出的边缘\r\nPASS 温度变化只写底部温度字段，未变化采样不写LCD\r\nPASS 099→098只绘制末位数字，文件名/标题/温度均不重画\r\nPASS USB OUT中断不执行FatFs，主任务执行后应答，IN结束后解除忙状态\r\nPASS 烧录期间文件指令返回忙，状态查询保留，回到待机后文件指令恢复\r\nPASS 导入含OPT文件后直接进入烧录页，额度不变且USB可立即查询状态\r\nPASS 导入取消后释放待机暂停状态\r\nPASS USB断线回调不关闭文件，主任务关闭并释放传输状态\r\nPASS 编译镜像已移除一级模式菜单和文件传输页面\r\n"
+    },
+    {
+      "test": "test_partial_list_reset.py",
+      "exit_code": 0,
+      "output": "PASS list cursor only redraws old/new rows; USB directory shrink clamps index and redraws\r\nPASS actual low-level USB bus reset defers file close to task\r\n"
+    },
+    {
+      "test": "test_partial_result_usb.py",
+      "exit_code": 0,
+      "output": "PASS manual completed result allows USB quota without leaving result page\r\n"
+    },
+    {
+      "test": "test_partial_cancel.py",
+      "exit_code": 0,
+      "output": "PASS failed import cancellation closes pending file and releases busy\r\n"
+    },
+    {
+      "test": "test_opt_display_buffer.py",
+      "exit_code": 0,
+      "output": "PASS Count/status refresh preserves pending OPT file path in limited and unlimited mode\r\nPASS Dynamic diagnostic in D survives quota display and is retained for automatic results\r\n"
+    },
+    {
+      "test": "test_opt_burn_flow.py",
+      "exit_code": 0,
+      "output": "PASS encrypted OPT completes without file-path corruption and consumes exactly one count\r\nPASS unprotected OPT completes without file-path corruption and consumes exactly one count\r\nPASS Actually missing OPT still fails and refunds the reserved count\r\n"
+    },
+    {
+      "test": "test_quota_arm.py",
+      "exit_code": 0,
+      "output": "PASS Fresh device is unlimited\r\nPASS 100 -> 099, durable success, duplicate begin/settings blocked\r\nPASS Detected programming failure refunds once\r\nPASS Repeated finish never refunds twice\r\nPASS Exactly 100 successes, 101st denied including after reboot\r\nPASS Unlimited/zero/max settings and invalid inputs\r\nPASS Power interruption after reservation retains deduction\r\nPASS Every word boundary/torn word during reserve: no extra credit\r\nPASS Rollover erase/program interruption preserves committed count or blocks\r\nPASS Storage write failures prevent target programming\r\nPASS Interrupted refund never increases above original count\r\nPASS CRC damage fails closed and explicit PC reset repairs journal\r\nPASS 999 successes with failures/reboots/page rotations have exact accounting\r\nTotal fault cases 50\r\n"
+    },
+    {
+      "test": "test_quota_integration.py",
+      "exit_code": 0,
+      "output": "PASS SET defers all Flash writes to task service, exact 8-byte response\r\nPASS GET exact version/flags/LE32 packet\r\nPASS Malformed/range/disabled-count requests rejected\r\nPASS Burn/file/prepare/pending conflicts and service-time race blocked\r\nPASS Zero manual/auto quota renders failure/reason/000 and performs no target operation\r\n"
+    },
+    {
+      "test": "test_quota_boot.py",
+      "exit_code": 0,
+      "output": "PASS 0/7/over-limit update rejected before log/file writes\r\nPASS Current app and maximum allowed image upgrade preserve both quota pages\r\n"
+    },
+    {
+      "test": "test_boot_partial_progress.py",
+      "exit_code": 0,
+      "output": "PASS 0/7/over-limit update rejected before log/file writes\r\nPASS Current app and maximum allowed image upgrade preserve both quota pages\r\nPASS Boot progress only paints changed bar segment and digit\r\n"
+    },
+    {
+      "test": "test_quota_host.py",
+      "exit_code": 0,
+      "output": "PASS host quota protocol, workers and controls in 3 window sizes\r\n"
+    },
+    {
+      "test": "verify_image.py",
+      "exit_code": 0,
+      "output": "{\r\n  \"baseline\": {\r\n    \"code\": 49468,\r\n    \"ro\": 11068,\r\n    \"rw\": 852,\r\n    \"zi\": 19212,\r\n    \"ram\": 20064,\r\n    \"rom\": 60908\r\n  },\r\n  \"offline\": {\r\n    \"code\": 44180,\r\n    \"ro\": 12064,\r\n    \"rw\": 772,\r\n    \"zi\": 16988,\r\n    \"ram\": 17760,\r\n    \"rom\": 56572\r\n  },\r\n  \"online\": {\r\n    \"code\": 52556,\r\n    \"ro\": 12136,\r\n    \"rw\": 880,\r\n    \"zi\": 19440,\r\n    \"ram\": 20320,\r\n    \"rom\": 65064\r\n  },\r\n  \"boot\": {\r\n    \"code\": 26432,\r\n    \"ro\": 6380,\r\n    \"rw\": 456,\r\n    \"zi\": 15040,\r\n    \"ram\": 15496,\r\n    \"rom\": 33012\r\n  },\r\n  \"ram_saved\": 2304,\r\n  \"rom_saved\": 4336,\r\n  \"image_size\": 56572,\r\n  \"sha256\": \"1c29e0c7e71f978162c5ab50325008fe888531260476cf97b4bd5243d5042f83\",\r\n  \"config_descriptor_size\": 115,\r\n  \"interface_numbers\": [\r\n    0,\r\n    1,\r\n    2,\r\n    3\r\n  ],\r\n  \"online_symbols_removed\": [\r\n    \"DAP_ProcessCommand\",\r\n    \"DAP_ExecuteCommand\",\r\n    \"DAP_Thread\",\r\n    \"DAP_TransferAbort\",\r\n    \"USB_Request\",\r\n    \"USB_Response\",\r\n    \"USB_Request_len\",\r\n    \"USB_Response_len\",\r\n    \"USBD_HID0_SetReport\",\r\n    \"custom_hid_class\",\r\n    \"customhid_report_descriptor\",\r\n    \"hid_handler\",\r\n    \"UsbTask_Handler\",\r\n    \"EventGroupHandle\",\r\n    \"xEventGroupCreate\",\r\n    \"xEventGroupWaitBits\",\r\n    \"xTimerCreateTimerTask\",\r\n    \"prvTimerTask\"\r\n  ],\r\n  \"offline_symbols_preserved\": [\r\n    \"DAP_Data\",\r\n    \"DAP_Setup\",\r\n    \"SWD_Transfer\",\r\n    \"SWJ_Sequence\",\r\n    \"swd_init\",\r\n    \"target_opt_program_ext\",\r\n    \"custombulk_class\",\r\n    \"custombulk_file_service\",\r\n    \"custombulk_is_busy\",\r\n    \"UI_Field\",\r\n    \"UI_EnterPage\",\r\n    \"custombulk_prepare_service\",\r\n    \"custombulk_take_prepare_complete\",\r\n    \"custombulk_quota_service\",\r\n    \"burn_quota_init\",\r\n    \"burn_quota_set\",\r\n    \"burn_quota_begin\",\r\n    \"burn_quota_finish\",\r\n    \"cdc_class\",\r\n    \"mode2\",\r\n    \"mode3\",\r\n    \"mode4\",\r\n    \"run_task\",\r\n    \"key_task\"\r\n  ],\r\n  \"heap\": {\r\n    \"size\": 6144,\r\n    \"tcb_size\": 92,\r\n    \"initial_task_allocations\": 5576,\r\n    \"estimated_initial_free\": 560,\r\n    \"note\": \"Calculated from compiled structure size and task allocations, not measured on hardware.\"\r\n  },\r\n  \"vectors\": {\r\n    \"initial_sp\": \"0x200044d0\",\r\n    \"reset\": \"0x800c1b5\"\r\n  },\r\n  \"hardware_tested\": false,\r\n  \"partial_refresh\": {\r\n    \"text_cache_bytes\": 1216,\r\n    \"framebuffer\": false,\r\n    \"removed_pages\": [\r\n      \"page\",\r\n      \"mode1\"\r\n    ],\r\n    \"ram_added\": 1224\r\n  },\r\n  \"quota\": {\r\n    \"flash_base\": \"0x0801F800\",\r\n    \"reserved_bytes\": 2048,\r\n    \"maximum\": 999,\r\n    \"default\": \"unlimited\",\r\n    \"normal_failure\": \"refund\",\r\n    \"interrupted_power\": \"consume reserved attempt\",\r\n    \"ram_added\": 1248\r\n  }\r\n}\r\n"
+    }
+  ],
+  "hardware_tested": false
+}

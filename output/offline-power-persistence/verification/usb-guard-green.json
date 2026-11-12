@@ -1,0 +1,42 @@
+{
+  "executed": "Actual ARMCC-compiled production USB mutation handlers, Thumb emulation with FatFs/USB/storage boundaries",
+  "hardware_tested": false,
+  "results": [
+    {
+      "test": "rejects_mutation_when_tombstone_fails",
+      "ok": true
+    },
+    {
+      "test": "durable_invalidation_precedes_each_mutation",
+      "ok": true
+    },
+    {
+      "test": "reset_during_guard_cancels_old_command",
+      "ok": true
+    },
+    {
+      "test": "invalid_open_and_rename_do_not_touch_storage",
+      "ok": true
+    },
+    {
+      "test": "failed_stage_commit_preserves_prior_session",
+      "ok": true
+    },
+    {
+      "test": "failed_cancel_commit_preserves_prior_session",
+      "ok": true
+    },
+    {
+      "test": "stage_and_cancel_commit_before_changes",
+      "ok": true
+    },
+    {
+      "test": "reset_during_stage_cancel_guard_discards_command",
+      "ok": true
+    },
+    {
+      "test": "invalid_stage_does_not_invalidate_selection",
+      "ok": true
+    }
+  ]
+}

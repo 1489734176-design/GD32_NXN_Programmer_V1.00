@@ -1,0 +1,15 @@
+{
+  "passed": [
+    "main_rows_and_yellow_icons",
+    "wide_count_fits_and_blank_rows_stay_clear",
+    "firmware_wrap_and_clear",
+    "overlay_transition_and_stability",
+    "status_uses_same_page",
+    "quota_failure_uses_same_page",
+    "automatic_waits_for_removal_before_next_burn",
+    "manual_repeat_and_connection_failure_closes_session"
+  ],
+  "failed": [],
+  "image_sha256": "16564517b980cd4298ead2d9aa2d24858e66f573f00d77eac60c8231b5776cc1",
+  "hardware_tested": false
+}

@@ -1,0 +1,22 @@
+test_failed_prepare_retains_only_the_imported_files_saved_quota (scoped_host.ScopedHostTests.test_failed_prepare_retains_only_the_imported_files_saved_quota) ... ok
+test_import_preflight_rejects_global_firmware_without_any_mutation (scoped_host.ScopedHostTests.test_import_preflight_rejects_global_firmware_without_any_mutation) ... ok
+test_import_resets_only_the_uploaded_firmware_before_prepare (scoped_host.ScopedHostTests.test_import_resets_only_the_uploaded_firmware_before_prepare) ... ok
+test_named_get_reads_requested_file_instead_of_active_file (scoped_host.ScopedHostTests.test_named_get_reads_requested_file_instead_of_active_file) ... ok
+test_named_set_accepts_full_31_byte_basename (scoped_host.ScopedHostTests.test_named_set_accepts_full_31_byte_basename) ... ok
+test_opt_upload_uses_main_bin_quota_identity (scoped_host.ScopedHostTests.test_opt_upload_uses_main_bin_quota_identity) ... ok
+test_stage_rejection_after_preflight_still_cancels_partial_session (scoped_host.ScopedHostTests.test_stage_rejection_after_preflight_still_cancels_partial_session) ... ok
+test_standalone_save_preflights_before_old_global_set (scoped_host.ScopedHostTests.test_standalone_save_preflights_before_old_global_set) ... ok
+test_standalone_save_targets_device_selected_file (scoped_host.ScopedHostTests.test_standalone_save_targets_device_selected_file) ... ok
+test_unlimited_import_preserves_another_files_limited_count (scoped_host.ScopedHostTests.test_unlimited_import_preserves_another_files_limited_count) ... ok
+test_unsafe_scopes_are_rejected_before_usb_io (scoped_host.ScopedHostTests.test_unsafe_scopes_are_rejected_before_usb_io) ... ok
+test_version_two_decoder_keeps_range_and_shape_checks (scoped_host.ScopedHostTests.test_version_two_decoder_keeps_range_and_shape_checks) ... ok
+test_prepare_failure_still_displays_quota_already_saved (__main__.RefreshTests.test_prepare_failure_still_displays_quota_already_saved) ... ok
+test_rejected_set_does_not_display_unconfirmed_input (__main__.RefreshTests.test_rejected_set_does_not_display_unconfirmed_input) ... ok
+test_success_refreshes_confirmed_count_immediately_and_same_name_again (__main__.RefreshTests.test_success_refreshes_confirmed_count_immediately_and_same_name_again) ... ok
+test_unlimited_refreshes_checkbox_and_label (__main__.RefreshTests.test_unlimited_refreshes_checkbox_and_label) ... ok
+test_zero_remains_zero_and_is_not_changed_to_unlimited (__main__.RefreshTests.test_zero_remains_zero_and_is_not_changed_to_unlimited) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 0.064s
+
+OK

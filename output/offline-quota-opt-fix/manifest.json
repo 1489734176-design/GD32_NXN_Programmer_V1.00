@@ -1,0 +1,158 @@
+{
+  "annotation-verification.json": {
+    "size": 179,
+    "sha256": "8e66bd7da3d574195e5a1541d1bedb4e63f4f10bfc85e32b65113917d6da7308"
+  },
+  "auto-result-320x240.png": {
+    "size": 3115,
+    "sha256": "6a9e7790ed0697a33b841c8b3bd5503256e649ba6ac20a98853d627bd2f46e2d"
+  },
+  "boot-update-320x240.png": {
+    "size": 1699,
+    "sha256": "609994d5ce332eb036a1631840902762d682b1d9e2c8c0564cb2fd5c1bc4da99"
+  },
+  "Bootloader-Quota.bin": {
+    "size": 32860,
+    "sha256": "85efd4974caa8f14e82f364ec21be8e2ab617bea6306369a8927200cbbac1a25"
+  },
+  "Bootloader-Quota.hex": {
+    "size": 92473,
+    "sha256": "bd72ac65475acd2651196c300f81b26db4ea8755b94533d6bc800a9ab05bd0f4"
+  },
+  "DAPlink-Quota-full.hex": {
+    "size": 247920,
+    "sha256": "13f1029cb1064a8383f33c1305cc5d266bf4e3a67378a665489a332e2db7967f"
+  },
+  "DAPlink.bin": {
+    "size": 55264,
+    "sha256": "ba31884ecb1afd2300d55a949a2700da41a4b5c8436ea34329a36d8e0b6cab63"
+  },
+  "DAPlink.hex": {
+    "size": 155498,
+    "sha256": "c8722acac8df7946da4ef0071ed2ac35d1f18a10e5e3c36bffb783137570946d"
+  },
+  "error-320x240.png": {
+    "size": 2239,
+    "sha256": "dc11e040f77585c38ef6607c1d1abdee4bd68aff0837b81de23dac1ffa9899ac"
+  },
+  "file-select-320x240.png": {
+    "size": 2215,
+    "sha256": "2a5d806458dc8ae115f47d5731a41d8ca7f6774632b606363a69809e82f4ec8b"
+  },
+  "font-comparison.png": {
+    "size": 21809,
+    "sha256": "e8dcdf3aae5894ceebda0c79131a5715f2b6b99702abe678b3c40ea66e5e598d"
+  },
+  "layout-verification.json": {
+    "size": 280,
+    "sha256": "a2a05f36230523f0bdddfb2bf3649f6115ae5d92ee5abbab6de381a7828c2f7f"
+  },
+  "long-name-320x240.png": {
+    "size": 3741,
+    "sha256": "a000f2f5ed0b1f39c3d025f5136cd54145cc08b5ab443acc7e9d12693ed27206"
+  },
+  "manual-320x240.png": {
+    "size": 2742,
+    "sha256": "0351f9cc5932fbd0f419e42b5e7ec2712c4cb54800dac6396acccb9b303ef611"
+  },
+  "opt-burn-verification.json": {
+    "size": 398,
+    "sha256": "95a377a3d7c9f7c7e9ee1879744421f7d9901ab14fa9fe290b0509d455c13b46"
+  },
+  "opt-display-verification.json": {
+    "size": 306,
+    "sha256": "389253602c03dce37a8b0f0dace84d83d5983627fbf912f110c74deb2883c885"
+  },
+  "opt-repair-manifest.json": {
+    "size": 11565,
+    "sha256": "dff11ed70b918957c8165d6e0958a2bc3d6e038246f12faa527ea9588990d976"
+  },
+  "opt-repair.diff": {
+    "size": 151812,
+    "sha256": "d6dd51ddcfe591721c7571ac9cbde67f34918f57c41eb78bb136c88564ace490"
+  },
+  "progress-320x240.png": {
+    "size": 2389,
+    "sha256": "3d1f46115a83fe792e86635ef57277948605f94dda60fdc3d902afc3a6a1f392"
+  },
+  "quota-arm-verification.json": {
+    "size": 938,
+    "sha256": "b56a7b8afeaf8588c4c5800f4efe81a512f4ffaf98fcf38f8860950b1e9744b7"
+  },
+  "quota-boot-verification.json": {
+    "size": 285,
+    "sha256": "f5d8ed8387a87988e57701114d51109854c0385e31e9f2db059d0347710ee065"
+  },
+  "quota-empty-320x240.png": {
+    "size": 1574,
+    "sha256": "e890f1962b4f86a0ff9bbc7dad7f8ab735ffff6a3bd4c3b404543ed116aebbee"
+  },
+  "quota-host-preview.png": {
+    "size": 70481,
+    "sha256": "4d18adfd1d3303a568e6d6b574d7b5040e5d656756fb407660e2feb62fe05955"
+  },
+  "quota-host-verification.json": {
+    "size": 300,
+    "sha256": "c7f96bc829683112f7f4d38709b48d79fde9bbf838167554d947b6a8f4e7842e"
+  },
+  "quota-integration-verification.json": {
+    "size": 461,
+    "sha256": "0574284b7c1c29c270c3a2cefd075db59de85995bb487f2308e1099d4e3ec2d3"
+  },
+  "quota-manifest.json": {
+    "size": 4054,
+    "sha256": "16fbf3833617ce2337496a58594127c1dd304bd339040efca4a64fffc47f006e"
+  },
+  "quota.diff": {
+    "size": 162833,
+    "sha256": "7eb93f55a3fc255b2cbf354b9b04587809cd1ca98a8a990d580909a335f3d6ea"
+  },
+  "README.md": {
+    "size": 5411,
+    "sha256": "0814978d51e5c067e11e3134dbe303d04da104b5f0ce3fa919ae2aa98c78c053"
+  },
+  "source-chinese-comments.zip": {
+    "size": 130425,
+    "sha256": "c36a7d99f78e3e661688ba053e2aa0daba3a8c42b3a3c6722ee9c9f900419698"
+  },
+  "status-preview.png": {
+    "size": 33586,
+    "sha256": "eef7577bd1db2832bd9c8d1646fd96165392b64efde7b3941fe05ceda88fb348"
+  },
+  "tools/algorithm_bindings.json": {
+    "size": 93,
+    "sha256": "94b3dde8f897e6edfbc239ca67a08bc95741564a932b8812020f68699226747d"
+  },
+  "tools/chip_config.json": {
+    "size": 10446,
+    "sha256": "54a2270d5efa45c26a7da78f9352baef1b9e1fc999329eda3d1ec469a4daecab"
+  },
+  "tools/daplink_manager.py": {
+    "size": 66688,
+    "sha256": "dce606e1b336a8ed415ef45314f20b28631b770d2594e7f6ff5b32bdbd3511e0"
+  },
+  "tools/file_transfer.py": {
+    "size": 12467,
+    "sha256": "8eb65fca418519ad58315c7a06298c789ad71c5ec0788d248579d173f126f314"
+  },
+  "tools/opt_config.py": {
+    "size": 1506,
+    "sha256": "0f4c8d8e575a24b364babd95736238dd82beee81bf055444b39f541e307b587f"
+  },
+  "tools/run.bat": {
+    "size": 462,
+    "sha256": "0aefda2d07ca6a65851f09e1c344a0f291772d4b0f8259756c76c807de5b119d"
+  },
+  "transfer-320x240.png": {
+    "size": 2312,
+    "sha256": "f9bd5a98a28325426b6a01b9bdd6a82c44a4c49c6525aacf8fbc634a20f53a0e"
+  },
+  "ui-preview.png": {
+    "size": 73453,
+    "sha256": "4312e0a2b10a20615866b4fc903e2c1e5472b121892bee838e70c9c6fd1aefaa"
+  },
+  "verification.json": {
+    "size": 2334,
+    "sha256": "c10793dcec5fa6ddbc001405fcca722506de39a61343de7ec7b961088dc581f4"
+  }
+}

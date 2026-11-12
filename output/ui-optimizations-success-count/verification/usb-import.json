@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "executed": "Real ARMCC Thumb USB handlers + quota/catalog/mirror/auth; only physical media and USB reply ports emulated",
+  "source_sha256": {
+    "burn_quota.c": "85e493f38ce69099e3325395a0b44f3352f70ee6d1457de97925441c3bc6a63f",
+    "burn_quota_catalog.c": "3e8ddd9d735c124e802ecc3bcb28d56264a8673928c9bd113fbcc58e437585c7",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad"
+  },
+  "usb_source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\GD32-HID\\GD32-HID\\GD32F10x_Firmware_Library\\GD32F10x_usbd_library\\class\\device\\custombulk\\Source\\usbd_custombulk.c",
+  "usb_source_sha256": "302140df0e645111feb562dd12121a3506c342738aa26ea01f479aa6d7b985e2",
+  "protocol": "GET 0x0D + optional name; SET 0x0E + enabled + remaining LE32 + name; v2 8-byte success response unchanged",
+  "checks": [
+    "Original real USB upload/GET/duplicate SET/failed-close/failed-SET retry cases pass with success-only quota core",
+    "Limited same-limit same-name reupload resets total/used/remaining, survives reboot, and accepts case aliases",
+    "Unlimited same-value same-name reupload resets total/used/remaining, survives reboot, and accepts case aliases",
+    "Reimport limit equal to current remaining still resets total and used",
+    "GET, consumed duplicate SET and stage-without-upload preserve history; ordinary SET only adjusts requested balance",
+    "Upload marker is scoped to its firmware; another named SET cannot clear unrelated successful-used"
+  ]
+}

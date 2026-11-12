@@ -1,0 +1,29 @@
+{
+  "passed": [
+    "charger_states_and_safe_validation_are_preserved"
+  ],
+  "failed": [
+    {
+      "test": "yellow_header_and_separate_voltage_blank_row",
+      "error": "status icon is not yellow"
+    },
+    {
+      "test": "twelve_short_items_fill_page_with_single_row_highlight",
+      "error": "short-name page does not contain twelve numbered items"
+    },
+    {
+      "test": "mixed_height_hanging_indent_and_page_repack_are_clean",
+      "error": "one long plus ten short should fill page"
+    },
+    {
+      "test": "six_long_items_pack_without_splitting_and_find_current",
+      "error": ""
+    },
+    {
+      "test": "numbered_filter_confirm_cancel_and_usb_restore",
+      "error": ""
+    }
+  ],
+  "image_sha256": "d6097d058f062597e0b5d660f8c8e88b702943136d21504ae6e003c148e13ca4",
+  "hardware_tested": false
+}

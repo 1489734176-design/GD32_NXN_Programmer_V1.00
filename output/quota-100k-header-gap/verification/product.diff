@@ -1,0 +1,310 @@
+--- original/APP/burn_quota.c
++++ current/APP/burn_quota.c
+@@ -1,10 +1,11 @@
+-/* 内外Flash保存相同BQT4记录；烧录前回读校验，确认成功后扣次；双写失败禁烧。 */
++/* 内外Flash保存相同BQT5记录；烧录前回读校验，确认成功后扣次；双写失败禁烧。 */
+ #include "burn_quota.h"
+ #include "burn_quota_mirror.h"
+ #include "quota_auth.h"
+ #include <string.h>
+ 
+-#define QUOTA_MAGIC 0x34545142UL
++#define QUOTA_MAGIC 0x35545142UL
++#define V4_MAGIC 0x34545142UL
+ #define V3_MAGIC 0x33545142UL
+ #define V2_MAGIC 0x32545142UL
+ #define V1_MAGIC 0x31545142UL
+@@ -39,7 +40,7 @@
+     return 0;
+ }
+ 
+-/* CRC只用于识别旧版，BQT3的授权依据始终是HMAC。 */
++/* CRC只用于识别旧版，BQT3及新版的授权依据始终是HMAC。 */
+ static uint32_t checksum(const uint32_t *words, uint8_t count)
+ {
+     uint32_t crc = 0xFFFFFFFFUL;
+@@ -57,12 +58,18 @@
+     uint8_t name[BURN_QUOTA_NAME_SIZE], tag[16];
+     uint32_t remaining = r[3] & 0xFFFFU, total = r[3] >> 16;
+     if(version == 3 && r[0] == QUOTA_MAGIC) {
+-        /* BQT4 keeps 96-byte slots: flags, packed total/remaining, used.
+-         * HMAC protects all three words; the old redundant inverse is gone. */
+-        if(r[2] > 3U || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
++        /* BQT5 retains the authenticated 96-byte slot. Total shares only
++         * the two flag bits; remaining and used each keep all 32 bits. */
++        total = r[2] >> 2;
++        if(total > BURN_QUOTA_MAX || r[3] > BURN_QUOTA_MAX ||
++           (!(r[2] & 1U) && r[3]) ||
++           (!(r[2] & 2U) && (total || r[4]))) return 0;
++    } else if(version == 3 && r[0] == V4_MAGIC) {
++        /* Decode BQT4 exactly as written by the 999-limit firmware. */
++        if(r[2] > 3U || remaining > BURN_QUOTA_LEGACY_MAX || total > BURN_QUOTA_LEGACY_MAX ||
+            (!(r[2] & 1U) && remaining) ||
+            (!(r[2] & 2U) && (total || r[4]))) return 0;
+-    } else if(r[2] > 1 || r[3] > BURN_QUOTA_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
++    } else if(r[2] > 1 || r[3] > BURN_QUOTA_LEGACY_MAX || (!r[2] && r[3]) || r[4] != ~r[3]) return 0;
+     if(version == 1)
+         return r[0] == V1_MAGIC && r[5] == checksum(r, 5) && r[6] == ~r[1] && r[7] == QUOTA_COMMIT;
+     if(!normalize_name(name, (const uint8_t *)&r[5]) ||
+@@ -70,7 +77,7 @@
+     if(version == 2)
+         return r[0] == V2_MAGIC && r[15] == checksum(r, 15) && r[16] == ~r[1] &&
+                r[17] == QUOTA_COMMIT && (r[13] || !r[14]);
+-    if((r[0] != QUOTA_MAGIC && r[0] != V3_MAGIC) || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
++    if((r[0] != QUOTA_MAGIC && r[0] != V4_MAGIC && r[0] != V3_MAGIC) || r[22] != ~r[1] || r[23] != QUOTA_COMMIT ||
+        (!r[13] && (r[14] || r[15] || r[16] || r[17]))) return 0;
+     quota_auth_tag(1, r, 18U * 4U, tag);
+     return quota_auth_equal(tag, &r[18], sizeof(tag));
+@@ -112,11 +119,12 @@
+                 }
+                 if(!quota_valid || (int32_t)(r[1] - quota_sequence) > 0) {
+                     quota_valid = 1; quota_sequence = r[1]; quota_enabled = (uint8_t)(r[2] & 1U);
+-                    quota_remaining = r[0] == QUOTA_MAGIC ? r[3] & 0xFFFFU : r[3];
++                    quota_remaining = r[0] == V4_MAGIC ? r[3] & 0xFFFFU : r[3];
+                     memset(&quota_stats, 0, sizeof(quota_stats));
+-                    if(r[0] == QUOTA_MAGIC) {
++                    if(r[0] == QUOTA_MAGIC || r[0] == V4_MAGIC) {
+                         quota_stats.known = (uint8_t)((r[2] >> 1) & 1U);
+-                        quota_stats.total = r[3] >> 16; quota_stats.used = r[4];
++                        quota_stats.total = r[0] == QUOTA_MAGIC ? r[2] >> 2 : r[3] >> 16;
++                        quota_stats.used = r[4];
+                     }
+                     quota_page = page; quota_address = address;
+                     legacy_pending = version == 3 ? 0 : version;
+@@ -171,8 +179,8 @@
+     uint8_t i, page = quota_page, slot = occupied[quota_page], preserved = quota_page;
+     memset(r, 0, sizeof(r));
+     r[0] = QUOTA_MAGIC; r[1] = quota_sequence + 1U;
+-    r[2] = enabled | ((uint32_t)stats->known << 1);
+-    r[3] = remaining | (stats->total << 16); r[4] = stats->used;
++    r[2] = enabled | ((uint32_t)stats->known << 1) | (stats->total << 2);
++    r[3] = remaining; r[4] = stats->used;
+     memcpy(&r[5], name, BURN_QUOTA_NAME_SIZE);
+     r[13] = catalog->length; memcpy(&r[14], catalog->tag, 16);
+     quota_auth_tag(1, r, 18U * 4U, (uint8_t *)&r[18]);
+--- original/APP/burn_quota.h
++++ current/APP/burn_quota.h
+@@ -2,7 +2,9 @@
+ #ifndef BURN_QUOTA_H
+ #define BURN_QUOTA_H
+ #include <stdint.h>
+-#define BURN_QUOTA_MAX 999U
++#define BURN_QUOTA_MAX 100000U
++/* Historical encodings retain their original accepted range. */
++#define BURN_QUOTA_LEGACY_MAX 999U
+ #define BURN_QUOTA_FLASH_BASE 0x0801F800UL
+ #define BURN_QUOTA_PAGE_SIZE 1024U
+ #define BURN_QUOTA_NAME_SIZE 32U
+--- original/APP/burn_quota_catalog.c
++++ current/APP/burn_quota_catalog.c
+@@ -11,6 +11,7 @@
+ #define CATALOG_PATH "0:/system/burnquota.dat"
+ #define CATALOG_MAGIC 0x31435142UL /* BQC1 */
+ #define CATALOG_STATS_MAGIC 0x32435142UL /* BQC2, same 48-byte record size */
++#define CATALOG_WIDE_MAGIC 0x33435142UL /* BQC3, full remaining/used */
+ #define CATALOG_NAME_SIZE 32U
+ #define CATALOG_RECORD_SIZE 48U
+ #define CATALOG_AUTH_DOMAIN 2U
+@@ -20,7 +21,7 @@
+     uint8_t name[CATALOG_NAME_SIZE];
+     uint32_t enabled;
+     uint32_t remaining;
+-    uint32_t crc;
++    uint32_t crc; /* BQC1/2 CRC; BQC3 full successful-used, protected by HMAC. */
+ } catalog_record_t;
+ 
+ /* FIL and HMAC contexts stay off the small task stack. The retained prefix
+@@ -70,19 +71,27 @@
+ {
+     uint8_t normalized[CATALOG_NAME_SIZE];
+     uint32_t state = record->enabled, remaining, total;
+-    if(record->magic == CATALOG_STATS_MAGIC) {
++    if(record->magic == CATALOG_WIDE_MAGIC) {
++        total = state >> 2;
++        if(total > BURN_QUOTA_MAX || record->remaining > BURN_QUOTA_MAX ||
++           (!(state & 1U) && record->remaining) ||
++           (!(state & 2U) && (total || record->crc))) return 0;
++    } else if(record->magic == CATALOG_STATS_MAGIC) {
+         /* 1 enabled + 1 known + 10 remaining + 10 total; full 32-bit used
+          * replaces the old remaining field. CRC and the HMAC root remain. */
+         remaining = (state >> 2) & 1023U; total = (state >> 12) & 1023U;
+-        if(state >> 22 || remaining > BURN_QUOTA_MAX || total > BURN_QUOTA_MAX ||
++        if(state >> 22 || remaining > BURN_QUOTA_LEGACY_MAX || total > BURN_QUOTA_LEGACY_MAX ||
+            (!(state & 1U) && remaining) ||
+            (!(state & 2U) && (total || record->remaining))) return 0;
+     } else if(record->magic != CATALOG_MAGIC || state > 1U ||
+-              record->remaining > BURN_QUOTA_MAX || (!state && record->remaining)) return 0;
++              record->remaining > BURN_QUOTA_LEGACY_MAX || (!state && record->remaining)) return 0;
+     return
+            normalize_name(record->name, normalized) &&
+            !memcmp(record->name, normalized, CATALOG_NAME_SIZE) &&
+-           record->crc == (crc_step(0xFFFFFFFFUL, record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL);
++           /* BQC3 uses the old CRC word for used. scan authenticates every
++            * byte through the committed root, including this word. */
++           (record->magic == CATALOG_WIDE_MAGIC ||
++            record->crc == (crc_step(0xFFFFFFFFUL, record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL));
+ }
+ 
+ /* Read and validate the complete prefix, retaining its HMAC context. The CRC
+@@ -121,7 +130,11 @@
+                 memset(&found_stats, 0, sizeof(found_stats));
+                 found_enabled = (uint8_t)(record.enabled & 1U);
+                 found_remaining = record.remaining;
+-                if(record.magic == CATALOG_STATS_MAGIC) {
++                if(record.magic == CATALOG_WIDE_MAGIC) {
++                    found_stats.known = (uint8_t)((record.enabled >> 1) & 1U);
++                    found_stats.total = record.enabled >> 2;
++                    found_stats.used = record.crc;
++                } else if(record.magic == CATALOG_STATS_MAGIC) {
+                     found_remaining = (record.enabled >> 2) & 1023U;
+                     found_stats.known = (uint8_t)((record.enabled >> 1) & 1U);
+                     found_stats.total = (record.enabled >> 12) & 1023U;
+@@ -210,11 +223,11 @@
+         return 1;
+     }
+     if(catalog->length > 0xFFFFFFFFUL - CATALOG_RECORD_SIZE) return 0;
+-    record.magic = stats->known ? CATALOG_STATS_MAGIC : CATALOG_MAGIC;
++    record.magic = CATALOG_WIDE_MAGIC;
+     memcpy(record.name, normalized, sizeof(record.name));
+-    record.enabled = stats->known ? enabled | 2U | (remaining << 2) | (stats->total << 12) : enabled;
+-    record.remaining = stats->known ? stats->used : remaining;
+-    record.crc = crc_step(0xFFFFFFFFUL, &record, CATALOG_RECORD_SIZE - 4U) ^ 0xFFFFFFFFUL;
++    record.enabled = enabled | ((uint32_t)stats->known << 1) | (stats->total << 2);
++    record.remaining = remaining;
++    record.crc = stats->used;
+     next.length = catalog->length + sizeof(record);
+     quota_auth_update(&catalog_auth, &record, sizeof(record));
+     quota_auth_final(&catalog_auth, next.tag);
+--- original/APP/run.c
++++ current/APP/run.c
+@@ -318,42 +318,42 @@
+         else strcpy(total, "\xCE\xDE\xCF\xDE");
+         sprintf(used, "%08lu", (unsigned long)burn_quota_used());
+     }
+-    UI_FieldColor(4, 80, 168, 152, 16, total, 16, 1, LCD_YELLOW);
+-    UI_FieldColor(5, 80, 188, 152, 16, used, 16, 1, LCD_YELLOW);
+-    show_quota(208);
+-}
+-
+-/* 静态标题只画一次，16个缓存槽只分配给动态值和两个光标。 */
++    UI_FieldColor(4, 80, 188, 152, 16, total, 16, 1, LCD_YELLOW);
++    UI_FieldColor(5, 80, 208, 152, 16, used, 16, 1, LCD_YELLOW);
++    show_quota(228);
++}
++
++/* 静态标题只画一次；状态栏下方与开始烧录上方各留一空行。 */
+ static void draw_main(void)
+ {
+     if(!g_ui_ready)
+     {
+         UI_EnterPage(10);
+-        UI_TextColor(8, 28, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
+-        UI_TextColor(8, 48, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
+-        UI_TextColor(8, 68, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
+-        UI_TextColor(8, 88, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
+-        UI_TextColor(8, 108, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
+-        UI_TextColor(8, 128, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
+-        UI_TextColor(8, 168, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
+-        UI_TextColor(8, 188, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
+-        UI_TextColor(8, 208, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
+-        UI_TextColor(8, 248, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
+-        UI_TextColor(8, 268, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
+-        UI_TextColor(64, 28, "000", 16, 1, LCD_YELLOW);
+-        UI_TextColor(80, 48, "3.3V", 16, 1, LCD_YELLOW);
++        UI_TextColor(8, 48, "\xBE\xB5\xCF\xF1\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 镜像号: */
++        UI_TextColor(8, 68, "\xCA\xE4\xB3\xF6\xB5\xE7\xD1\xB9\x3A", 16, 1, LCD_BLUE); /* 输出电压: */
++        UI_TextColor(8, 88, "\xD0\xBE\xC6\xAC\xD0\xCD\xBA\xC5\x3A", 16, 1, LCD_BLUE); /* 芯片型号: */
++        UI_TextColor(8, 108, "\xC9\xD5\xC2\xBC\xC4\xA3\xCA\xBD\x3A", 16, 1, LCD_BLUE); /* 烧录模式: */
++        UI_TextColor(8, 128, "\x63\x68\x65\x63\x6B\x73\x75\x6D\x3A", 16, 1, LCD_BLUE); /* checksum: */
++        UI_TextColor(8, 148, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE\x3A", 16, 1, LCD_BLUE); /* 烧录固件: */
++        UI_TextColor(8, 188, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
++        UI_TextColor(8, 208, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
++        UI_TextColor(8, 228, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
++        UI_TextColor(8, 268, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
++        UI_TextColor(8, 288, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
++        UI_TextColor(64, 48, "000", 16, 1, LCD_YELLOW);
++        UI_TextColor(80, 68, "3.3V", 16, 1, LCD_YELLOW);
+         g_ui_ready = 1;
+         show_top(1);
+     }
+-    show_chip_name(68);
+-    show_firmware_name(128);
+-    UI_FieldColor(2, 80, 88, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
+-    show_checksum(108);
++    show_chip_name(88);
++    show_firmware_name(148);
++    UI_FieldColor(2, 80, 108, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
++    show_checksum(128);
+     show_counts();
+-    UI_FieldColor(7, 0, 128, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
+-    UI_FieldColor(8, 0, 248, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
++    UI_FieldColor(7, 0, 148, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
++    UI_FieldColor(8, 0, 268, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
+     show_top(0);
+-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
++    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+ }
+ 
+ static void reset_feedback(void)
+@@ -587,7 +587,7 @@
+ {
+     uint8_t next = (uint8_t)(15U + 70U * (percent > 100 ? 100 : percent) / 100U);
+     if(next > g_ui_percent) g_ui_percent = next;
+-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
++    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+ }
+ 
+ /* 保存反馈文字并叠加在底部进度条内，自动和手动模式共用。
+@@ -609,7 +609,7 @@
+         else if(strstr(status, "\xD0\xA3\xD1\xE9\x4F\x50\x54") || strstr(status, "\xB6\xC1\xC8\xA1\x4F\x50\x54") || strstr(status, "\xBC\xEC\xB2\xE9\x4F\x50\x54")) next = 95;
+         if(next > g_ui_percent) g_ui_percent = next;
+     }
+-    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status);
++    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+     show_counts();
+ }
+ 
+--- original/tools/daplink_manager.py
++++ current/tools/daplink_manager.py
+@@ -56,6 +56,7 @@
+ PACKET_SIZE = 64
+ MAX_DATA = 56
+ TIMEOUT = 5000
++BURN_QUOTA_MAX = 100000  # 次数输入、设备响应和控件共用同一上限。
+ PREPARE_TIMEOUT = 30000  # 设备需要回读主BIN计算SUM32，大文件准备响应允许等待30秒。
+ 
+ CMD_LIST_DIR    = 0x01
+@@ -249,8 +250,8 @@
+         if resp[2] > 1 or resp[3] > 1:
+             raise RuntimeError("设备次数响应无效。")
+         remaining = struct.unpack('<I', resp[4:8])[0]
+-        if remaining > 999 or (not resp[2] and remaining):
+-            raise RuntimeError("设备剩余次数无效。")
++        if remaining > BURN_QUOTA_MAX or (not resp[2] and remaining):
++            raise RuntimeError(f"设备剩余次数无效（应为 0–{BURN_QUOTA_MAX}）。")
+         return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
+ 
+     @staticmethod
+@@ -275,8 +276,8 @@
+ 
+     # 发送0x0E指令设置次数并检查设备回传，取消限制时额度归零但恢复不限。
+     def set_burn_quota(self, enabled, remaining, program_name=None):
+-        if not isinstance(remaining, int) or not 0 <= remaining <= 999:
+-            raise ValueError("烧录次数必须为 0–999。")
++        if not isinstance(remaining, int) or not 0 <= remaining <= BURN_QUOTA_MAX:
++            raise ValueError(f"烧录次数必须为 0–{BURN_QUOTA_MAX}。")
+         remaining = remaining if enabled else 0
+         request = (bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining) +
+                    self._quota_name_bytes(program_name))
+@@ -691,9 +692,10 @@
+         quota_layout.setHorizontalSpacing(10)
+         self.chk_quota = QCheckBox("启用次数限制")
+         self.spin_quota = QSpinBox()
+-        self.spin_quota.setRange(0, 999)
++        self.spin_quota.setRange(0, BURN_QUOTA_MAX)
+         self.spin_quota.setValue(100)
+         self.spin_quota.setSuffix(" 次")
++        self.spin_quota.setToolTip(f"次数范围：0–{BURN_QUOTA_MAX} 次；0 次表示额度已用尽，取消勾选为不限。")
+         self.spin_quota.setMinimumWidth(100)
+         self.btn_quota_save = QPushButton("保存当前固件")
+         self.btn_quota_read = QPushButton("读取当前剩余")

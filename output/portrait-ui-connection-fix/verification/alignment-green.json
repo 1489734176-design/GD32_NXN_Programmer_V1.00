@@ -1,0 +1,28 @@
+{
+  "image": ".planning\\2026-10-29-portrait-freeze\\offline.axf",
+  "sha256": "411cb2cbf7cbf444681da4fcbdaa99ded6d615a467830998d4fd3c54739cdada",
+  "data_buffer": "0x200026b8",
+  "data_buffer_bytes": 4096,
+  "containing_elf_section_alignment": 8,
+  "preceding_r0_literal_load": {
+    "pc": "0x8013dee",
+    "pool": "0x8014180",
+    "value": "0x200026b8"
+  },
+  "compiled_header_read": {
+    "pc": "0x8013e00",
+    "registers": [
+      10,
+      1
+    ],
+    "base_register": 0,
+    "offset": 56,
+    "instruction": "LDRD r10,r1,[r0,#56]",
+    "bytes": "d0e90ea1"
+  },
+  "effective_address": "0x200026f0",
+  "address_mod4": 0,
+  "passed": true,
+  "reason": "ARMv7-M LDRD/STRD require 4-byte alignment independently of CCR.UNALIGN_TRP.",
+  "scope": "Compiled-image contract check; no hardware exception emulation is claimed."
+}

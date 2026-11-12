@@ -1,0 +1,13 @@
+PASS Fresh storage and complete chip/firmware/checksum/OPT survive reboot
+PASS Unchanged and normalized ignored checksum/name padding avoid Flash wear
+PASS Explicit empty tombstone and partial selections replace older runnable records
+PASS Invalid/path/unterminated names and flag combinations never modify safe state
+PASS Every data/CRC/complement/commit word power cut preserves old or complete new selection
+PASS Program/readback errors block load and explicit retry safely repairs torn slots
+PASS Rollover including partial stale-page erase preserves latest or fails closed
+PASS Any committed field/CRC damage blocks rollback and successful explicit save clears reboot fault
+PASS Recovery target erase/commit/old-page cleanup interruption never revives corrupted selection
+PASS Sequence wrap uses serial ordering and saves through FFFFFFFF -> 00000000
+PASS 250 configuration changes with reboots/page rotations retain exact latest selection
+PASS Older committed corruption cannot be hidden by a valid newer record
+Total fault cases 189

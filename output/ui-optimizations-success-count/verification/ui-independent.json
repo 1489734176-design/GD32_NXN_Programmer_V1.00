@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "image_sha256": "d6097d058f062597e0b5d660f8c8e88b702943136d21504ae6e003c148e13ca4",
+  "checks": [
+    "50 entries traverse multiple pages and wrap in both directions without body reads or selection mutation",
+    "Busy chooser ignores short/long/repeat/confirm; long middle can cancel without filesystem reads",
+    "Invalidated later-page cache safely locates a shrunken directory; USB invalidation branch verified statically",
+    "Cross-page read failure leaves no confirmable phantom candidate and keeps prior selection",
+    "Page changes repaint charging/full/off bolt correctly and then return to idle no-write behavior"
+  ]
+}

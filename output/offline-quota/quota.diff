@@ -1,0 +1,3562 @@
+--- a/Bootloader/Bootloader/USER/APP/run.c
++++ b/Bootloader/Bootloader/USER/APP/run.c
+@@ -38,6 +38,13 @@
+ 		if(ret == FR_OK)
+ 		{
+ 			update_size = f_size(&fd);
++            if(update_size < 8 || update_size > 0x13800U)
++            {
++                f_close(&fd);
++                UI_TextBox(8, 164, 304, 64, "\xB8\xFC\xD0\xC2\xCE\xC4\xBC\xFE\xB9\xFD\xB4\xF3", 32, 1);
++                update_flag = 2;
++                return;
++            }
+ 			ret = f_stat("0:/update/DAPlink.bin",&bin_log);
+ 			if(ret != FR_OK)
+ 				UI_TextBox(8, 164, 304, 64, "\xB8\xFC\xD0\xC2\xCE\xC4\xBC\xFE\xD0\xC5\xCF\xA2\xD2\xEC\xB3\xA3", 32, 1);
+--- a/Bootloader/Bootloader/USER/BSP/ui_chinese_font.h
++++ b/Bootloader/Bootloader/USER/BSP/ui_chinese_font.h
+@@ -11,11 +11,13 @@
+     {0xB3CC, {0x08,0x00,0x1D,0xFC,0xF1,0x04,0x11,0x04,0x11,0x04,0xFD,0xFC,0x10,0x00,0x30,0x00,0x39,0xFE,0x54,0x20,0x54,0x20,0x91,0xFC,0x10,0x20,0x10,0x20,0x13,0xFE,0x10,0x00}}, /* U+7A0B */
+     {0xB3F5, {0x20,0x00,0x10,0x00,0x01,0xFC,0xFC,0x44,0x08,0x44,0x10,0x44,0x10,0x44,0x34,0x44,0x58,0x44,0x94,0x44,0x14,0x44,0x10,0x84,0x10,0x84,0x11,0x04,0x12,0x28,0x14,0x10}}, /* U+521D */
+     {0xB4AB, {0x08,0x40,0x08,0x40,0x08,0x40,0x13,0xF8,0x10,0x40,0x30,0x80,0x37,0xFE,0x50,0x80,0x91,0x00,0x13,0xF8,0x10,0x08,0x11,0x10,0x10,0xA0,0x10,0x40,0x10,0x20,0x10,0x20}}, /* U+4F20 */
++    {0xB4F3, {0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0xFF,0xFE,0x01,0x00,0x01,0x00,0x02,0x80,0x02,0x80,0x04,0x40,0x04,0x40,0x08,0x20,0x10,0x10,0x20,0x08,0xC0,0x06}}, /* U+5927 */
+     {0xB5BD, {0x00,0x04,0xFF,0x84,0x08,0x04,0x10,0x24,0x22,0x24,0x41,0x24,0xFF,0xA4,0x08,0xA4,0x08,0x24,0x08,0x24,0x7F,0x24,0x08,0x24,0x08,0x04,0x0F,0x84,0xF8,0x14,0x40,0x08}}, /* U+5230 */
+     {0xB7A8, {0x00,0x40,0x20,0x40,0x10,0x40,0x10,0x40,0x87,0xFC,0x40,0x40,0x40,0x40,0x10,0x40,0x1F,0xFE,0x20,0x40,0xE0,0x80,0x21,0x00,0x22,0x10,0x24,0x08,0x2F,0xFC,0x04,0x04}}, /* U+6CD5 */
+     {0xB7C2, {0x08,0x80,0x08,0x40,0x08,0x40,0x17,0xFE,0x11,0x00,0x31,0x00,0x31,0x00,0x51,0xF8,0x91,0x08,0x11,0x08,0x11,0x08,0x11,0x08,0x12,0x08,0x12,0x08,0x14,0x50,0x18,0x20}}, /* U+4EFF */
+     {0xB8FC, {0x00,0x00,0xFF,0xFE,0x01,0x00,0x01,0x00,0x3F,0xF8,0x21,0x08,0x21,0x08,0x3F,0xF8,0x21,0x08,0x21,0x08,0x3F,0xF8,0x11,0x00,0x0A,0x00,0x06,0x00,0x19,0xC0,0xE0,0x3E}}, /* U+66F4 */
+     {0xB9CC, {0x00,0x00,0x7F,0xFC,0x41,0x04,0x41,0x04,0x5F,0xF4,0x41,0x04,0x41,0x04,0x4F,0xE4,0x48,0x24,0x48,0x24,0x48,0x24,0x4F,0xE4,0x48,0x24,0x40,0x04,0x7F,0xFC,0x40,0x04}}, /* U+56FA */
++    {0xB9FD, {0x00,0x10,0x20,0x10,0x10,0x10,0x17,0xFE,0x00,0x10,0x00,0x10,0xF2,0x10,0x11,0x10,0x11,0x10,0x10,0x10,0x10,0x10,0x10,0x50,0x10,0x20,0x28,0x00,0x47,0xFE,0x00,0x00}}, /* U+8FC7 */
+     {0xBBAF, {0x08,0x80,0x08,0x80,0x08,0x84,0x10,0x88,0x10,0x90,0x30,0xA0,0x30,0xC0,0x50,0x80,0x91,0x80,0x12,0x80,0x14,0x80,0x10,0x82,0x10,0x82,0x10,0x82,0x10,0x7E,0x10,0x00}}, /* U+5316 */
+     {0xBCC7, {0x00,0x00,0x20,0x00,0x11,0xF8,0x10,0x08,0x00,0x08,0x00,0x08,0xF0,0x08,0x11,0xF8,0x11,0x08,0x11,0x00,0x11,0x00,0x11,0x00,0x15,0x02,0x19,0x02,0x10,0xFE,0x00,0x00}}, /* U+8BB0 */
+     {0xBCFE, {0x08,0x20,0x08,0x20,0x09,0x20,0x11,0x20,0x11,0xFC,0x32,0x20,0x32,0x20,0x54,0x20,0x90,0x20,0x17,0xFE,0x10,0x20,0x10,0x20,0x10,0x20,0x10,0x20,0x10,0x20,0x10,0x20}}, /* U+4EF6 */
+--- a/GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx
++++ b/GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx
+@@ -277,7 +277,7 @@
+               <OCR_RVCT4>
+                 <Type>1</Type>
+                 <StartAddress>0x800c000</StartAddress>
+-                <Size>0x14000</Size>
++                <Size>0x13800</Size>
+               </OCR_RVCT4>
+               <OCR_RVCT5>
+                 <Type>1</Type>
+@@ -714,6 +714,14 @@
+               <FileType>1</FileType>
+               <FilePath>..\..\USER\APP\run.c</FilePath>
+             </File>
++            <File>
++              <FileName>burn_quota.c</FileName><FileType>1</FileType>
++              <FilePath>..\..\USER\APP\burn_quota.c</FilePath>
++            </File>
++            <File>
++              <FileName>burn_quota_port.c</FileName><FileType>1</FileType>
++              <FilePath>..\..\USER\APP\burn_quota_port.c</FilePath>
++            </File>
+           </Files>
+         </Group>
+         <Group>
+--- a/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h
++++ b/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h
+@@ -26,6 +26,8 @@
+ #define CMD_RENAME                  0x0AU
+ #define CMD_STAGE_ALGORITHM         0x0BU
+ #define CMD_PREPARE_DOWNLOAD        0x0CU
++#define CMD_GET_BURN_QUOTA          0x0DU
++#define CMD_SET_BURN_QUOTA          0x0EU
+ 
+ /* Response status codes */
+ #define STATUS_OK                   0x00U
+@@ -54,6 +56,7 @@
+ 
+ /* Process deferred prepare requests from the application task. */
+ void custombulk_prepare_service(usb_dev *udev);
++void custombulk_quota_service(usb_dev *udev);
+ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
+                                          uint8_t *program_name,
+                                          uint8_t *opt_required);
+--- a/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c
++++ b/GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c
+@@ -3,6 +3,7 @@
+ #include "usbd_transc.h"
+ #include "ff.h"
+ #include <string.h>
++#include "burn_quota.h"
+ 
+ /* External FatFs objects from run.c */
+ extern FATFS fs;
+@@ -18,6 +19,9 @@
+ static volatile uint8_t prepare_request_pending;
+ static volatile uint8_t prepare_response_pending;
+ static volatile uint8_t prepare_complete_pending;
++static volatile uint8_t quota_request_pending;
++static uint8_t quota_request_enabled;
++static uint32_t quota_request_remaining;
+ 
+ /* Forward declarations */
+ static uint8_t custombulk_init(usb_dev *udev, uint8_t config_index);
+@@ -55,6 +59,7 @@
+     prepare_request_pending = 0;
+     prepare_response_pending = 0;
+     prepare_complete_pending = 0;
++    quota_request_pending = 0;
+ 
+     udev->class_data[CUSTOMBULK_INTERFACE] = (void *)&cb_handler;
+ 
+@@ -82,6 +87,7 @@
+     prepare_request_pending = 0;
+     prepare_response_pending = 0;
+     prepare_complete_pending = 0;
++    quota_request_pending = 0;
+     memset(staged_algorithm, 0, sizeof(staged_algorithm));
+     memset(prepare_algorithm, 0, sizeof(prepare_algorithm));
+     memset(prepare_program, 0, sizeof(prepare_program));
+@@ -544,6 +550,58 @@
+     return 1;
+ }
+ 
++/* GET: [0D]; SET: [0E][enabled][remaining LE32]. Response:
++ * [status][version=1][enabled][fault][remaining LE32]. Writes run in task context. */
++static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
++{
++    uint32_t remaining = 0;
++    if(app_data.mode == 4 || cb_handler.file_opened || prepare_request_pending ||
++       prepare_response_pending || prepare_complete_pending || quota_request_pending) {
++        send_response(udev, STATUS_BUSY, NULL, 0);
++        return;
++    }
++    if((buf[0] == CMD_GET_BURN_QUOTA && len != 1) ||
++       (buf[0] == CMD_SET_BURN_QUOTA && (len != 6 || buf[1] > 1))) {
++        send_response(udev, STATUS_ERR, NULL, 0);
++        return;
++    }
++    if(buf[0] == CMD_SET_BURN_QUOTA) {
++        remaining = (uint32_t)buf[2] | ((uint32_t)buf[3] << 8) |
++                    ((uint32_t)buf[4] << 16) | ((uint32_t)buf[5] << 24);
++        if(remaining > BURN_QUOTA_MAX || (!buf[1] && remaining)) {
++            send_response(udev, STATUS_ERR, NULL, 0);
++            return;
++        }
++        quota_request_enabled = buf[1];
++        quota_request_remaining = remaining;
++    }
++    quota_request_pending = buf[0];
++}
++
++void custombulk_quota_service(usb_dev *udev)
++{
++    uint8_t cmd = quota_request_pending, result = BURN_QUOTA_OK;
++    uint8_t response[7];
++    uint32_t remaining;
++    if(!cmd) return;
++    /* OUT is rearmed only after this response completes. */
++    if(app_data.mode == 4 || cb_handler.file_opened) {
++        quota_request_pending = 0;
++        send_response(udev, STATUS_BUSY, NULL, 0);
++        return;
++    }
++    if(cmd == CMD_SET_BURN_QUOTA) {
++        result = burn_quota_set(quota_request_enabled, quota_request_remaining);
++        oled.Refresh_flag = 1;
++    }
++    remaining = burn_quota_remaining();
++    response[0] = 1; response[1] = burn_quota_enabled(); response[2] = burn_quota_fault();
++    response[3] = (uint8_t)remaining; response[4] = (uint8_t)(remaining >> 8);
++    response[5] = (uint8_t)(remaining >> 16); response[6] = (uint8_t)(remaining >> 24);
++    quota_request_pending = 0;
++    send_response(udev, result == BURN_QUOTA_OK ? STATUS_OK : STATUS_ERR, response, sizeof(response));
++}
++
+ /* Command dispatcher */
+ static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
+ {
+@@ -588,6 +646,10 @@
+     case CMD_PREPARE_DOWNLOAD:
+         cmd_prepare_download(udev, buf, len);
+         break;
++    case CMD_GET_BURN_QUOTA:
++    case CMD_SET_BURN_QUOTA:
++        cmd_burn_quota(udev, buf, len);
++        break;
+     default:
+         send_response(udev, STATUS_ERR, NULL, 0);
+         break;
+--- a/GD32-HID/GD32-HID/USER/APP/burn_quota.c
++++ b/GD32-HID/GD32-HID/USER/APP/burn_quota.c
+@@ -0,0 +1,136 @@
++#include "burn_quota.h"
++
++#define QUOTA_MAGIC 0x31545142UL /* BQT1, journal format version 1 */
++#define QUOTA_COMMIT 0x54494D43UL
++#define QUOTA_WORDS 8U
++#define QUOTA_RECORD_SIZE (QUOTA_WORDS * 4U)
++#define QUOTA_SLOTS (BURN_QUOTA_PAGE_SIZE / QUOTA_RECORD_SIZE)
++
++static uint32_t quota_sequence;
++static uint32_t quota_remaining;
++static uint8_t quota_enabled, quota_fault, quota_reserved;
++static uint8_t quota_page, quota_next, quota_valid;
++
++static uint32_t record_address(uint8_t page, uint8_t slot)
++{
++    return BURN_QUOTA_FLASH_BASE + page * BURN_QUOTA_PAGE_SIZE + slot * QUOTA_RECORD_SIZE;
++}
++
++static uint32_t checksum(const uint32_t *words)
++{
++    uint32_t crc = 0xFFFFFFFFUL;
++    uint8_t i, byte, bit;
++    for(i = 0; i < 5; i++)
++        for(byte = 0; byte < 4; byte++)
++        {
++            crc ^= (words[i] >> (byte * 8)) & 0xFFU;
++            for(bit = 0; bit < 8; bit++)
++                crc = (crc >> 1) ^ ((crc & 1U) ? 0xEDB88320UL : 0U);
++        }
++    return crc ^ 0xFFFFFFFFUL;
++}
++
++static uint8_t record_valid(const uint32_t *r)
++{
++    return r[0] == QUOTA_MAGIC && r[2] <= 1 && r[3] <= BURN_QUOTA_MAX &&
++           (r[2] || r[3] == 0) && r[4] == ~r[3] && r[5] == checksum(r) &&
++           r[6] == ~r[1] && r[7] == QUOTA_COMMIT;
++}
++
++void burn_quota_init(void)
++{
++    uint32_t r[QUOTA_WORDS];
++    uint8_t page, slot, i, empty, any_data = 0, occupied[2] = {0, 0};
++    quota_sequence = quota_remaining = 0;
++    quota_enabled = quota_fault = quota_reserved = quota_valid = quota_page = quota_next = 0;
++    for(page = 0; page < 2; page++)
++        for(slot = 0; slot < QUOTA_SLOTS; slot++)
++        {
++            empty = 1;
++            for(i = 0; i < QUOTA_WORDS; i++)
++            {
++                r[i] = burn_quota_read_word(record_address(page, slot) + i * 4U);
++                if(r[i] != 0xFFFFFFFFUL) empty = 0;
++            }
++            if(empty) continue;
++            any_data = 1;
++            occupied[page] = slot + 1;
++            if(!record_valid(r))
++            {
++                /* A torn uncommitted append is ignored. A committed record
++                 * with damaged data fails closed instead of restoring credit. */
++                if(r[7] == QUOTA_COMMIT) quota_fault = 1;
++                continue;
++            }
++            if(!quota_valid || (int32_t)(r[1] - quota_sequence) > 0)
++            {
++                quota_valid = 1;
++                quota_sequence = r[1]; quota_enabled = (uint8_t)r[2];
++                quota_remaining = r[3]; quota_page = page;
++            }
++        }
++    quota_next = occupied[quota_page];
++    if(any_data && !quota_valid) quota_fault = 1;
++}
++
++uint8_t burn_quota_enabled(void) { return quota_enabled; }
++uint8_t burn_quota_fault(void) { return quota_fault; }
++uint32_t burn_quota_remaining(void) { return quota_remaining; }
++
++static uint8_t append(uint8_t enabled, uint32_t remaining, uint8_t repair)
++{
++    uint32_t r[QUOTA_WORDS], address;
++    uint8_t i, page = quota_page, slot = quota_next;
++    if(repair || slot >= QUOTA_SLOTS)
++    {
++        page ^= 1U; slot = 0;
++        /* Keep the current committed page intact until the replacement commits. */
++        if(!burn_quota_erase_page(record_address(page, 0))) goto storage_error;
++    }
++    address = record_address(page, slot);
++    r[0] = QUOTA_MAGIC; r[1] = quota_sequence + 1U; r[2] = enabled;
++    r[3] = remaining; r[4] = ~remaining; r[5] = checksum(r);
++    r[6] = ~r[1]; r[7] = QUOTA_COMMIT;
++    for(i = 0; i < QUOTA_WORDS; i++)
++    {
++        if(!burn_quota_program_word(address + i * 4U, r[i]) ||
++           burn_quota_read_word(address + i * 4U) != r[i]) goto storage_error;
++    }
++    if(repair && !burn_quota_erase_page(record_address(quota_page, 0))) goto storage_error;
++    quota_sequence = r[1]; quota_enabled = enabled; quota_remaining = remaining;
++    quota_page = page; quota_next = slot + 1; quota_valid = 1; quota_fault = 0;
++    return BURN_QUOTA_OK;
++storage_error:
++    quota_fault = 1;
++    return BURN_QUOTA_STORAGE;
++}
++
++uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
++{
++    if(quota_reserved) return BURN_QUOTA_BUSY;
++    if(enabled > 1 || remaining > BURN_QUOTA_MAX || (!enabled && remaining))
++        return BURN_QUOTA_STORAGE;
++    if(!quota_fault && quota_valid && enabled == quota_enabled && remaining == quota_remaining)
++        return BURN_QUOTA_OK;
++    return append(enabled, remaining, quota_fault);
++}
++
++uint8_t burn_quota_begin(void)
++{
++    uint8_t result;
++    if(quota_reserved) return BURN_QUOTA_BUSY;
++    if(quota_fault) return BURN_QUOTA_STORAGE;
++    if(!quota_enabled) return BURN_QUOTA_OK;
++    if(!quota_remaining) return BURN_QUOTA_EMPTY;
++    result = append(1, quota_remaining - 1U, 0);
++    if(result == BURN_QUOTA_OK) quota_reserved = 1;
++    return result;
++}
++
++uint8_t burn_quota_finish(uint8_t success)
++{
++    if(!quota_reserved) return BURN_QUOTA_OK;
++    quota_reserved = 0;
++    if(success) return BURN_QUOTA_OK;
++    return append(1, quota_remaining + 1U, 0);
++}
+--- a/GD32-HID/GD32-HID/USER/APP/burn_quota.h
++++ b/GD32-HID/GD32-HID/USER/APP/burn_quota.h
+@@ -0,0 +1,26 @@
++#ifndef BURN_QUOTA_H
++#define BURN_QUOTA_H
++#include <stdint.h>
++
++/* Global device quota. 0..999 allows fixed three-digit LCD presentation.
++ * The last two 1KB MCU Flash pages are excluded from the app linker region. */
++#define BURN_QUOTA_MAX 999U
++#define BURN_QUOTA_FLASH_BASE 0x0801F800UL
++#define BURN_QUOTA_PAGE_SIZE 1024U
++enum { BURN_QUOTA_OK = 0, BURN_QUOTA_EMPTY, BURN_QUOTA_STORAGE, BURN_QUOTA_BUSY };
++
++void burn_quota_init(void);
++uint8_t burn_quota_enabled(void);
++uint8_t burn_quota_fault(void);
++uint32_t burn_quota_remaining(void);
++uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining);
++/* Reserve durably BEFORE powering/programming the target. Normal failures
++ * refund; interrupted power retains the reservation. Success needs no write. */
++uint8_t burn_quota_begin(void);
++uint8_t burn_quota_finish(uint8_t success);
++
++/* Storage adapter: the journal is portable and fault-testable independently. */
++uint32_t burn_quota_read_word(uint32_t address);
++uint8_t burn_quota_program_word(uint32_t address, uint32_t value);
++uint8_t burn_quota_erase_page(uint32_t address);
++#endif
+--- a/GD32-HID/GD32-HID/USER/APP/burn_quota_port.c
++++ b/GD32-HID/GD32-HID/USER/APP/burn_quota_port.c
+@@ -0,0 +1,45 @@
++#include "main.h"
++#include "burn_quota.h"
++#include "gd32f10x_fmc.h"
++
++static uint8_t valid_address(uint32_t address)
++{
++    return address >= BURN_QUOTA_FLASH_BASE &&
++           address < BURN_QUOTA_FLASH_BASE + 2U * BURN_QUOTA_PAGE_SIZE && !(address & 3U);
++}
++
++uint32_t burn_quota_read_word(uint32_t address)
++{
++    return valid_address(address) ? *(volatile uint32_t *)address : 0;
++}
++
++static void clear_flags(void)
++{
++    fmc_flag_clear(FMC_FLAG_BANK0_END);
++    fmc_flag_clear(FMC_FLAG_BANK0_PGERR);
++    fmc_flag_clear(FMC_FLAG_BANK0_WPERR);
++}
++
++uint8_t burn_quota_program_word(uint32_t address, uint32_t value)
++{
++    fmc_state_enum result;
++    if(!valid_address(address)) return 0;
++    taskENTER_CRITICAL();
++    fmc_unlock(); clear_flags();
++    result = fmc_word_program(address, value);
++    fmc_lock();
++    taskEXIT_CRITICAL();
++    return result == FMC_READY;
++}
++
++uint8_t burn_quota_erase_page(uint32_t address)
++{
++    fmc_state_enum result;
++    if(!valid_address(address) || address % BURN_QUOTA_PAGE_SIZE) return 0;
++    taskENTER_CRITICAL();
++    fmc_unlock(); clear_flags();
++    result = fmc_page_erase(address);
++    fmc_lock();
++    taskEXIT_CRITICAL();
++    return result == FMC_READY;
++}
+--- a/GD32-HID/GD32-HID/USER/APP/run.c
++++ b/GD32-HID/GD32-HID/USER/APP/run.c
+@@ -5,6 +5,7 @@
+ #include "ff.h"
+ #include "DAP_config.h"
+ #include "usbd_custombulk.h"
++#include "burn_quota.h"
+ 
+ 
+ usb_dev usb_hid;
+@@ -83,6 +84,19 @@
+    repeat the failure reason after mode4 has returned */
+ static char g_last_status[64] = {0};
+ 
++/* Quota gets a full-width 32px row. Key hints move to a separate 16px footer. */
++static void show_quota(uint16_t y)
++{
++    if(burn_quota_fault())
++        strcpy((char *)D, "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
++    else if(burn_quota_enabled())
++        sprintf((char *)D, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\x25\x30\x33\x6C\x75\xB4\xCE", (unsigned long)burn_quota_remaining());
++    else
++        strcpy((char *)D, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A\xB2\xBB\xCF\xDE");
++    UI_Fill(0, y, 320, 32, 0);
++    UI_Text(8, y, (char *)D, 32, 1);
++}
++
+ static void apply_prepare_download(const uint8_t *algorithm_name,
+                                    const uint8_t *program_name,
+                                    uint8_t opt_required)
+@@ -119,6 +133,7 @@
+     uint8_t ret;
+     uint32_t ulReadNum;
+     const char *status;
++    burn_quota_init();
+     ret = f_mount(&fs, "0:", 1);
+     status = "\xCE\xC4\xBC\xFE\xCF\xB5\xCD\xB3\xD2\xEC\xB3\xA3";
+     if(ret == FR_OK)
+@@ -358,6 +373,7 @@
+         UI_Fill(0, 32, 320, 208, 0);
+         UI_Text(8, 56, "\xCE\xC4\xBC\xFE\xB4\xAB\xCA\xE4", 32, 1);
+         UI_Text(8, 112, "\xB5\xE7\xC4\xD4\xB4\xAB\xCA\xE4\xCE\xC4\xBC\xFE", 32, 1);
++        show_quota(148);
+         UI_Text(8, 184, "\xD6\xD0\xBC\xFC\xBD\xF8\xC8\xEB\xC9\xD5\xC2\xBC", 32, 1);
+         OLED_Refresh();
+         oled.Refresh_flag = 0;
+@@ -460,11 +476,12 @@
+ 		{
+             UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
+             UI_Text(8, 48, (const char *)app_data.firmware_name, 16, 1);
+-            UI_Text(8, 88, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+-            UI_Text(8, 128, (const char *)app_data.bin_name, 16, 1);
++            UI_Text(8, 72, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
++            UI_Text(8, 112, (const char *)app_data.bin_name, 16, 1);
+             UI_Text(8, 176, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
+-            UI_Text(272, app_data.head == 2 ? 176 : 8 + app_data.head * 80, "<-", 32, 1);
+-            UI_Text(8, 220, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1);
++            UI_Text(272, app_data.head == 2 ? 176 : 8 + app_data.head * 64, "<-", 32, 1);
++            show_quota(136);
++            UI_Text(160, 220, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xD7\xD4\xB6\xAF", 16, 1);
+ 		}
+ 		OLED_Refresh();
+ 		oled.Refresh_flag = 0;
+@@ -479,10 +496,11 @@
+ static void show_download_status(const char *status)
+ {
+     uint16_t size = UI_TextWidth(status, 32) <= 576 ? 32 : 16;
+-    UI_Fill(0, 160, 320, 80, 0);
+-    UI_TextBox(8, 160, 304, 80, status, (uint8_t)size, 1);
++    UI_Fill(0, 144, 320, 64, 0);
++    UI_TextBox(8, 144, 304, 64, status, (uint8_t)size, 1);
+     strncpy(g_last_status, status, sizeof(g_last_status) - 1);
+     g_last_status[sizeof(g_last_status) - 1] = '\0';
++    show_quota(208);
+ }
+ 
+ /* Native LCD error page: wrapped 32px title, complete 16px register values. */
+@@ -503,6 +521,7 @@
+     UI_Text(8, 144, (char *)D, 16, 1);
+     sprintf((char *)D, "DHCSR=%08lX", (unsigned long)g_diag_hcsr);
+     UI_Text(8, 172, (char *)D, 16, 1);
++    show_quota(208);
+ }
+ 
+ /* Connect and halt the core as fast as possible.
+@@ -675,15 +694,16 @@
+ 	}
+ 
+     UI_Text(8, 8, st, 32, 1);
+-    UI_Text(8, 48, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
+-    UI_Text(8, 84, (const char *)app_data.firmware_name, 16, 1);
+-    UI_Text(8, 108, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
+-    UI_Text(8, 144, (const char *)app_data.bin_name, 16, 1);
++    UI_Text(8, 44, "\xC9\xD5\xC2\xBC\xCB\xE3\xB7\xA8", 32, 1);
++    UI_Text(8, 76, (const char *)app_data.firmware_name, 16, 1);
++    UI_Text(8, 96, "\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE", 32, 1);
++    UI_Text(8, 128, (const char *)app_data.bin_name, 16, 1);
++    show_quota(148);
+     if(UI_TextWidth(detail, 32) <= 304)
+-        UI_Text(8, 168, detail, 32, 1);
++        UI_Text(8, 184, detail, 32, 1);
+     else
+-        UI_TextBox(8, 168, 304, 32, detail, 16, 1);
+-    UI_Text(8, 204, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 32, 1);
++        UI_TextBox(8, 184, 304, 32, detail, 16, 1);
++    UI_Text(8, 224, "\xB3\xA4\xB0\xB4\xD3\xD2\xBC\xFC\x3A\xCA\xD6\xB6\xAF", 16, 1);
+ }
+ 
+ void mode4(void)
+@@ -752,6 +772,20 @@
+ 	g_burn_done = 1;
+ 	g_burn_ok = 0;
+ 
++    if(burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
++    {
++quota_rejected:
++        OLED_Clear();
++        UI_Text(8, 8, "\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC", 32, 1);
++        show_download_status(burn_quota_fault() ? "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3" : "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3");
++        if(g_auto_en)
++        {
++            g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms();
++            app_data.mode = 2; oled.Refresh_flag = 1;
++        }
++        return;
++    }
++
+     OLED_Clear();
+     UI_Text(8, 8, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 32, 1);
+     sprintf((char *)D, "\xCB\xE3\xB7\xA8\x3A\x25\x73", app_data.firmware_name);
+@@ -762,6 +796,7 @@
+ 
+ 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
+ 	{
++        if(burn_quota_begin() != BURN_QUOTA_OK) goto quota_rejected;
+ 		show_download_status("\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC");
+ 		/* Power-cycle target and grab SWD before programming */
+ 		swd_off();
+@@ -1173,7 +1208,14 @@
+ 		}
+ 		else show_download_status("\x45\x52\x34\x3A\xB9\xCC\xBC\xFE\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC");
+ 		
+-download_return:		
++download_return:
++        if(burn_quota_finish(g_burn_ok) != BURN_QUOTA_OK)
++        {
++            g_burn_ok = 0;
++            show_download_status("\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
++        }
++        else
++            show_quota(208);
+ 		swd_off();
+ 		TARGET_PWR_OFF;
+ 		oled.Refresh_flag = 1;
+@@ -1366,6 +1408,7 @@
+ 
+ 		while(1)
+ 		{
++            custombulk_quota_service(&usb_hid);
+ 			custombulk_prepare_service(&usb_hid);
+ 			if(custombulk_take_prepare_complete(prepare_algorithm,
+ 			                                    prepare_program,
+--- a/GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h
++++ b/GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h
+@@ -10,6 +10,7 @@
+     {0xB0DC, {0x00,0x40,0x7C,0x40,0x44,0x40,0x54,0x80,0x54,0xFE,0x55,0x08,0x56,0x88,0x54,0x88,0x54,0x88,0x54,0x50,0x54,0x50,0x10,0x20,0x28,0x50,0x24,0x88,0x45,0x04,0x82,0x02}}, /* U+8D25 */
+     {0xB1EA, {0x10,0x00,0x11,0xFC,0x10,0x00,0x10,0x00,0xFC,0x00,0x13,0xFE,0x30,0x20,0x38,0x20,0x55,0x28,0x55,0x24,0x92,0x24,0x12,0x22,0x14,0x22,0x10,0x20,0x10,0xA0,0x10,0x40}}, /* U+6807 */
+     {0xB2A2, {0x10,0x10,0x08,0x10,0x08,0x20,0x00,0x00,0x7F,0xFC,0x08,0x20,0x08,0x20,0x08,0x20,0x08,0x20,0xFF,0xFE,0x08,0x20,0x08,0x20,0x10,0x20,0x10,0x20,0x20,0x20,0x40,0x20}}, /* U+5E76 */
++    {0xB2BB, {0x00,0x00,0x7F,0xFC,0x00,0x80,0x00,0x80,0x01,0x00,0x01,0x00,0x03,0x40,0x05,0x20,0x09,0x10,0x11,0x08,0x21,0x04,0x41,0x04,0x81,0x00,0x01,0x00,0x01,0x00,0x01,0x00}}, /* U+4E0D */
+     {0xB2BD, {0x01,0x00,0x01,0x00,0x11,0xF8,0x11,0x00,0x11,0x00,0x11,0x00,0xFF,0xFE,0x01,0x00,0x01,0x00,0x11,0x08,0x11,0x10,0x21,0x20,0x40,0xC0,0x03,0x00,0x1C,0x00,0xE0,0x00}}, /* U+6B65 */
+     {0xB2C1, {0x20,0x80,0x20,0x40,0x27,0xFE,0x24,0x02,0xFA,0x24,0x23,0xBC,0x24,0xA4,0x2A,0xA8,0x35,0x10,0xE2,0xE8,0x24,0x04,0x2B,0xFA,0x20,0x40,0x22,0x48,0xA4,0x44,0x40,0xC0}}, /* U+64E6 */
+     {0xB2E9, {0x01,0x00,0x01,0x00,0x7F,0xFC,0x05,0x40,0x09,0x20,0x31,0x18,0xC1,0x06,0x1F,0xF0,0x10,0x10,0x1F,0xF0,0x10,0x10,0x1F,0xF0,0x10,0x10,0x00,0x00,0xFF,0xFE,0x00,0x00}}, /* U+67E5 */
+@@ -20,6 +21,7 @@
+     {0xB3F6, {0x01,0x00,0x01,0x00,0x21,0x08,0x21,0x08,0x21,0x08,0x21,0x08,0x3F,0xF8,0x01,0x08,0x01,0x00,0x01,0x00,0x41,0x04,0x41,0x04,0x41,0x04,0x41,0x04,0x7F,0xFC,0x00,0x04}}, /* U+51FA */
+     {0xB3FD, {0x00,0x40,0x78,0x40,0x48,0xA0,0x51,0x10,0x52,0x08,0x65,0xF6,0x50,0x40,0x48,0x40,0x4F,0xFC,0x48,0x40,0x6A,0x50,0x52,0x48,0x44,0x44,0x48,0x44,0x41,0x40,0x40,0x80}}, /* U+9664 */
+     {0xB4AB, {0x08,0x40,0x08,0x40,0x08,0x40,0x13,0xF8,0x10,0x40,0x30,0x80,0x37,0xFE,0x50,0x80,0x91,0x00,0x13,0xF8,0x10,0x08,0x11,0x10,0x10,0xA0,0x10,0x40,0x10,0x20,0x10,0x20}}, /* U+4F20 */
++    {0xB4CE, {0x00,0x80,0x40,0x80,0x20,0x80,0x20,0xFC,0x01,0x04,0x09,0x08,0x0A,0x40,0x14,0x40,0x10,0x40,0xE0,0xA0,0x20,0xA0,0x21,0x10,0x21,0x10,0x22,0x08,0x24,0x04,0x08,0x02}}, /* U+6B21 */
+     {0xB4ED, {0x21,0x10,0x21,0x10,0x39,0x10,0x27,0xFC,0x41,0x10,0x79,0x10,0xAF,0xFE,0x20,0x00,0xFB,0xF8,0x22,0x08,0x22,0x08,0x23,0xF8,0x2A,0x08,0x32,0x08,0x23,0xF8,0x02,0x08}}, /* U+9519 */
+     {0xB4F2, {0x10,0x00,0x10,0x00,0x13,0xFE,0x10,0x20,0xFC,0x20,0x10,0x20,0x10,0x20,0x14,0x20,0x18,0x20,0x30,0x20,0xD0,0x20,0x10,0x20,0x10,0x20,0x10,0x20,0x50,0xA0,0x20,0x40}}, /* U+6253 */
+     {0xB4FD, {0x08,0x40,0x08,0x40,0x10,0x40,0x23,0xFC,0x48,0x40,0x08,0x40,0x17,0xFE,0x30,0x10,0x50,0x10,0x97,0xFE,0x10,0x10,0x12,0x10,0x11,0x10,0x11,0x10,0x10,0x50,0x10,0x20}}, /* U+5F85 */
+@@ -37,6 +39,7 @@
+     {0xB9CC, {0x00,0x00,0x7F,0xFC,0x41,0x04,0x41,0x04,0x5F,0xF4,0x41,0x04,0x41,0x04,0x4F,0xE4,0x48,0x24,0x48,0x24,0x48,0x24,0x4F,0xE4,0x48,0x24,0x40,0x04,0x7F,0xFC,0x40,0x04}}, /* U+56FA */
+     {0xB9FD, {0x00,0x10,0x20,0x10,0x10,0x10,0x17,0xFE,0x00,0x10,0x00,0x10,0xF2,0x10,0x11,0x10,0x11,0x10,0x10,0x10,0x10,0x10,0x10,0x50,0x10,0x20,0x28,0x00,0x47,0xFE,0x00,0x00}}, /* U+8FC7 */
+     {0xBBAF, {0x08,0x80,0x08,0x80,0x08,0x84,0x10,0x88,0x10,0x90,0x30,0xA0,0x30,0xC0,0x50,0x80,0x91,0x80,0x12,0x80,0x14,0x80,0x10,0x82,0x10,0x82,0x10,0x82,0x10,0x7E,0x10,0x00}}, /* U+5316 */
++    {0xBCC7, {0x00,0x00,0x20,0x00,0x11,0xF8,0x10,0x08,0x00,0x08,0x00,0x08,0xF0,0x08,0x11,0xF8,0x11,0x08,0x11,0x00,0x11,0x00,0x11,0x00,0x15,0x02,0x19,0x02,0x10,0xFE,0x00,0x00}}, /* U+8BB0 */
+     {0xBCD3, {0x10,0x00,0x10,0x00,0x10,0x00,0x10,0x7C,0xFE,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x12,0x44,0x22,0x44,0x22,0x7C,0x4A,0x44,0x84,0x00}}, /* U+52A0 */
+     {0xBCEC, {0x10,0x40,0x10,0x40,0x10,0xA0,0x10,0xA0,0xFD,0x10,0x12,0x08,0x35,0xF6,0x38,0x00,0x54,0x88,0x50,0x48,0x92,0x48,0x11,0x50,0x11,0x10,0x10,0x20,0x17,0xFE,0x10,0x00}}, /* U+68C0 */
+     {0xBCFC, {0x20,0x10,0x20,0x10,0x3B,0x7C,0x21,0x14,0x41,0xFE,0x7A,0x14,0xA2,0x7C,0x27,0x10,0xF9,0x7C,0x25,0x10,0x25,0xFE,0x22,0x10,0x2A,0x10,0x35,0x00,0x28,0xFE,0x00,0x00}}, /* U+952E */
+@@ -57,10 +60,12 @@
+     {0xC8EB, {0x04,0x00,0x02,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x02,0x80,0x02,0x80,0x02,0x80,0x04,0x40,0x04,0x40,0x08,0x20,0x08,0x20,0x10,0x10,0x20,0x10,0x40,0x08,0x80,0x06}}, /* U+5165 */
+     {0xC9D5, {0x20,0x80,0x20,0x80,0x20,0xBC,0x23,0xC0,0xA8,0x50,0xB0,0x24,0xA0,0xD4,0xA3,0x0C,0x20,0x00,0x27,0xFE,0x20,0x90,0x20,0x90,0x51,0x12,0x49,0x12,0x42,0x0E,0x84,0x00}}, /* U+70E7 */
+     {0xC9D9, {0x01,0x00,0x01,0x00,0x01,0x00,0x09,0x20,0x09,0x10,0x11,0x08,0x11,0x04,0x21,0x14,0x41,0x10,0x01,0x20,0x00,0x40,0x00,0x80,0x01,0x00,0x02,0x00,0x0C,0x00,0x70,0x00}}, /* U+5C11 */
++    {0xCAA3, {0x07,0x02,0x78,0x02,0x08,0x02,0xFF,0x82,0x2A,0x12,0x2A,0x92,0xEB,0x12,0x2A,0x92,0x6A,0x92,0xA9,0x92,0x1C,0x12,0x2A,0x12,0x49,0x02,0x88,0x82,0x08,0x0A,0x08,0x04}}, /* U+5269 */
+     {0xCAA7, {0x01,0x00,0x11,0x00,0x11,0x00,0x11,0x00,0x3F,0xF8,0x21,0x00,0x41,0x00,0x01,0x00,0xFF,0xFE,0x02,0x80,0x04,0x40,0x04,0x40,0x08,0x20,0x10,0x10,0x20,0x08,0xC0,0x06}}, /* U+5931 */
+     {0xCABC, {0x10,0x20,0x10,0x20,0x10,0x20,0x10,0x40,0xFC,0x48,0x24,0x84,0x25,0xFE,0x24,0x82,0x24,0x00,0x48,0xFC,0x28,0x84,0x10,0x84,0x28,0x84,0x44,0x84,0x80,0xFC,0x00,0x84}}, /* U+59CB */
+     {0xCAD6, {0x00,0x10,0x00,0xF8,0x3F,0x00,0x01,0x00,0x01,0x00,0x3F,0xF8,0x01,0x00,0x01,0x00,0x01,0x00,0xFF,0xFE,0x01,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x05,0x00,0x02,0x00}}, /* U+624B */
+     {0xCAE4, {0x20,0x40,0x20,0xA0,0x21,0x10,0xFA,0x08,0x25,0xF6,0x40,0x00,0x53,0xC4,0x92,0x54,0xFA,0x54,0x13,0xD4,0x1A,0x54,0xF2,0x54,0x53,0xD4,0x12,0x44,0x12,0x54,0x12,0xC8}}, /* U+8F93 */
++    {0xCAFD, {0x08,0x20,0x49,0x20,0x2A,0x20,0x08,0x3E,0xFF,0x44,0x2A,0x44,0x49,0x44,0x88,0xA4,0x10,0x28,0xFE,0x28,0x22,0x10,0x42,0x10,0x64,0x28,0x18,0x28,0x34,0x44,0xC2,0x82}}, /* U+6570 */
+     {0xCBE3, {0x20,0x40,0x3E,0x7E,0x48,0x90,0x80,0x00,0x3F,0xF8,0x20,0x08,0x3F,0xF8,0x20,0x08,0x3F,0xF8,0x20,0x08,0x3F,0xF8,0x08,0x20,0xFF,0xFE,0x08,0x20,0x10,0x20,0x20,0x20}}, /* U+7B97 */
+     {0xCBF8, {0x10,0x20,0x11,0x24,0x3C,0xA4,0x20,0xA8,0x40,0x20,0xBD,0xFC,0x11,0x04,0x11,0x24,0xFD,0x24,0x11,0x24,0x11,0x24,0x11,0x24,0x14,0x50,0x18,0x88,0x11,0x04,0x02,0x02}}, /* U+9501 */
+     {0xCDA3, {0x10,0x80,0x10,0x40,0x17,0xFC,0x20,0x00,0x23,0xF8,0x62,0x08,0x63,0xF8,0xA0,0x00,0x2F,0xFE,0x28,0x02,0x23,0xF8,0x20,0x40,0x20,0x40,0x20,0x40,0x21,0x40,0x20,0x80}}, /* U+505C */
+@@ -76,6 +81,7 @@
+     {0xCFB5, {0x00,0xF8,0x3F,0x00,0x04,0x00,0x08,0x20,0x10,0x40,0x3F,0x80,0x01,0x00,0x06,0x10,0x18,0x08,0x7F,0xFC,0x01,0x04,0x09,0x20,0x11,0x10,0x21,0x08,0x45,0x04,0x02,0x00}}, /* U+7CFB */
+     {0xCFC2, {0x00,0x00,0xFF,0xFE,0x02,0x00,0x02,0x00,0x02,0x00,0x02,0x00,0x02,0x40,0x02,0x20,0x02,0x10,0x02,0x08,0x02,0x08,0x02,0x00,0x02,0x00,0x02,0x00,0x02,0x00,0x02,0x00}}, /* U+4E0B */
+     {0xCFC8, {0x01,0x00,0x11,0x00,0x11,0x00,0x1F,0xF8,0x21,0x00,0x41,0x00,0x01,0x00,0xFF,0xFE,0x04,0x40,0x04,0x40,0x04,0x40,0x08,0x40,0x08,0x42,0x10,0x42,0x20,0x3E,0xC0,0x00}}, /* U+5148 */
++    {0xCFDE, {0x00,0x00,0x7B,0xF8,0x4A,0x08,0x52,0x08,0x53,0xF8,0x62,0x08,0x52,0x08,0x4B,0xF8,0x4A,0x44,0x4A,0x48,0x6A,0x30,0x52,0x20,0x42,0x10,0x42,0x88,0x43,0x06,0x42,0x00}}, /* U+9650 */
+     {0xCFDF, {0x10,0x50,0x10,0x48,0x20,0x40,0x24,0x5C,0x45,0xE0,0xF8,0x40,0x10,0x5E,0x23,0xE0,0x40,0x44,0xFC,0x48,0x40,0x30,0x00,0x22,0x1C,0x52,0xE0,0x8A,0x43,0x06,0x00,0x02}}, /* U+7EBF */
+     {0xD0A3, {0x10,0x40,0x10,0x20,0x10,0x20,0x11,0xFE,0xFC,0x00,0x10,0x88,0x31,0x04,0x3A,0x02,0x54,0x88,0x50,0x88,0x90,0x50,0x10,0x50,0x10,0x20,0x10,0x50,0x10,0x88,0x13,0x06}}, /* U+6821 */
+     {0xD0B4, {0x00,0x00,0x7F,0xFE,0x40,0x02,0x90,0x04,0x10,0x00,0x1F,0xF8,0x10,0x00,0x20,0x00,0x3F,0xF8,0x00,0x08,0x00,0x08,0xFF,0xC8,0x00,0x08,0x00,0x08,0x00,0x50,0x00,0x20}}, /* U+5199 */
+@@ -87,6 +93,7 @@
+     {0xD2EC, {0x00,0x00,0x3F,0xF0,0x20,0x10,0x20,0x10,0x3F,0xF0,0x20,0x04,0x20,0x04,0x1F,0xFC,0x00,0x00,0x08,0x20,0x08,0x20,0xFF,0xFE,0x08,0x20,0x10,0x20,0x20,0x20,0x40,0x20}}, /* U+5F02 */
+     {0xD3D0, {0x02,0x00,0x02,0x00,0xFF,0xFE,0x04,0x00,0x04,0x00,0x0F,0xF0,0x08,0x10,0x18,0x10,0x2F,0xF0,0x48,0x10,0x88,0x10,0x0F,0xF0,0x08,0x10,0x08,0x10,0x08,0x50,0x08,0x20}}, /* U+6709 */
+     {0xD3D2, {0x02,0x00,0x02,0x00,0x02,0x00,0xFF,0xFE,0x04,0x00,0x04,0x00,0x08,0x00,0x08,0x00,0x1F,0xF8,0x28,0x08,0x48,0x08,0x88,0x08,0x08,0x08,0x08,0x08,0x0F,0xF8,0x08,0x08}}, /* U+53F3 */
++    {0xD3E0, {0x01,0x00,0x01,0x00,0x02,0x80,0x04,0x40,0x08,0x20,0x10,0x10,0x2F,0xE8,0xC1,0x06,0x01,0x00,0x3F,0xF8,0x01,0x00,0x11,0x10,0x11,0x08,0x21,0x04,0x45,0x04,0x02,0x00}}, /* U+4F59 */
+     {0xD4D8, {0x08,0x20,0x08,0x28,0x7F,0x24,0x08,0x20,0xFF,0xFE,0x10,0x20,0x10,0x24,0xFF,0x24,0x20,0x24,0x48,0x28,0x7F,0x28,0x08,0x10,0x0F,0x12,0xF8,0x2A,0x08,0x46,0x08,0x82}}, /* U+8F7D */
+     {0xD4DA, {0x02,0x00,0x02,0x00,0x04,0x00,0xFF,0xFE,0x08,0x00,0x08,0x40,0x10,0x40,0x30,0x40,0x57,0xFC,0x90,0x40,0x10,0x40,0x10,0x40,0x10,0x40,0x10,0x40,0x1F,0xFE,0x10,0x00}}, /* U+5728 */
+     {0xD4DD, {0x10,0x0C,0xFE,0xF0,0x20,0x80,0x48,0x80,0x7E,0xFE,0x08,0x88,0x0E,0x88,0xF9,0x08,0x4A,0x08,0x1F,0xF8,0x10,0x10,0x10,0x10,0x1F,0xF0,0x10,0x10,0x10,0x10,0x1F,0xF0}}, /* U+6682 */
+@@ -98,5 +105,6 @@
+     {0xD6D8, {0x00,0x10,0x00,0xF8,0x3F,0x00,0x01,0x00,0xFF,0xFE,0x01,0x00,0x1F,0xF0,0x11,0x10,0x1F,0xF0,0x11,0x10,0x1F,0xF0,0x01,0x00,0x3F,0xF8,0x01,0x00,0xFF,0xFE,0x00,0x00}}, /* U+91CD */
+     {0xD6E8, {0x07,0xE0,0xF2,0x5C,0x13,0xC4,0x52,0x54,0x53,0xC8,0x52,0x68,0x57,0xD4,0x78,0x64,0x08,0x3C,0x0F,0xC0,0x39,0x44,0xCA,0x68,0x08,0xD0,0x09,0x48,0x2E,0x46,0x10,0x40}}, /* U+9AA4 */
+     {0xD7D4, {0x01,0x00,0x02,0x00,0x04,0x00,0x1F,0xF0,0x10,0x10,0x10,0x10,0x10,0x10,0x1F,0xF0,0x10,0x10,0x10,0x10,0x1F,0xF0,0x10,0x10,0x10,0x10,0x10,0x10,0x1F,0xF0,0x10,0x10}}, /* U+81EA */
++    {0xD7E3, {0x00,0x00,0x1F,0xF0,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x10,0x1F,0xF0,0x01,0x00,0x01,0x00,0x11,0x00,0x11,0xF8,0x11,0x00,0x29,0x00,0x25,0x00,0x43,0xFE,0x80,0x00}}, /* U+8DB3 */
+ };
+ #endif
+--- a/GD32-HID/GD32-HID/tools/daplink_manager.py
++++ b/GD32-HID/GD32-HID/tools/daplink_manager.py
+@@ -1,1404 +1,1532 @@
+-#!/usr/bin/env python3
+-"""
+-CMSIS-DAPLINK File Manager
+-PyQt5 GUI for transferring files to/from GD32 DAPLINK device.
+-
+-Usage:
+-    python daplink_manager.py
+-
+-Requires: PyQt5, pyusb, libusb-package
+-    pip install PyQt5 pyusb libusb-package
+-"""
+-
+-import sys
+-import os
+-import struct
+-import threading
+-import re
+-
+-from intelhex import IntelHex
+-
+-import usb.core
+-import usb.util
+-
+-# Use libusb-package as backend
+-try:
+-    import libusb_package
+-    _original_find = usb.core.find
+-    def _find_with_backend(*args, **kwargs):
+-        kwargs.setdefault('backend', libusb_package.get_libusb1_backend())
+-        return _original_find(*args, **kwargs)
+-    usb.core.find = _find_with_backend
+-except ImportError:
+-    pass
+-
+-from PyQt5.QtWidgets import (
+-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+-    QSplitter, QTreeWidget, QTreeWidgetItem, QToolBar, QAction,
+-    QPushButton, QLabel, QProgressBar, QStatusBar, QFileDialog,
+-    QMessageBox, QInputDialog, QHeaderView, QFrame, QStyle,
+-    QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
+-    QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy
+-)
+-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
+-from PyQt5.QtGui import QIcon, QFont, QColor
+-
+-from opt_config import OptConfig
+-
+-# ─── USB Protocol Constants ────────────────────────────────────────────────────
+-
+-VID = 0x28E9
+-PID = 0x128A
+-CUSTOMBULK_INTERFACE = 1
+-EP_OUT = 0x02
+-EP_IN = 0x82
+-PACKET_SIZE = 64
+-MAX_DATA = 56
+-TIMEOUT = 5000
+-
+-CMD_LIST_DIR    = 0x01
+-CMD_OPEN_WRITE  = 0x02
+-CMD_WRITE_DATA  = 0x03
+-CMD_CLOSE_FILE  = 0x04
+-CMD_OPEN_READ   = 0x05
+-CMD_READ_DATA   = 0x06
+-CMD_DELETE_FILE = 0x07
+-CMD_MKDIR       = 0x08
+-CMD_GET_STATUS  = 0x09
+-CMD_RENAME      = 0x0A
+-CMD_STAGE_ALGORITHM = 0x0B
+-CMD_PREPARE_DOWNLOAD = 0x0C
+-
+-STATUS_OK   = 0x00
+-STATUS_ERR  = 0x01
+-STATUS_BUSY = 0x02
+-STATUS_EOF  = 0x03
+-
+-
+-# ─── USB Device Driver ─────────────────────────────────────────────────────────
+-
+-class DAPLinkDevice:
+-    def __init__(self):
+-        self.dev = None
+-        self.ep_out = None
+-        self.ep_in = None
+-
+-    def connect(self):
+-        # Release any previous resources first
+-        self.disconnect()
+-
+-        self.dev = usb.core.find(idVendor=VID, idProduct=PID)
+-        if self.dev is None:
+-            raise RuntimeError("Device not found. Check USB connection.")
+-
+-        # Detach kernel drivers on all interfaces
+-        for i in range(4):
+-            try:
+-                if self.dev.is_kernel_driver_active(i):
+-                    self.dev.detach_kernel_driver(i)
+-            except (usb.core.USBError, NotImplementedError):
+-                pass
+-
+-        # Try to set configuration (may already be set)
+-        try:
+-            self.dev.set_configuration()
+-        except usb.core.USBError:
+-            pass  # Already configured
+-
+-        cfg = self.dev.get_active_configuration()
+-        intf = cfg[(CUSTOMBULK_INTERFACE, 0)]
+-
+-        self.ep_out = usb.util.find_descriptor(
+-            intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
+-        self.ep_in = usb.util.find_descriptor(
+-            intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN)
+-
+-        if self.ep_out is None or self.ep_in is None:
+-            self.disconnect()
+-            raise RuntimeError("Endpoints not found on Interface 1. Check WinUSB driver.")
+-
+-    def is_connected(self):
+-        return self.dev is not None and self.ep_out is not None
+-
+-    def disconnect(self):
+-        if self.dev:
+-            usb.util.dispose_resources(self.dev)
+-            self.dev = None
+-            self.ep_out = None
+-            self.ep_in = None
+-
+-    @staticmethod
+-    def _fix_path(path):
+-        git_prefix = 'C:/Program Files/Git'
+-        if path.startswith(git_prefix):
+-            path = path[len(git_prefix):]
+-        if path.startswith('0:'):
+-            return path
+-        return '0:' + path.lstrip('/')
+-
+-    def _send_cmd(self, cmd_data):
+-        self.ep_out.write(cmd_data, timeout=TIMEOUT)
+-        data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
+-        return bytes(data)
+-
+-    def list_dir(self, path="/"):
+-        resp = self._send_cmd(bytes([CMD_LIST_DIR]) + self._fix_path(path).encode('utf-8'))
+-        if resp[0] == STATUS_ERR:
+-            raise RuntimeError(f"List failed: {path}")
+-        data = resp[1:].decode('utf-8', errors='replace').strip()
+-        result = []
+-        for entry in data.split('\n'):
+-            entry = entry.strip()
+-            if not entry:
+-                continue
+-            if entry.endswith('/'):
+-                result.append(('DIR', entry[:-1]))
+-            else:
+-                result.append(('FILE', entry))
+-        return result
+-
+-    def push(self, local_path, remote_path, callback=None):
+-        file_size = os.path.getsize(local_path)
+-        size_bytes = struct.pack('<I', file_size)
+-        resp = self._send_cmd(bytes([CMD_OPEN_WRITE]) + size_bytes + self._fix_path(remote_path).encode('utf-8'))
+-        if resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Open write failed: {remote_path}")
+-        sent = 0
+-        with open(local_path, 'rb') as f:
+-            while sent < file_size:
+-                chunk = f.read(MAX_DATA)
+-                if not chunk:
+-                    break
+-                resp = self._send_cmd(bytes([CMD_WRITE_DATA]) + chunk)
+-                if resp[0] != STATUS_OK:
+-                    raise RuntimeError(f"Write error at {sent}")
+-                sent += len(chunk)
+-                if callback:
+-                    callback(sent, file_size)
+-        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
+-        if not close_resp or close_resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Close write failed: {remote_path}")
+-        if sent != file_size:
+-            raise RuntimeError(f"Incomplete write: {sent}/{file_size} bytes")
+-        return sent
+-
+-    def file_exists(self, remote_path):
+-        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
+-        if not resp or resp[0] != STATUS_OK:
+-            return False
+-        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
+-        if not close_resp or close_resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Close failed after checking: {remote_path}")
+-        return True
+-
+-    def stage_algorithm(self, algorithm_name):
+-        if not algorithm_name or len(algorithm_name.encode('ascii')) > 31:
+-            raise ValueError("Algorithm filename must be 1-31 ASCII characters")
+-        resp = self._send_cmd(bytes([CMD_STAGE_ALGORITHM]) + algorithm_name.encode('ascii'))
+-        if not resp or resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
+-
+-    def prepare_download(self, program_name, opt_required):
+-        if not program_name or len(program_name.encode('ascii')) > 31:
+-            raise ValueError("Program filename must be 1-31 ASCII characters")
+-        flags = 1 if opt_required else 0
+-        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + program_name.encode('ascii'))
+-        if not resp:
+-            raise RuntimeError("Prepare response was empty")
+-        if resp[0] == STATUS_BUSY:
+-            raise RuntimeError("Device is busy")
+-        if resp[0] != STATUS_OK:
+-            raise RuntimeError("Device rejected download preparation")
+-
+-    def pull(self, remote_path, local_path, callback=None):
+-        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
+-        if resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Open read failed: {remote_path}")
+-        file_size = struct.unpack('<I', resp[1:5])[0]
+-        received = 0
+-        with open(local_path, 'wb') as f:
+-            while received < file_size:
+-                req_len = min(MAX_DATA, file_size - received)
+-                resp = self._send_cmd(bytes([CMD_READ_DATA, req_len]))
+-                if resp[0] == STATUS_ERR:
+-                    raise RuntimeError(f"Read error at {received}")
+-                data = resp[1:]
+-                f.write(data)
+-                received += len(data)
+-                if callback:
+-                    callback(received, file_size)
+-                if resp[0] == STATUS_EOF:
+-                    break
+-        return received
+-
+-    def mkdir(self, path):
+-        resp = self._send_cmd(bytes([CMD_MKDIR]) + self._fix_path(path).encode('utf-8'))
+-        if resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Mkdir failed: {path}")
+-
+-    def rm(self, path):
+-        resp = self._send_cmd(bytes([CMD_DELETE_FILE]) + self._fix_path(path).encode('utf-8'))
+-        if resp[0] != STATUS_OK:
+-            raise RuntimeError(f"Delete failed: {path}")
+-
+-
+-# ─── Worker Threads ─────────────────────────────────────────────────────────────
+-
+-class ConnectWorker(QThread):
+-    finished = pyqtSignal(bool, str)
+-    def __init__(self, device):
+-        super().__init__()
+-        self.device = device
+-    def run(self):
+-        try:
+-            self.device.connect()
+-            self.finished.emit(True, "Connected")
+-        except Exception as e:
+-            self.finished.emit(False, str(e))
+-
+-
+-class ListDirWorker(QThread):
+-    finished = pyqtSignal(list, str)  # entries, error
+-    def __init__(self, device, path):
+-        super().__init__()
+-        self.device = device
+-        self.path = path
+-    def run(self):
+-        try:
+-            entries = self.device.list_dir(self.path)
+-            self.finished.emit(entries, "")
+-        except Exception as e:
+-            self.finished.emit([], str(e))
+-
+-
+-class TransferWorker(QThread):
+-    progress = pyqtSignal(int, int)  # current, total
+-    finished = pyqtSignal(int, str)  # bytes, error
+-    def __init__(self, device, mode, src, dst):
+-        super().__init__()
+-        self.device = device
+-        self.mode = mode  # 'push' or 'pull'
+-        self.src = src
+-        self.dst = dst
+-    def run(self):
+-        try:
+-            def cb(cur, total):
+-                self.progress.emit(cur, total)
+-            if self.mode == 'push':
+-                n = self.device.push(self.src, self.dst, cb)
+-            else:
+-                n = self.device.pull(self.src, self.dst, cb)
+-            self.finished.emit(n, "")
+-        except Exception as e:
+-            self.finished.emit(0, str(e))
+-
+-
+-class ActionWorker(QThread):
+-    finished = pyqtSignal(bool, str)
+-    def __init__(self, device, action, path, path2=None):
+-        super().__init__()
+-        self.device = device
+-        self.action = action
+-        self.path = path
+-        self.path2 = path2
+-    def run(self):
+-        try:
+-            if self.action == 'mkdir':
+-                self.device.mkdir(self.path)
+-            elif self.action == 'rm':
+-                self.device.rm(self.path)
+-            self.finished.emit(True, "")
+-        except Exception as e:
+-            self.finished.emit(False, str(e))
+-
+-
+-class ImportWorker(QThread):
+-    """Upload a program batch and commit it for offline programming."""
+-    progress = pyqtSignal(str, int, int)  # step_name, current, total
+-    log = pyqtSignal(str)
+-    finished = pyqtSignal(bool, str)
+-
+-    def __init__(self, device, program_path, algorithm_name, opt_path=None):
+-        super().__init__()
+-        self.device = device
+-        self.program_path = program_path
+-        self.algorithm_name = algorithm_name
+-        self.opt_path = opt_path
+-
+-    def run(self):
+-        try:
+-            try:
+-                self.device.mkdir("0:/download/bin/")
+-            except Exception:
+-                pass
+-
+-            prog_name = os.path.basename(self.program_path)
+-            self.log.emit("Uploading program: " + prog_name)
+-            written = self.device.push(
+-                self.program_path,
+-                "0:/download/bin/" + prog_name,
+-                self._cb)
+-            if written != os.path.getsize(self.program_path):
+-                raise RuntimeError(f"Program upload incomplete: {written} bytes")
+-
+-            opt_required = bool(self.opt_path and os.path.exists(self.opt_path))
+-            if opt_required:
+-                opt_name = os.path.basename(self.opt_path)
+-                self.log.emit("Uploading OPT: " + opt_name)
+-                written = self.device.push(
+-                    self.opt_path,
+-                    "0:/download/bin/" + opt_name,
+-                    self._cb)
+-                if written != os.path.getsize(self.opt_path):
+-                    raise RuntimeError(f"OPT upload incomplete: {written} bytes")
+-
+-            self.log.emit("Preparing offline programming")
+-            self.device.stage_algorithm(self.algorithm_name)
+-            self.device.prepare_download(prog_name, opt_required)
+-            self.finished.emit(True, "Device ready for offline programming")
+-        except Exception as e:
+-            self.finished.emit(False, str(e))
+-
+-    def _cb(self, cur, total):
+-        self.progress.emit("", cur, total)
+-
+-
+-# ─── Main Window ───────────────────────────────────────────────────────────────
+-
+-class DAPLinkManager(QMainWindow):
+-    def __init__(self):
+-        super().__init__()
+-        self.device = DAPLinkDevice()
+-        self.current_remote_path = "/"
+-        self.worker = None
+-
+-        # OPT configuration
+-        self.opt_config = OptConfig()
+-        self.current_chip = None
+-        self.current_model = ''
+-        self.import_in_progress = False
+-        self._opt_widgets = {}
+-
+-        self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
+-        self.setFont(QFont("Microsoft YaHei", 10))
+-        self.control_height = max(36, self.fontMetrics().height() + 16)
+-        self.setMinimumSize(900, 600)
+-        self.resize(1000, 760)
+-
+-        self._init_ui()
+-        self._apply_style()
+-        self._update_toolbar_state()
+-
+-    def _init_ui(self):
+-        # ── Toolbar ──
+-        self.toolbar = QToolBar("Main Toolbar")
+-        self.toolbar.setIconSize(QSize(20, 20))
+-        self.toolbar.setMovable(False)
+-        self.addToolBar(self.toolbar)
+-
+-        self.btn_connect = QAction("🔌 连接", self)
+-        self.btn_connect.triggered.connect(self._on_connect)
+-        self.toolbar.addAction(self.btn_connect)
+-
+-        self.btn_disconnect = QAction("⏏ 断开", self)
+-        self.btn_disconnect.triggered.connect(self._on_disconnect)
+-        self.toolbar.addAction(self.btn_disconnect)
+-
+-        self.toolbar.addSeparator()
+-
+-        self.btn_upload = QAction("⬆ 上传", self)
+-        self.btn_upload.triggered.connect(self._on_upload)
+-        self.toolbar.addAction(self.btn_upload)
+-
+-        self.btn_download = QAction("⬇ 下载", self)
+-        self.btn_download.triggered.connect(self._on_download)
+-        self.toolbar.addAction(self.btn_download)
+-
+-        self.toolbar.addSeparator()
+-
+-        self.btn_mkdir = QAction("📁 新建文件夹", self)
+-        self.btn_mkdir.triggered.connect(self._on_mkdir)
+-        self.toolbar.addAction(self.btn_mkdir)
+-
+-        self.btn_delete = QAction("🗑 删除", self)
+-        self.btn_delete.triggered.connect(self._on_delete)
+-        self.toolbar.addAction(self.btn_delete)
+-
+-        self.toolbar.addSeparator()
+-
+-        self.btn_refresh = QAction("🔄 刷新", self)
+-        self.btn_refresh.triggered.connect(self._on_refresh)
+-        self.toolbar.addAction(self.btn_refresh)
+-
+-        self.toolbar.addSeparator()
+-
+-        self.btn_import = QAction("⚡ 导入程序", self)
+-        self.btn_import.triggered.connect(self._on_import_program)
+-        self.toolbar.addAction(self.btn_import)
+-
+-        # ── Central Widget ──
+-        central = QWidget()
+-        self.setCentralWidget(central)
+-        layout = QVBoxLayout(central)
+-        layout.setContentsMargins(8, 8, 8, 8)
+-        layout.setSpacing(6)
+-
+-        # ── Title Banner ──
+-        self.banner = QLabel("⚡  CMSIS-DAPLINK 脱机编程器")
+-        self.banner.setObjectName("banner")
+-        self.banner.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+-        self.banner.setFixedHeight(46)
+-        layout.addWidget(self.banner)
+-
+-        # ── Connection Status ──
+-        self.status_frame = QFrame()
+-        self.status_frame.setFrameShape(QFrame.StyledPanel)
+-        self.status_frame.setProperty("panel", True)
+-        status_layout = QVBoxLayout(self.status_frame)
+-        status_layout.setContentsMargins(10, 6, 10, 6)
+-        status_layout.setSpacing(2)
+-        # Row 1: status icon + text
+-        row1 = QHBoxLayout()
+-        self.lbl_status_icon = QLabel("●")
+-        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+-        self.lbl_status_text = QLabel("未连接")
+-        self.lbl_status_text.setFont(QFont("Microsoft YaHei", 10))
+-        row1.addWidget(self.lbl_status_icon)
+-        row1.addWidget(self.lbl_status_text)
+-        row1.addStretch()
+-        status_layout.addLayout(row1)
+-        # Row 2: path
+-        self.lbl_path = QLabel("路径: /")
+-        self.lbl_path.setFont(QFont("Consolas", 9))
+-        self.lbl_path.setStyleSheet("color: #555;")
+-        self.lbl_path.setWordWrap(True)
+-        status_layout.addWidget(self.lbl_path)
+-        layout.addWidget(self.status_frame)
+-
+-        # ── Chip & OPT Selection Bar ──
+-        self.chip_opt_frame = QFrame()
+-        self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
+-        self.chip_opt_frame.setProperty("panel", True)
+-        chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
+-        chip_opt_layout.setContentsMargins(12, 12, 12, 12)
+-        chip_opt_layout.setSpacing(12)
+-
+-        # Two rows share the same input and button columns.
+-        chip_bar = QGridLayout()
+-        chip_bar.setHorizontalSpacing(12)
+-        chip_bar.setVerticalSpacing(10)
+-        chip_bar.setColumnStretch(1, 1)
+-        chip_bar.addWidget(QLabel("芯片型号："), 0, 0)
+-        self.cmb_chip = QComboBox()
+-        self.cmb_chip.setView(QListView())
+-        self.cmb_chip.setMinimumWidth(220)
+-        self.cmb_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+-        self.cmb_chip.addItem("")  # empty default
+-        for m in self.opt_config.get_chip_models():
+-            self.cmb_chip.addItem(m)
+-        self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
+-        chip_bar.addWidget(self.cmb_chip, 0, 1)
+-        chip_bar.addWidget(QLabel("算法文件："), 1, 0)
+-        self.algorithm_edit = QLineEdit()
+-        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的算法文件名")
+-        self.algorithm_edit.setMinimumWidth(220)
+-        chip_bar.addWidget(self.algorithm_edit, 1, 1)
+-        self.btn_bind_algorithm = QPushButton("保存算法")
+-        self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
+-        chip_bar.addWidget(self.btn_bind_algorithm, 1, 2)
+-        self.btn_opt_toggle = QPushButton("OPT 配置 ▲")
+-        self.btn_opt_toggle.setCheckable(True)
+-        self.btn_opt_toggle.setChecked(True)
+-        self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
+-        chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
+-        button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
+-        for control in (self.cmb_chip, self.algorithm_edit,
+-                        self.btn_bind_algorithm, self.btn_opt_toggle):
+-            control.setFixedHeight(self.control_height)
+-        for button in (self.btn_bind_algorithm, self.btn_opt_toggle):
+-            button.setFixedWidth(button_width)
+-        self.chk_opt = QCheckBox("上传 OPT")
+-        self.chk_opt.setChecked(True)
+-        self.chk_opt.setEnabled(False)
+-        self.chk_opt.setMinimumHeight(self.control_height)
+-        chip_bar.addWidget(self.chk_opt, 0, 3)
+-        chip_opt_layout.addLayout(chip_bar)
+-
+-        # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
+-        self.opt_scroll = QScrollArea()
+-        self.opt_scroll.setObjectName("optScroll")
+-        self.opt_scroll.setWidgetResizable(True)
+-        self.opt_scroll.setMinimumHeight(100)
+-        self.opt_scroll.setMaximumHeight(350)
+-        self.opt_scroll.setVisible(True)
+-        self.opt_content = QWidget()
+-        self.opt_scroll.setWidget(self.opt_content)
+-        chip_opt_layout.addWidget(self.opt_scroll)
+-
+-        layout.addWidget(self.chip_opt_frame)
+-
+-        # ── Splitter: Local + Remote ──
+-        splitter = QSplitter(Qt.Horizontal)
+-
+-        # Local files
+-        local_frame = QFrame()
+-        local_frame.setFrameShape(QFrame.StyledPanel)
+-        local_frame.setProperty("panel", True)
+-        local_layout = QVBoxLayout(local_frame)
+-        local_layout.setContentsMargins(4, 4, 4, 4)
+-        lbl_local = QLabel("💻 本地电脑")
+-        lbl_local.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+-        local_layout.addWidget(lbl_local)
+-
+-        self.local_tree = QTreeWidget()
+-        self.local_tree.setHeaderLabels(["名称", "大小", "类型"])
+-        self.local_tree.setRootIsDecorated(False)
+-        self.local_tree.setAlternatingRowColors(True)
+-        self.local_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+-        self.local_tree.header().resizeSection(1, 80)
+-        self.local_tree.header().resizeSection(2, 60)
+-        self.local_tree.itemDoubleClicked.connect(self._on_local_double_click)
+-        local_layout.addWidget(self.local_tree)
+-
+-        self.local_path_edit = QLabel("请选择文件夹...")
+-        self.local_path_edit.setFont(QFont("Consolas", 8))
+-        self.local_path_edit.setStyleSheet("color: #888; padding: 2px;")
+-        local_layout.addWidget(self.local_path_edit)
+-
+-        btn_browse = QPushButton("📂 浏览文件夹...")
+-        btn_browse.clicked.connect(self._on_browse_local)
+-        local_layout.addWidget(btn_browse)
+-
+-        splitter.addWidget(local_frame)
+-
+-        # Remote files
+-        remote_frame = QFrame()
+-        remote_frame.setFrameShape(QFrame.StyledPanel)
+-        remote_frame.setProperty("panel", True)
+-        remote_layout = QVBoxLayout(remote_frame)
+-        remote_layout.setContentsMargins(4, 4, 4, 4)
+-        lbl_remote = QLabel("🔧 设备 (SPI Flash)")
+-        lbl_remote.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
+-        remote_layout.addWidget(lbl_remote)
+-
+-        self.remote_tree = QTreeWidget()
+-        self.remote_tree.setHeaderLabels(["名称", "大小", "类型"])
+-        self.remote_tree.setRootIsDecorated(False)
+-        self.remote_tree.setAlternatingRowColors(True)
+-        self.remote_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+-        self.remote_tree.header().resizeSection(1, 80)
+-        self.remote_tree.header().resizeSection(2, 60)
+-        self.remote_tree.itemDoubleClicked.connect(self._on_remote_double_click)
+-        self.remote_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+-        self.remote_tree.customContextMenuRequested.connect(self._on_remote_context_menu)
+-        remote_layout.addWidget(self.remote_tree)
+-
+-        # Remote navigation: path input + buttons
+-        nav_layout = QHBoxLayout()
+-        nav_layout.addWidget(QLabel("路径:"))
+-        self.remote_path_input = QLineEdit("/")
+-        self.remote_path_input.setFont(QFont("Consolas", 9))
+-        self.remote_path_input.returnPressed.connect(self._on_go_path)
+-        nav_layout.addWidget(self.remote_path_input, 1)
+-        btn_go = QPushButton("转到")
+-        btn_go.setFixedWidth(48)
+-        btn_go.clicked.connect(self._on_go_path)
+-        nav_layout.addWidget(btn_go)
+-        btn_up = QPushButton("上级")
+-        btn_up.setFixedWidth(48)
+-        btn_up.clicked.connect(self._on_remote_up)
+-        nav_layout.addWidget(btn_up)
+-        btn_root = QPushButton("/")
+-        btn_root.setFixedWidth(30)
+-        btn_root.clicked.connect(lambda: self._navigate_remote("/"))
+-        nav_layout.addWidget(btn_root)
+-        remote_layout.addLayout(nav_layout)
+-
+-        splitter.addWidget(remote_frame)
+-        splitter.setSizes([450, 450])
+-        layout.addWidget(splitter)
+-
+-        # ── Progress Bar ──
+-        self.progress = QProgressBar()
+-        self.progress.setVisible(False)
+-        self.progress.setTextVisible(True)
+-        layout.addWidget(self.progress)
+-
+-        # ── Status Bar ──
+-        self.statusBar().showMessage("就绪")
+-
+-    def _apply_style(self):
+-        self.setStyleSheet("""
+-            QWidget { font-family: 'Microsoft YaHei'; font-size: 10pt; }
+-            QMainWindow { background: #eef2f7; }
+-            QLabel#banner {
+-                color: #ffffff;
+-                font-family: 'Microsoft YaHei';
+-                font-size: 17px;
+-                font-weight: bold;
+-                padding-left: 16px;
+-                border-radius: 8px;
+-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+-                    stop:0 #2b5876, stop:1 #4e9fd1);
+-            }
+-            QToolBar {
+-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+-                    stop:0 #ffffff, stop:1 #e9eef4);
+-                border: none;
+-                border-bottom: 2px solid #4e9fd1;
+-                spacing: 6px;
+-                padding: 5px;
+-            }
+-            QToolBar QToolButton {
+-                padding: 6px 14px;
+-                border: 1px solid #c3cede;
+-                border-radius: 6px;
+-                background: #ffffff;
+-                font-family: 'Microsoft YaHei';
+-                font-size: 13px;
+-                color: #2b3a4a;
+-            }
+-            QToolBar QToolButton:hover {
+-                background: #4e9fd1;
+-                border-color: #2b5876;
+-                color: #ffffff;
+-            }
+-            QToolBar QToolButton:pressed { background: #2b5876; color: #ffffff; }
+-            QToolBar QToolButton:disabled { color: #aeb8c4; background: #f3f5f8; }
+-            QToolBar::separator { background: #d0d8e3; width: 1px; margin: 4px 2px; }
+-            QFrame[panel="true"] {
+-                background: #ffffff; border-radius: 8px; border: 1px solid #dde4ec;
+-            }
+-            QLabel { border: none; background: transparent; color: #2b3a4a; }
+-            QScrollArea#optScroll { border: none; background: #ffffff; }
+-            QScrollArea#optScroll > QWidget > QWidget { background: #ffffff; }
+-            QTreeWidget {
+-                border: 1px solid #dde4ec; border-radius: 6px;
+-                font-size: 12px; background: #fbfcfe;
+-                alternate-background-color: #f2f6fb;
+-            }
+-            QTreeWidget::item { padding: 4px; }
+-            QTreeWidget::item:selected { background: #4e9fd1; color: #ffffff; }
+-            QHeaderView::section {
+-                background: #eaf1f8; border: none;
+-                border-bottom: 2px solid #4e9fd1; padding: 5px;
+-                font-weight: bold; color: #2b5876;
+-            }
+-            QProgressBar {
+-                border: 1px solid #c3cede; border-radius: 6px;
+-                text-align: center; height: 22px; background: #f3f5f8;
+-                color: #2b3a4a;
+-            }
+-            QProgressBar::chunk {
+-                border-radius: 5px;
+-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+-                    stop:0 #43cea2, stop:1 #4e9fd1);
+-            }
+-            QPushButton {
+-                padding: 4px 10px; border: 1px solid #c3cede;
+-                border-radius: 6px; background: #ffffff; color: #2b3a4a;
+-            }
+-            QPushButton:hover { background: #e8f2fc; border-color: #2677bd; color: #174e7d; }
+-            QPushButton:pressed, QPushButton:checked { background: #2677bd; color: #ffffff; }
+-            QPushButton:disabled { color: #8593a3; background: #f3f5f8; }
+-            QComboBox, QLineEdit {
+-                border: 1px solid #c3cede; border-radius: 5px;
+-                padding: 4px 8px; background: #ffffff; color: #24364b;
+-                selection-background-color: #2677bd; selection-color: #ffffff;
+-            }
+-            QComboBox { padding-right: 28px; }
+-            QComboBox:focus, QLineEdit:focus { border-color: #2677bd; }
+-            QComboBox:disabled, QLineEdit:disabled { color: #8593a3; background: #f3f5f8; }
+-            QComboBox QAbstractItemView {
+-                background: #ffffff; color: #24364b;
+-                border: 1px solid #b5c6da; padding: 4px;
+-                selection-background-color: #2677bd; selection-color: #ffffff;
+-                outline: none;
+-            }
+-            QComboBox QAbstractItemView::item {
+-                min-height: 28px; padding: 4px 10px;
+-                border: none; color: #24364b; background: #ffffff;
+-            }
+-            QComboBox QAbstractItemView::item:hover {
+-                background: #e8f2fc; color: #174e7d;
+-            }
+-            QComboBox QAbstractItemView::item:selected {
+-                background: #2677bd; color: #ffffff;
+-            }
+-            QGroupBox {
+-                border: 1px solid #dde4ec; border-radius: 6px;
+-                margin-top: 1.2em; padding-top: 0; color: #2b5876;
+-            }
+-            QGroupBox::title {
+-                subcontrol-origin: margin; subcontrol-position: top left;
+-                left: 12px; padding: 0 4px; color: #2b5876;
+-                background: #ffffff;
+-            }
+-            QCheckBox, QRadioButton { color: #24364b; spacing: 6px; }
+-            QCheckBox:disabled, QRadioButton:disabled { color: #8593a3; }
+-            QStatusBar { background: #e9eef4; color: #2b3a4a; }
+-        """)
+-
+-    def _update_toolbar_state(self):
+-        connected = self.device.is_connected()
+-        idle = not self.import_in_progress
+-        self.btn_connect.setEnabled(not connected and idle)
+-        self.btn_disconnect.setEnabled(connected and idle)
+-        self.btn_upload.setEnabled(connected and idle)
+-        self.btn_download.setEnabled(connected and idle)
+-        self.btn_mkdir.setEnabled(connected and idle)
+-        self.btn_delete.setEnabled(connected and idle)
+-        self.btn_refresh.setEnabled(connected and idle)
+-        self.btn_import.setEnabled(connected and idle)
+-        self.cmb_chip.setEnabled(idle)
+-        self.algorithm_edit.setEnabled(idle)
+-        self.btn_bind_algorithm.setEnabled(idle)
+-        self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
+-        self.chk_opt.setEnabled(idle and self.current_chip is not None)
+-
+-    def _set_import_state(self, active):
+-        self.import_in_progress = active
+-        self.remote_tree.setEnabled(not active)
+-        self.remote_path_input.setEnabled(not active)
+-        self._update_toolbar_state()
+-
+-    def _on_connect(self):
+-        self.statusBar().showMessage("正在连接...")
+-        self.btn_connect.setEnabled(False)
+-        self.worker = ConnectWorker(self.device)
+-        self.worker.finished.connect(self._connect_done)
+-        self.worker.start()
+-
+-    def _connect_done(self, ok, msg):
+-        if ok:
+-            self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
+-            self.lbl_status_text.setText("已连接")
+-            self.statusBar().showMessage("设备已连接")
+-            self._navigate_remote("/")
+-        else:
+-            self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+-            self.lbl_status_text.setText("未连接")
+-            self.statusBar().showMessage(f"连接失败: {msg}")
+-        self._update_toolbar_state()
+-
+-    def _on_disconnect(self):
+-        self.device.disconnect()
+-        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
+-        self.lbl_status_text.setText("未连接")
+-        self.remote_tree.clear()
+-        self.statusBar().showMessage("已断开")
+-        self._update_toolbar_state()
+-
+-    # ── Remote Navigation ──
+-
+-    def _navigate_remote(self, path):
+-        if not self.device.is_connected():
+-            return
+-        self.current_remote_path = path
+-        self.lbl_path.setText(f"路径: {path}")
+-        self.remote_path_input.setText(path)
+-        self.statusBar().showMessage(f"正在列出 {path} ...")
+-        self.worker = ListDirWorker(self.device, path)
+-        self.worker.finished.connect(self._list_done)
+-        self.worker.start()
+-
+-    def _list_done(self, entries, error):
+-        self.remote_tree.clear()
+-        if error:
+-            self.statusBar().showMessage(f"错误: {error}")
+-            return
+-
+-        # Add parent directory entry
+-        if self.current_remote_path != "/":
+-            item = QTreeWidgetItem(["..", "", "DIR"])
+-            item.setData(0, Qt.UserRole, ("DIR", ".."))
+-            item.setForeground(0, QColor("#4285f4"))
+-            self.remote_tree.addTopLevelItem(item)
+-
+-        for entry_type, name in entries:
+-            if entry_type == 'DIR':
+-                item = QTreeWidgetItem([name, "", "DIR"])
+-                item.setForeground(0, QColor("#4285f4"))
+-                item.setForeground(2, QColor("#4285f4"))
+-            else:
+-                item = QTreeWidgetItem([name, "", "FILE"])
+-            item.setData(0, Qt.UserRole, (entry_type, name))
+-            self.remote_tree.addTopLevelItem(item)
+-
+-        self.statusBar().showMessage(f"{self.current_remote_path} 共 {len(entries)} 项")
+-
+-    def _on_remote_double_click(self, item, col):
+-        entry_type, name = item.data(0, Qt.UserRole)
+-        if entry_type == 'DIR':
+-            if name == "..":
+-                self._on_remote_up()
+-            else:
+-                new_path = self.current_remote_path.rstrip('/') + '/' + name
+-                self._navigate_remote(new_path)
+-
+-    def _on_go_path(self):
+-        path = self.remote_path_input.text().strip()
+-        if not path:
+-            path = "/"
+-        if not path.startswith("/"):
+-            path = "/" + path
+-        self._navigate_remote(path)
+-
+-    def _on_remote_up(self):
+-        if self.current_remote_path == "/":
+-            return
+-        parts = self.current_remote_path.rstrip('/').split('/')
+-        parent = '/'.join(parts[:-1]) or '/'
+-        self._navigate_remote(parent)
+-
+-    def _on_refresh(self):
+-        self._navigate_remote(self.current_remote_path)
+-
+-    # ── Local Browser ──
+-
+-    def _on_browse_local(self):
+-        folder = QFileDialog.getExistingDirectory(self, "Select Local Folder")
+-        if folder:
+-            self._load_local_folder(folder)
+-
+-    def _load_local_folder(self, folder):
+-        self.local_path_edit.setText(folder)
+-        self.local_tree.clear()
+-        try:
+-            entries = sorted(os.listdir(folder), key=lambda x: (not os.path.isdir(os.path.join(folder, x)), x.lower()))
+-            for name in entries:
+-                full = os.path.join(folder, name)
+-                if os.path.isdir(full):
+-                    item = QTreeWidgetItem([name, "", "DIR"])
+-                    item.setForeground(0, QColor("#4285f4"))
+-                    item.setData(0, Qt.UserRole, ("DIR", full))
+-                else:
+-                    size = os.path.getsize(full)
+-                    size_str = self._format_size(size)
+-                    item = QTreeWidgetItem([name, size_str, "FILE"])
+-                    item.setData(0, Qt.UserRole, ("FILE", full))
+-                self.local_tree.addTopLevelItem(item)
+-        except Exception as e:
+-            self.statusBar().showMessage(f"Error listing local folder: {e}")
+-
+-    def _on_local_double_click(self, item, col):
+-        entry_type, path = item.data(0, Qt.UserRole)
+-        if entry_type == 'DIR':
+-            self._load_local_folder(path)
+-
+-    @staticmethod
+-    def _format_size(size):
+-        if size < 1024:
+-            return f"{size} B"
+-        elif size < 1024 * 1024:
+-            return f"{size/1024:.1f} KB"
+-        else:
+-            return f"{size/1024/1024:.1f} MB"
+-
+-    # ── Upload / Download ──
+-
+-    def _on_upload(self):
+-        if not self.device.is_connected():
+-            return
+-        files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Upload")
+-        if not files:
+-            return
+-        for local_path in files:
+-            filename = os.path.basename(local_path)
+-            remote_path = self.current_remote_path.rstrip('/') + '/' + filename
+-            self._start_transfer('push', local_path, remote_path)
+-
+-    def _on_download(self):
+-        if not self.device.is_connected():
+-            return
+-        item = self.remote_tree.currentItem()
+-        if not item:
+-            QMessageBox.information(self, "提示", "请先在设备上选择一个文件。")
+-            return
+-        entry_type, name = item.data(0, Qt.UserRole)
+-        if entry_type != 'FILE':
+-            QMessageBox.information(self, "提示", "请选择文件(不是目录)。")
+-            return
+-
+-        save_path, _ = QFileDialog.getSaveFileName(self, "另存为", name)
+-        if not save_path:
+-            return
+-        remote_path = self.current_remote_path.rstrip('/') + '/' + name
+-        self._start_transfer('pull', remote_path, save_path)
+-
+-    def _start_transfer(self, mode, src, dst):
+-        self.progress.setVisible(True)
+-        self.progress.setValue(0)
+-        name = os.path.basename(src if mode == 'push' else dst)
+-        direction = "上传" if mode == 'push' else "下载"
+-        self.statusBar().showMessage(f"正在{direction} {name} ...")
+-
+-        self.worker = TransferWorker(self.device, mode, src, dst)
+-        self.worker.progress.connect(self._transfer_progress)
+-        self.worker.finished.connect(self._transfer_done)
+-        self.worker.start()
+-
+-    def _transfer_progress(self, current, total):
+-        if total > 0:
+-            pct = current * 100 // total
+-            self.progress.setValue(pct)
+-            self.progress.setFormat(f"{self._format_size(current)} / {self._format_size(total)} ({pct}%)")
+-
+-    def _transfer_done(self, nbytes, error):
+-        self.progress.setVisible(False)
+-        if error:
+-            self.statusBar().showMessage(f"传输失败: {error}")
+-            QMessageBox.warning(self, "错误", f"传输失败:\n{error}")
+-        else:
+-            self.statusBar().showMessage(f"传输完成: {self._format_size(nbytes)}")
+-            self._navigate_remote(self.current_remote_path)
+-
+-    # ── Mkdir / Delete ──
+-
+-    def _on_mkdir(self):
+-        if not self.device.is_connected():
+-            return
+-        name, ok = QInputDialog.getText(self, "新建文件夹", "文件夹名称:")
+-        if ok and name:
+-            path = self.current_remote_path.rstrip('/') + '/' + name
+-            self.worker = ActionWorker(self.device, 'mkdir', path)
+-            self.worker.finished.connect(self._action_done)
+-            self.worker.start()
+-
+-    def _on_delete(self):
+-        if not self.device.is_connected():
+-            return
+-        item = self.remote_tree.currentItem()
+-        if not item:
+-            return
+-        entry_type, name = item.data(0, Qt.UserRole)
+-        if name == "..":
+-            return
+-        reply = QMessageBox.question(self, "确认删除", f"确定删除 '{name}' ？",
+-                                     QMessageBox.Yes | QMessageBox.No)
+-        if reply == QMessageBox.Yes:
+-            path = self.current_remote_path.rstrip('/') + '/' + name
+-            self.worker = ActionWorker(self.device, 'rm', path)
+-            self.worker.finished.connect(self._action_done)
+-            self.worker.start()
+-
+-    def _on_remote_context_menu(self, pos):
+-        item = self.remote_tree.itemAt(pos)
+-        if not item:
+-            return
+-        entry_type, name = item.data(0, Qt.UserRole)
+-        if name == "..":
+-            return
+-
+-        menu = QApplication.instance().style()  # just use a simple approach
+-        from PyQt5.QtWidgets import QMenu
+-        menu = QMenu(self)
+-        if entry_type == 'FILE':
+-            act_download = menu.addAction("下载")
+-            act_download.triggered.connect(self._on_download)
+-        act_delete = menu.addAction("删除")
+-        act_delete.triggered.connect(self._on_delete)
+-        menu.exec_(self.remote_tree.viewport().mapToGlobal(pos))
+-
+-    def _action_done(self, ok, msg):
+-        if ok:
+-            self.statusBar().showMessage("完成")
+-        else:
+-            self.statusBar().showMessage(f"错误: {msg}")
+-        self._navigate_remote(self.current_remote_path)
+-
+-    # ── OPT Configuration ──
+-
+-    def _toggle_opt_panel(self):
+-        visible = self.btn_opt_toggle.isChecked()
+-        self.opt_scroll.setVisible(visible)
+-        self.btn_opt_toggle.setText("OPT 配置 ▲" if visible else "OPT 配置 ▼")
+-
+-    @staticmethod
+-    def _valid_name(name, require_bin=False):
+-        try:
+-            encoded = name.encode('ascii')
+-        except UnicodeEncodeError:
+-            return False
+-        if not 1 <= len(encoded) <= 31:
+-            return False
+-        if name in ('.', '..') or any(c in name for c in '/\\:'):
+-            return False
+-        return not require_bin or name.lower().endswith('.bin')
+-
+-    def _bind_algorithm(self):
+-        if not self.current_model:
+-            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
+-            return
+-        name = self.algorithm_edit.text().strip()
+-        if not self._valid_name(name, require_bin=True):
+-            QMessageBox.warning(self, "Algorithm Error", "算法文件名必须是 1-31 个 ASCII 字符的 .bin 文件名。")
+-            return
+-        self.opt_config.set_algorithm(self.current_model, name)
+-        self.algorithm_edit.setText(name)
+-        self.statusBar().showMessage(f"已保存 {self.current_model} 的算法绑定: {name}")
+-
+-    def _on_chip_changed(self, model_name):
+-        self.current_model = model_name or ''
+-        self.algorithm_edit.setText(
+-            self.opt_config.get_algorithm(self.current_model) if self.current_model else '')
+-        if not model_name:
+-            self.current_chip = None
+-            self.chk_opt.setChecked(False)
+-            self._clear_opt_ui()
+-            self._update_toolbar_state()
+-            return
+-        self.current_chip = self.opt_config.get_chip(model_name)
+-        self.chk_opt.setChecked(True)
+-        self._build_opt_ui()
+-        # auto-expand panel when chip selected
+-        if not self.opt_scroll.isVisible():
+-            self.btn_opt_toggle.setChecked(True)
+-            self._toggle_opt_panel()
+-        self._update_toolbar_state()
+-
+-    def _clear_opt_ui(self):
+-        self._opt_widgets.clear()
+-        if self.opt_content:
+-            self.opt_content.deleteLater()
+-        self.opt_content = QWidget()
+-        self.opt_scroll.setWidget(self.opt_content)
+-
+-    def _build_opt_ui(self):
+-        self._clear_opt_ui()
+-        if not self.current_chip:
+-            return
+-
+-        layout = QVBoxLayout(self.opt_content)
+-        layout.setContentsMargins(4, 4, 8, 4)
+-        layout.setSpacing(12)
+-        layout.setSizeConstraint(QLayout.SetMinimumSize)
+-
+-        # Let the scroll area scroll rather than squeeze the field rows.
+-        preview_grp = QGroupBox("OPT 数据预览", self.opt_content)
+-        preview_grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+-        preview_layout = QHBoxLayout(preview_grp)
+-        preview_layout.setContentsMargins(12, 12, 12, 12)
+-        self.lbl_opt_preview = QLineEdit(preview_grp)
+-        self.lbl_opt_preview.setReadOnly(True)
+-        self.lbl_opt_preview.setFixedHeight(self.control_height)
+-        self.lbl_opt_preview.setFont(QFont("Consolas", 10))
+-        self.lbl_opt_preview.setStyleSheet(
+-            "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
+-        preview_layout.addWidget(self.lbl_opt_preview)
+-        self.lbl_rdp_state = QLabel("", preview_grp)
+-        self.lbl_rdp_state.setFixedWidth(76)
+-        self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
+-        self.lbl_rdp_state.setMinimumHeight(self.control_height)
+-        preview_layout.addWidget(self.lbl_rdp_state)
+-        layout.addWidget(preview_grp)
+-
+-        words = self.current_chip.get('opt_words', [])
+-        label_width = max([120] + [
+-            self.fontMetrics().horizontalAdvance(field['name']) + 12
+-            for word in words for field in word.get('fields', [])
+-        ])
+-        for w in words:
+-            grp = QGroupBox(f"{w['name']}  ({w['address']})", self.opt_content)
+-            grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+-            grp_layout = QGridLayout(grp)
+-            grp_layout.setContentsMargins(12, 12, 12, 12)
+-            grp_layout.setHorizontalSpacing(16)
+-            grp_layout.setVerticalSpacing(10)
+-            grp_layout.setColumnStretch(1, 1)
+-
+-            for row, field in enumerate(w.get('fields', [])):
+-                widget = self._build_field_widget(field, grp)
+-                widget.setMinimumHeight(self.control_height)
+-                label = QLabel(field['name'], grp)
+-                label.setFixedWidth(label_width)
+-                label.setMinimumHeight(self.control_height)
+-                grp_layout.addWidget(label, row, 0, Qt.AlignVCenter)
+-                grp_layout.addWidget(widget, row, 1)
+-                self._opt_widgets[field['name']] = widget
+-                # Connect change signals for live preview
+-                self._connect_opt_signal(widget)
+-
+-            layout.addWidget(grp)
+-
+-        layout.addStretch()
+-        self._update_opt_preview()
+-
+-    def _connect_opt_signal(self, widget):
+-        """Connect widget change signals to update OPT preview."""
+-        if isinstance(widget, QComboBox):
+-            widget.currentIndexChanged.connect(self._update_opt_preview)
+-        elif isinstance(widget, QCheckBox):
+-            widget.stateChanged.connect(self._update_opt_preview)
+-        elif isinstance(widget, QWidget) and hasattr(widget, '_btn_group'):
+-            widget._btn_group.buttonClicked.connect(self._update_opt_preview)
+-
+-    def _update_opt_preview(self, *args):
+-        """Compute current OPT bin and show hex in preview."""
+-        if not self.current_chip:
+-            return
+-        try:
+-            buf = self._build_opt_bytes()
+-            hex_str = ' '.join(f'{b:02X}' for b in buf)
+-            self.lbl_opt_preview.setText(hex_str)
+-
+-            # 直接把 RDP 结果标出来: A5 5A = 不加密, 7F 80 = 加密
+-            if hasattr(self, 'lbl_rdp_state'):
+-                rdp = (buf[0] | (buf[1] << 8)) if len(buf) >= 2 else 0xFFFF
+-                if rdp == 0x5AA5:
+-                    self.lbl_rdp_state.setText("未加密")
+-                    self.lbl_rdp_state.setStyleSheet(
+-                        "color:#b03a2e; font-weight:bold; border:1px solid #e6b0aa;"
+-                        "border-radius:3px; background:#fdedec;")
+-                elif rdp == 0x807F:
+-                    self.lbl_rdp_state.setText("已加密")
+-                    self.lbl_rdp_state.setStyleSheet(
+-                        "color:#1e8449; font-weight:bold; border:1px solid #a9dfbf;"
+-                        "border-radius:3px; background:#eafaf1;")
+-                else:
+-                    self.lbl_rdp_state.setText("RDP 异常")
+-                    self.lbl_rdp_state.setStyleSheet(
+-                        "color:#b9770e; font-weight:bold; border:1px solid #f5cba7;"
+-                        "border-radius:3px; background:#fef5e7;")
+-        except Exception:
+-            pass
+-
+-    def _build_field_widget(self, field, parent):
+-        options = field.get('options', [])
+-        default = field.get('default')
+-
+-        if field.get('byte'):
+-            combo = QComboBox(parent)
+-            combo.setView(QListView())
+-            combo.setFixedHeight(self.control_height)
+-            default_idx = 0
+-            for i, opt in enumerate(options):
+-                combo.addItem(opt['label'], opt['value'])
+-                if default is not None and opt['value'] == default:
+-                    default_idx = i
+-            combo.setCurrentIndex(default_idx)
+-            return combo
+-
+-        if 'bit' in field:
+-            has_labels = any(o['label'] not in ('0', '1') for o in options)
+-            if has_labels:
+-                # Wrap radio buttons in a container widget for proper parent chain
+-                container = QWidget(parent)
+-                hbox = QHBoxLayout(container)
+-                hbox.setContentsMargins(0, 0, 0, 0)
+-                hbox.setSpacing(20)
+-                group = QButtonGroup(container)
+-                for opt in options:
+-                    radio = QRadioButton(opt['label'], container)
+-                    group.addButton(radio, opt['value'])
+-                    hbox.addWidget(radio)
+-                    if default is not None and opt['value'] == default:
+-                        radio.setChecked(True)
+-                hbox.addStretch()
+-                container._btn_group = group
+-                return container
+-            else:
+-                cb = QCheckBox(parent)
+-                if default is not None:
+-                    cb.setChecked(default != 0)
+-                return cb
+-
+-        return QLabel("", parent)
+-
+-    def _get_field_value(self, field_name):
+-        widget = self._opt_widgets.get(field_name)
+-        if widget is None:
+-            return None
+-        if isinstance(widget, QComboBox):
+-            return widget.currentData()
+-        if hasattr(widget, '_btn_group'):
+-            btn = widget._btn_group.checkedButton()
+-            if btn:
+-                return widget._btn_group.id(btn)
+-            return None
+-        if isinstance(widget, QCheckBox):
+-            return 1 if widget.isChecked() else 0
+-        return None
+-
+-    @staticmethod
+-    def _safe_filename(path):
+-        """Return path with ASCII-only basename; copy file if renamed.
+-        Returns (safe_path, original_was_unsafe).
+-        """
+-        dir_name = os.path.dirname(path)
+-        base = os.path.basename(path)
+-        name, ext = os.path.splitext(base)
+-        safe = re.sub(r'[^\x00-\x7F]', '', name).strip(' _-')
+-        if not safe:
+-            safe = 'firmware'
+-        if safe + ext == base:
+-            return path, False
+-        safe_path = os.path.join(dir_name, safe + ext)
+-        if os.path.exists(safe_path):
+-            os.remove(safe_path)
+-        os.rename(path, safe_path)
+-        return safe_path, True
+-
+-    # ── Import Program ──
+-
+-    def _on_import_program(self):
+-        if not self.device.is_connected():
+-            QMessageBox.warning(self, "Warning", "请先连接设备。")
+-            return
+-        if not self.current_model:
+-            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
+-            return
+-        algorithm_name = self.opt_config.get_algorithm(self.current_model)
+-        if not algorithm_name:
+-            QMessageBox.warning(self, "Warning",
+-                                f"芯片 {self.current_model} 尚未绑定算法文件，请先在“算法文件”中填写并保存。")
+-            return
+-        if not self._valid_name(algorithm_name, require_bin=True):
+-            QMessageBox.warning(self, "Warning",
+-                                f"已保存的算法文件名无效: {algorithm_name}")
+-            return
+-        file_path, _ = QFileDialog.getOpenFileName(
+-            self, "选择程序文件", "",
+-            "Binary/Hex Files (*.bin *.hex);;Binary Files (*.bin);;Hex Files (*.hex);;All Files (*)")
+-        if not file_path:
+-            return
+-
+-        # Convert .hex to .bin if needed
+-        if file_path.lower().endswith('.hex'):
+-            try:
+-                ih = IntelHex(file_path)
+-                dir_name = os.path.dirname(file_path)
+-                base_name = os.path.splitext(os.path.basename(file_path))[0]
+-                safe_name = re.sub(r'[^\x00-\x7F]', '', base_name).strip(' _-')
+-                if not safe_name:
+-                    safe_name = 'firmware'
+-                bin_path = os.path.join(dir_name, safe_name + '.bin')
+-                ih.tobinfile(bin_path)
+-                self.statusBar().showMessage(f"HEX -> BIN: {os.path.basename(bin_path)}")
+-                file_path = bin_path
+-            except Exception as e:
+-                QMessageBox.warning(self, "HEX Error", f"HEX 转换失败:\n{e}")
+-                return
+-
+-        # Sanitize filename for FATFS compatibility
+-        file_path, renamed = self._safe_filename(file_path)
+-        if renamed:
+-            self.statusBar().showMessage(f"文件名已过滤: {os.path.basename(file_path)}")
+-
+-        prog_name = os.path.basename(file_path)
+-        if not self._valid_name(prog_name, require_bin=True):
+-            QMessageBox.warning(self, "Warning",
+-                                f"程序文件名无效(需 1-31 个 ASCII 字符的 .bin): {prog_name}")
+-            return
+-
+-        opt_path = None
+-        if self.chk_opt.isChecked():
+-            opt_path = self._generate_opt_bin(file_path)
+-
+-        self.progress.setVisible(True)
+-        self.progress.setValue(0)
+-        self.statusBar().showMessage("正在导入...")
+-        self._set_import_state(True)
+-
+-        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path)
+-        self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
+-        self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
+-        self.worker.finished.connect(self._import_done)
+-        self.worker.start()
+-
+-    def _build_opt_bytes(self):
+-        """按当前 UI 值构造 OPT 二进制（长度 = 配置里定义的 word 范围）。"""
+-        chip = self.current_chip
+-        words = chip['opt_words']
+-
+-        addresses = [int(w['address'], 16) for w in words]
+-        base_addr = min(addresses)
+-        end_addr = max(addresses) + 2
+-        # 文件长度按实际定义的 word 生成(MM32G0001 为 10 字节: OPT0~WRP0)。
+-        # 算法会按 opt_size(16B) 写入, 但固件已用 0xFF 预填缓冲区,
+-        # 超出文件的部分写进去就是"未编程", 安全; 而校验也只比对文件长度,
+-        # 不会去读 OPT 区后面那些读不回来的保留字节。
+-        total = end_addr - base_addr
+-        buf = bytearray([0xFF] * total)
+-
+-        for w in words:
+-            offset = int(w['address'], 16) - base_addr
+-            if offset + 2 > total:
+-                continue
+-
+-            byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
+-            bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
+-
+-            if byte_fields:
+-                user_val = self._get_field_value(byte_fields[0]['name'])
+-                low_byte = user_val if user_val is not None else byte_fields[0].get('default', 0xFF)
+-            else:
+-                low_byte = 0xFF
+-                for f in bit_fields:
+-                    user_val = self._get_field_value(f['name'])
+-                    if user_val is None:
+-                        user_val = f.get('default', 1)
+-                    if user_val:
+-                        low_byte |= (1 << f['bit'])
+-                    else:
+-                        low_byte &= ~(1 << f['bit'])
+-
+-            # 半字格式 = 低字节(值) + 高字节(值的反码)。
+-            # 高字节必须严格等于 ~低字节, 芯片会按这个规则校验/规范化:
+-            # 实测低字节 0xFF 时, 写 0xFFFF 读回是 0x00FF —— 反码位被纠正为 0x00。
+-            # 所以这里统一按反码规则算, 不要特判 0xFF。
+-            value = (((~low_byte) & 0xFF) << 8) | low_byte
+-            buf[offset:offset + 2] = struct.pack('<H', value)
+-
+-        return buf
+-
+-    def _generate_opt_bin(self, program_path):
+-        buf = self._build_opt_bytes()
+-
+-        base_name = os.path.splitext(program_path)[0]
+-        opt_path = base_name + '_opt.bin'
+-        with open(opt_path, 'wb') as f:
+-            f.write(buf)
+-
+-        return opt_path
+-
+-    def _import_done(self, ok, msg):
+-        self.progress.setVisible(False)
+-        if ok:
+-            # Device switches to offline mode and drops USB on purpose.
+-            self.device.disconnect()
+-            self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
+-            self.lbl_status_text.setText("Disconnected")
+-            self.remote_tree.clear()
+-            self.statusBar().showMessage("导入完成，设备已准备离线烧录。再次导入前请让设备回到在线模式。")
+-            QMessageBox.information(self, "导入完成",
+-                                    "程序与算法已导入，设备已切换到离线烧录选择页，光标停在“开始烧录”。\n"
+-                                    "在设备上按一下中键即可烧录。\n\n"
+-                                    "设备已按预期断开 USB。再次导入前请让它回到在线模式。")
+-        else:
+-            self.statusBar().showMessage(f"导入失败: {msg}")
+-            QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")
+-        self._set_import_state(False)
+-
+-    # ── Close ──
+-
+-    def closeEvent(self, event):
+-        self.device.disconnect()
+-        event.accept()
+-
+-
+-# ─── Entry Point ───────────────────────────────────────────────────────────────
+-
+-def main():
+-    app = QApplication(sys.argv)
+-    app.setApplicationName("DAPLINK 脱机编程器")
+-    app.setStyle("Fusion")
+-
+-    window = DAPLinkManager()
+-    window.show()
+-
+-    sys.exit(app.exec_())
+-
+-
+-if __name__ == '__main__':
+-    main()
++#!/usr/bin/env python3
++"""
++CMSIS-DAPLINK File Manager
++PyQt5 GUI for transferring files to/from GD32 DAPLINK device.
++
++Usage:
++    python daplink_manager.py
++
++Requires: PyQt5, pyusb, libusb-package
++    pip install PyQt5 pyusb libusb-package
++"""
++
++import sys
++import os
++import struct
++import threading
++import re
++
++from intelhex import IntelHex
++
++import usb.core
++import usb.util
++
++# Use libusb-package as backend
++try:
++    import libusb_package
++    _original_find = usb.core.find
++    def _find_with_backend(*args, **kwargs):
++        kwargs.setdefault('backend', libusb_package.get_libusb1_backend())
++        return _original_find(*args, **kwargs)
++    usb.core.find = _find_with_backend
++except ImportError:
++    pass
++
++from PyQt5.QtWidgets import (
++    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
++    QSplitter, QTreeWidget, QTreeWidgetItem, QToolBar, QAction,
++    QPushButton, QLabel, QProgressBar, QStatusBar, QFileDialog,
++    QMessageBox, QInputDialog, QHeaderView, QFrame, QStyle,
++    QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
++    QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy, QSpinBox
++)
++from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
++from PyQt5.QtGui import QIcon, QFont, QColor
++
++from opt_config import OptConfig
++
++# ─── USB Protocol Constants ────────────────────────────────────────────────────
++
++VID = 0x28E9
++PID = 0x128A
++CUSTOMBULK_INTERFACE = 1
++EP_OUT = 0x02
++EP_IN = 0x82
++PACKET_SIZE = 64
++MAX_DATA = 56
++TIMEOUT = 5000
++
++CMD_LIST_DIR    = 0x01
++CMD_OPEN_WRITE  = 0x02
++CMD_WRITE_DATA  = 0x03
++CMD_CLOSE_FILE  = 0x04
++CMD_OPEN_READ   = 0x05
++CMD_READ_DATA   = 0x06
++CMD_DELETE_FILE = 0x07
++CMD_MKDIR       = 0x08
++CMD_GET_STATUS  = 0x09
++CMD_RENAME      = 0x0A
++CMD_STAGE_ALGORITHM = 0x0B
++CMD_PREPARE_DOWNLOAD = 0x0C
++CMD_GET_BURN_QUOTA = 0x0D
++CMD_SET_BURN_QUOTA = 0x0E
++
++STATUS_OK   = 0x00
++STATUS_ERR  = 0x01
++STATUS_BUSY = 0x02
++STATUS_EOF  = 0x03
++
++
++# ─── USB Device Driver ─────────────────────────────────────────────────────────
++
++class DAPLinkDevice:
++    def __init__(self):
++        self.dev = None
++        self.ep_out = None
++        self.ep_in = None
++        self._command_lock = threading.Lock()
++
++    def connect(self):
++        # Release any previous resources first
++        self.disconnect()
++
++        self.dev = usb.core.find(idVendor=VID, idProduct=PID)
++        if self.dev is None:
++            raise RuntimeError("Device not found. Check USB connection.")
++
++        # Detach kernel drivers on all interfaces
++        for i in range(4):
++            try:
++                if self.dev.is_kernel_driver_active(i):
++                    self.dev.detach_kernel_driver(i)
++            except (usb.core.USBError, NotImplementedError):
++                pass
++
++        # Try to set configuration (may already be set)
++        try:
++            self.dev.set_configuration()
++        except usb.core.USBError:
++            pass  # Already configured
++
++        cfg = self.dev.get_active_configuration()
++        intf = cfg[(CUSTOMBULK_INTERFACE, 0)]
++
++        self.ep_out = usb.util.find_descriptor(
++            intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
++        self.ep_in = usb.util.find_descriptor(
++            intf, custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN)
++
++        if self.ep_out is None or self.ep_in is None:
++            self.disconnect()
++            raise RuntimeError("Endpoints not found on Interface 1. Check WinUSB driver.")
++
++    def is_connected(self):
++        return self.dev is not None and self.ep_out is not None
++
++    def disconnect(self):
++        if self.dev:
++            usb.util.dispose_resources(self.dev)
++            self.dev = None
++            self.ep_out = None
++            self.ep_in = None
++
++    @staticmethod
++    def _fix_path(path):
++        git_prefix = 'C:/Program Files/Git'
++        if path.startswith(git_prefix):
++            path = path[len(git_prefix):]
++        if path.startswith('0:'):
++            return path
++        return '0:' + path.lstrip('/')
++
++    def _send_cmd(self, cmd_data):
++        with self._command_lock:
++            self.ep_out.write(cmd_data, timeout=TIMEOUT)
++            data = self.ep_in.read(PACKET_SIZE, timeout=TIMEOUT)
++            return bytes(data)
++
++    def list_dir(self, path="/"):
++        resp = self._send_cmd(bytes([CMD_LIST_DIR]) + self._fix_path(path).encode('utf-8'))
++        if resp[0] == STATUS_ERR:
++            raise RuntimeError(f"List failed: {path}")
++        data = resp[1:].decode('utf-8', errors='replace').strip()
++        result = []
++        for entry in data.split('\n'):
++            entry = entry.strip()
++            if not entry:
++                continue
++            if entry.endswith('/'):
++                result.append(('DIR', entry[:-1]))
++            else:
++                result.append(('FILE', entry))
++        return result
++
++    def push(self, local_path, remote_path, callback=None):
++        file_size = os.path.getsize(local_path)
++        size_bytes = struct.pack('<I', file_size)
++        resp = self._send_cmd(bytes([CMD_OPEN_WRITE]) + size_bytes + self._fix_path(remote_path).encode('utf-8'))
++        if resp[0] != STATUS_OK:
++            raise RuntimeError(f"Open write failed: {remote_path}")
++        sent = 0
++        with open(local_path, 'rb') as f:
++            while sent < file_size:
++                chunk = f.read(MAX_DATA)
++                if not chunk:
++                    break
++                resp = self._send_cmd(bytes([CMD_WRITE_DATA]) + chunk)
++                if resp[0] != STATUS_OK:
++                    raise RuntimeError(f"Write error at {sent}")
++                sent += len(chunk)
++                if callback:
++                    callback(sent, file_size)
++        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
++        if not close_resp or close_resp[0] != STATUS_OK:
++            raise RuntimeError(f"Close write failed: {remote_path}")
++        if sent != file_size:
++            raise RuntimeError(f"Incomplete write: {sent}/{file_size} bytes")
++        return sent
++
++    def file_exists(self, remote_path):
++        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
++        if not resp or resp[0] != STATUS_OK:
++            return False
++        close_resp = self._send_cmd(bytes([CMD_CLOSE_FILE]))
++        if not close_resp or close_resp[0] != STATUS_OK:
++            raise RuntimeError(f"Close failed after checking: {remote_path}")
++        return True
++
++    def stage_algorithm(self, algorithm_name):
++        if not algorithm_name or len(algorithm_name.encode('ascii')) > 31:
++            raise ValueError("Algorithm filename must be 1-31 ASCII characters")
++        resp = self._send_cmd(bytes([CMD_STAGE_ALGORITHM]) + algorithm_name.encode('ascii'))
++        if not resp or resp[0] != STATUS_OK:
++            raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
++
++    def prepare_download(self, program_name, opt_required):
++        if not program_name or len(program_name.encode('ascii')) > 31:
++            raise ValueError("Program filename must be 1-31 ASCII characters")
++        flags = 1 if opt_required else 0
++        resp = self._send_cmd(bytes([CMD_PREPARE_DOWNLOAD, flags]) + program_name.encode('ascii'))
++        if not resp:
++            raise RuntimeError("Prepare response was empty")
++        if resp[0] == STATUS_BUSY:
++            raise RuntimeError("Device is busy")
++        if resp[0] != STATUS_OK:
++            raise RuntimeError("Device rejected download preparation")
++
++    @staticmethod
++    def _decode_quota(resp):
++        if resp and resp[0] == STATUS_BUSY:
++            raise RuntimeError("设备正在传输或烧录，请完成后再设置次数。")
++        if not resp or resp[0] != STATUS_OK:
++            raise RuntimeError("设备不支持次数限制或保存失败，请更新固件后重试。")
++        if len(resp) != 8 or resp[1] != 1 or resp[2] > 1 or resp[3] > 1:
++            raise RuntimeError("设备次数响应无效。")
++        remaining = struct.unpack('<I', resp[4:8])[0]
++        if remaining > 999 or (not resp[2] and remaining):
++            raise RuntimeError("设备剩余次数无效。")
++        return dict(enabled=bool(resp[2]), fault=bool(resp[3]), remaining=remaining)
++
++    def get_burn_quota(self):
++        return self._decode_quota(self._send_cmd(bytes([CMD_GET_BURN_QUOTA])))
++
++    def set_burn_quota(self, enabled, remaining):
++        if not isinstance(remaining, int) or not 0 <= remaining <= 999:
++            raise ValueError("烧录次数必须为 0–999。")
++        remaining = remaining if enabled else 0
++        request = bytes([CMD_SET_BURN_QUOTA, int(bool(enabled))]) + struct.pack('<I', remaining)
++        result = self._decode_quota(self._send_cmd(request))
++        if result['fault'] or result['enabled'] != bool(enabled) or result['remaining'] != remaining:
++            raise RuntimeError("设备次数保存校验失败。")
++        return result
++
++    def pull(self, remote_path, local_path, callback=None):
++        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
++        if resp[0] != STATUS_OK:
++            raise RuntimeError(f"Open read failed: {remote_path}")
++        file_size = struct.unpack('<I', resp[1:5])[0]
++        received = 0
++        with open(local_path, 'wb') as f:
++            while received < file_size:
++                req_len = min(MAX_DATA, file_size - received)
++                resp = self._send_cmd(bytes([CMD_READ_DATA, req_len]))
++                if resp[0] == STATUS_ERR:
++                    raise RuntimeError(f"Read error at {received}")
++                data = resp[1:]
++                f.write(data)
++                received += len(data)
++                if callback:
++                    callback(received, file_size)
++                if resp[0] == STATUS_EOF:
++                    break
++        return received
++
++    def mkdir(self, path):
++        resp = self._send_cmd(bytes([CMD_MKDIR]) + self._fix_path(path).encode('utf-8'))
++        if resp[0] != STATUS_OK:
++            raise RuntimeError(f"Mkdir failed: {path}")
++
++    def rm(self, path):
++        resp = self._send_cmd(bytes([CMD_DELETE_FILE]) + self._fix_path(path).encode('utf-8'))
++        if resp[0] != STATUS_OK:
++            raise RuntimeError(f"Delete failed: {path}")
++
++
++# ─── Worker Threads ─────────────────────────────────────────────────────────────
++
++class ConnectWorker(QThread):
++    finished = pyqtSignal(bool, str)
++    def __init__(self, device):
++        super().__init__()
++        self.device = device
++    def run(self):
++        try:
++            self.device.connect()
++            self.finished.emit(True, "Connected")
++        except Exception as e:
++            self.finished.emit(False, str(e))
++
++
++class ListDirWorker(QThread):
++    finished = pyqtSignal(list, str)  # entries, error
++    def __init__(self, device, path):
++        super().__init__()
++        self.device = device
++        self.path = path
++    def run(self):
++        try:
++            entries = self.device.list_dir(self.path)
++            self.finished.emit(entries, "")
++        except Exception as e:
++            self.finished.emit([], str(e))
++
++
++class TransferWorker(QThread):
++    progress = pyqtSignal(int, int)  # current, total
++    finished = pyqtSignal(int, str)  # bytes, error
++    def __init__(self, device, mode, src, dst):
++        super().__init__()
++        self.device = device
++        self.mode = mode  # 'push' or 'pull'
++        self.src = src
++        self.dst = dst
++    def run(self):
++        try:
++            def cb(cur, total):
++                self.progress.emit(cur, total)
++            if self.mode == 'push':
++                n = self.device.push(self.src, self.dst, cb)
++            else:
++                n = self.device.pull(self.src, self.dst, cb)
++            self.finished.emit(n, "")
++        except Exception as e:
++            self.finished.emit(0, str(e))
++
++
++class ActionWorker(QThread):
++    finished = pyqtSignal(bool, str)
++    def __init__(self, device, action, path, path2=None):
++        super().__init__()
++        self.device = device
++        self.action = action
++        self.path = path
++        self.path2 = path2
++    def run(self):
++        try:
++            if self.action == 'mkdir':
++                self.device.mkdir(self.path)
++            elif self.action == 'rm':
++                self.device.rm(self.path)
++            self.finished.emit(True, "")
++        except Exception as e:
++            self.finished.emit(False, str(e))
++
++
++class QuotaWorker(QThread):
++    finished = pyqtSignal(object, str)
++
++    def __init__(self, device, setting=None):
++        super().__init__()
++        self.device = device
++        self.setting = setting
++
++    def run(self):
++        try:
++            if self.setting is None:
++                result = self.device.get_burn_quota()
++            else:
++                result = self.device.set_burn_quota(*self.setting)
++            self.finished.emit(result, "")
++        except Exception as exc:
++            self.finished.emit(None, str(exc))
++
++
++class ImportWorker(QThread):
++    """Upload a program batch and commit it for offline programming."""
++    progress = pyqtSignal(str, int, int)  # step_name, current, total
++    log = pyqtSignal(str)
++    finished = pyqtSignal(bool, str)
++
++    def __init__(self, device, program_path, algorithm_name, opt_path=None):
++        super().__init__()
++        self.device = device
++        self.program_path = program_path
++        self.algorithm_name = algorithm_name
++        self.opt_path = opt_path
++
++    def run(self):
++        try:
++            try:
++                self.device.mkdir("0:/download/bin/")
++            except Exception:
++                pass
++
++            prog_name = os.path.basename(self.program_path)
++            self.log.emit("Uploading program: " + prog_name)
++            written = self.device.push(
++                self.program_path,
++                "0:/download/bin/" + prog_name,
++                self._cb)
++            if written != os.path.getsize(self.program_path):
++                raise RuntimeError(f"Program upload incomplete: {written} bytes")
++
++            opt_required = bool(self.opt_path and os.path.exists(self.opt_path))
++            if opt_required:
++                opt_name = os.path.basename(self.opt_path)
++                self.log.emit("Uploading OPT: " + opt_name)
++                written = self.device.push(
++                    self.opt_path,
++                    "0:/download/bin/" + opt_name,
++                    self._cb)
++                if written != os.path.getsize(self.opt_path):
++                    raise RuntimeError(f"OPT upload incomplete: {written} bytes")
++
++            self.log.emit("Preparing offline programming")
++            self.device.stage_algorithm(self.algorithm_name)
++            self.device.prepare_download(prog_name, opt_required)
++            self.finished.emit(True, "Device ready for offline programming")
++        except Exception as e:
++            self.finished.emit(False, str(e))
++
++    def _cb(self, cur, total):
++        self.progress.emit("", cur, total)
++
++
++# ─── Main Window ───────────────────────────────────────────────────────────────
++
++class DAPLinkManager(QMainWindow):
++    def __init__(self):
++        super().__init__()
++        self.device = DAPLinkDevice()
++        self.current_remote_path = "/"
++        self.worker = None
++
++        # OPT configuration
++        self.opt_config = OptConfig()
++        self.current_chip = None
++        self.current_model = ''
++        self.import_in_progress = False
++        self.quota_in_progress = False
++        self.quota_worker = None
++        self._opt_widgets = {}
++
++        self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
++        self.setFont(QFont("Microsoft YaHei", 10))
++        self.control_height = max(36, self.fontMetrics().height() + 16)
++        self.setMinimumSize(900, 600)
++        self.resize(1000, 760)
++
++        self._init_ui()
++        self._apply_style()
++        self._update_toolbar_state()
++
++    def _init_ui(self):
++        # ── Toolbar ──
++        self.toolbar = QToolBar("Main Toolbar")
++        self.toolbar.setIconSize(QSize(20, 20))
++        self.toolbar.setMovable(False)
++        self.addToolBar(self.toolbar)
++
++        self.btn_connect = QAction("🔌 连接", self)
++        self.btn_connect.triggered.connect(self._on_connect)
++        self.toolbar.addAction(self.btn_connect)
++
++        self.btn_disconnect = QAction("⏏ 断开", self)
++        self.btn_disconnect.triggered.connect(self._on_disconnect)
++        self.toolbar.addAction(self.btn_disconnect)
++
++        self.toolbar.addSeparator()
++
++        self.btn_upload = QAction("⬆ 上传", self)
++        self.btn_upload.triggered.connect(self._on_upload)
++        self.toolbar.addAction(self.btn_upload)
++
++        self.btn_download = QAction("⬇ 下载", self)
++        self.btn_download.triggered.connect(self._on_download)
++        self.toolbar.addAction(self.btn_download)
++
++        self.toolbar.addSeparator()
++
++        self.btn_mkdir = QAction("📁 新建文件夹", self)
++        self.btn_mkdir.triggered.connect(self._on_mkdir)
++        self.toolbar.addAction(self.btn_mkdir)
++
++        self.btn_delete = QAction("🗑 删除", self)
++        self.btn_delete.triggered.connect(self._on_delete)
++        self.toolbar.addAction(self.btn_delete)
++
++        self.toolbar.addSeparator()
++
++        self.btn_refresh = QAction("🔄 刷新", self)
++        self.btn_refresh.triggered.connect(self._on_refresh)
++        self.toolbar.addAction(self.btn_refresh)
++
++        self.toolbar.addSeparator()
++
++        self.btn_import = QAction("⚡ 导入程序", self)
++        self.btn_import.triggered.connect(self._on_import_program)
++        self.toolbar.addAction(self.btn_import)
++
++        # ── Central Widget ──
++        central = QWidget()
++        self.setCentralWidget(central)
++        layout = QVBoxLayout(central)
++        layout.setContentsMargins(8, 8, 8, 8)
++        layout.setSpacing(6)
++
++        # ── Title Banner ──
++        self.banner = QLabel("⚡  CMSIS-DAPLINK 脱机编程器")
++        self.banner.setObjectName("banner")
++        self.banner.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
++        self.banner.setFixedHeight(46)
++        layout.addWidget(self.banner)
++
++        # ── Connection Status ──
++        self.status_frame = QFrame()
++        self.status_frame.setFrameShape(QFrame.StyledPanel)
++        self.status_frame.setProperty("panel", True)
++        status_layout = QVBoxLayout(self.status_frame)
++        status_layout.setContentsMargins(10, 6, 10, 6)
++        status_layout.setSpacing(2)
++        # Row 1: status icon + text
++        row1 = QHBoxLayout()
++        self.lbl_status_icon = QLabel("●")
++        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
++        self.lbl_status_text = QLabel("未连接")
++        self.lbl_status_text.setFont(QFont("Microsoft YaHei", 10))
++        row1.addWidget(self.lbl_status_icon)
++        row1.addWidget(self.lbl_status_text)
++        row1.addStretch()
++        status_layout.addLayout(row1)
++        # Row 2: path
++        self.lbl_path = QLabel("路径: /")
++        self.lbl_path.setFont(QFont("Consolas", 9))
++        self.lbl_path.setStyleSheet("color: #555;")
++        self.lbl_path.setWordWrap(True)
++        status_layout.addWidget(self.lbl_path)
++        layout.addWidget(self.status_frame)
++
++        # ── Chip & OPT Selection Bar ──
++        self.chip_opt_frame = QFrame()
++        self.chip_opt_frame.setFrameShape(QFrame.StyledPanel)
++        self.chip_opt_frame.setProperty("panel", True)
++        chip_opt_layout = QVBoxLayout(self.chip_opt_frame)
++        chip_opt_layout.setContentsMargins(12, 12, 12, 12)
++        chip_opt_layout.setSpacing(12)
++        chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
++
++        # Two rows share the same input and button columns.
++        chip_bar = QGridLayout()
++        chip_bar.setHorizontalSpacing(12)
++        chip_bar.setVerticalSpacing(10)
++        chip_bar.setColumnStretch(1, 1)
++        chip_bar.addWidget(QLabel("芯片型号："), 0, 0)
++        self.cmb_chip = QComboBox()
++        self.cmb_chip.setView(QListView())
++        self.cmb_chip.setMinimumWidth(220)
++        self.cmb_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
++        self.cmb_chip.addItem("")  # empty default
++        for m in self.opt_config.get_chip_models():
++            self.cmb_chip.addItem(m)
++        self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
++        chip_bar.addWidget(self.cmb_chip, 0, 1)
++        chip_bar.addWidget(QLabel("算法文件："), 1, 0)
++        self.algorithm_edit = QLineEdit()
++        self.algorithm_edit.setPlaceholderText("设备 /download/firmware/ 中的算法文件名")
++        self.algorithm_edit.setMinimumWidth(220)
++        chip_bar.addWidget(self.algorithm_edit, 1, 1)
++        self.btn_bind_algorithm = QPushButton("保存算法")
++        self.btn_bind_algorithm.clicked.connect(self._bind_algorithm)
++        chip_bar.addWidget(self.btn_bind_algorithm, 1, 2)
++        self.btn_opt_toggle = QPushButton("OPT 配置 ▲")
++        self.btn_opt_toggle.setCheckable(True)
++        self.btn_opt_toggle.setChecked(True)
++        self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
++        chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
++        button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
++        for control in (self.cmb_chip, self.algorithm_edit,
++                        self.btn_bind_algorithm, self.btn_opt_toggle):
++            control.setFixedHeight(self.control_height)
++        for button in (self.btn_bind_algorithm, self.btn_opt_toggle):
++            button.setFixedWidth(button_width)
++        self.chk_opt = QCheckBox("上传 OPT")
++        self.chk_opt.setChecked(True)
++        self.chk_opt.setEnabled(False)
++        self.chk_opt.setMinimumHeight(self.control_height)
++        chip_bar.addWidget(self.chk_opt, 0, 3)
++        chip_opt_layout.addLayout(chip_bar)
++
++        # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
++        self.opt_scroll = QScrollArea()
++        self.opt_scroll.setObjectName("optScroll")
++        self.opt_scroll.setWidgetResizable(True)
++        self.opt_scroll.setMinimumHeight(100)
++        self.opt_scroll.setMaximumHeight(350)
++        self.opt_scroll.setVisible(True)
++        self.opt_content = QWidget()
++        self.opt_scroll.setWidget(self.opt_content)
++        chip_opt_layout.addWidget(self.opt_scroll)
++
++        layout.addWidget(self.chip_opt_frame)
++
++        # Persistent quota is saved separately; importing a program never replenishes it.
++        self.quota_frame = QGroupBox("烧录次数限制")
++        quota_layout = QGridLayout(self.quota_frame)
++        quota_layout.setContentsMargins(12, 2, 12, 4)
++        quota_layout.setHorizontalSpacing(10)
++        self.chk_quota = QCheckBox("启用次数限制")
++        self.spin_quota = QSpinBox()
++        self.spin_quota.setRange(0, 999)
++        self.spin_quota.setValue(100)
++        self.spin_quota.setSuffix(" 次")
++        self.spin_quota.setMinimumWidth(100)
++        self.btn_quota_save = QPushButton("保存到设备")
++        self.btn_quota_read = QPushButton("读取剩余次数")
++        self.lbl_quota = QLabel("剩余次数：请连接设备后读取")
++        self.lbl_quota.setWordWrap(True)
++        self.chk_quota.toggled.connect(lambda _: self._update_toolbar_state())
++        self.btn_quota_save.clicked.connect(lambda: self._start_quota(True))
++        self.btn_quota_read.clicked.connect(lambda: self._start_quota(False))
++        for control in (self.chk_quota, self.spin_quota, self.btn_quota_save, self.btn_quota_read):
++            control.setMinimumHeight(self.control_height)
++        quota_layout.addWidget(self.chk_quota, 0, 0)
++        quota_layout.addWidget(self.spin_quota, 0, 1)
++        quota_layout.addWidget(self.btn_quota_save, 0, 2)
++        quota_layout.addWidget(self.btn_quota_read, 0, 3)
++        quota_layout.addWidget(self.lbl_quota, 0, 4)
++        quota_layout.setColumnStretch(4, 1)
++        self.quota_frame.setToolTip("保存会把设备剩余次数设为输入值；失败不扣次数，烧录中断电按一次计。取消勾选并保存可不限次数。")
++        layout.addWidget(self.quota_frame)
++
++        # ── Splitter: Local + Remote ──
++        splitter = QSplitter(Qt.Horizontal)
++
++        # Local files
++        local_frame = QFrame()
++        local_frame.setFrameShape(QFrame.StyledPanel)
++        local_frame.setProperty("panel", True)
++        local_layout = QVBoxLayout(local_frame)
++        local_layout.setContentsMargins(4, 4, 4, 4)
++        lbl_local = QLabel("💻 本地电脑")
++        lbl_local.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
++        local_layout.addWidget(lbl_local)
++
++        self.local_tree = QTreeWidget()
++        self.local_tree.setHeaderLabels(["名称", "大小", "类型"])
++        self.local_tree.setRootIsDecorated(False)
++        self.local_tree.setAlternatingRowColors(True)
++        self.local_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
++        self.local_tree.header().resizeSection(1, 80)
++        self.local_tree.header().resizeSection(2, 60)
++        self.local_tree.itemDoubleClicked.connect(self._on_local_double_click)
++        local_layout.addWidget(self.local_tree)
++
++        self.local_path_edit = QLabel("请选择文件夹...")
++        self.local_path_edit.setFont(QFont("Consolas", 8))
++        self.local_path_edit.setStyleSheet("color: #888; padding: 2px;")
++        local_layout.addWidget(self.local_path_edit)
++
++        btn_browse = QPushButton("📂 浏览文件夹...")
++        btn_browse.clicked.connect(self._on_browse_local)
++        local_layout.addWidget(btn_browse)
++
++        splitter.addWidget(local_frame)
++
++        # Remote files
++        remote_frame = QFrame()
++        remote_frame.setFrameShape(QFrame.StyledPanel)
++        remote_frame.setProperty("panel", True)
++        remote_layout = QVBoxLayout(remote_frame)
++        remote_layout.setContentsMargins(4, 4, 4, 4)
++        lbl_remote = QLabel("🔧 设备 (SPI Flash)")
++        lbl_remote.setFont(QFont("Microsoft YaHei", 10, QFont.Bold))
++        remote_layout.addWidget(lbl_remote)
++
++        self.remote_tree = QTreeWidget()
++        self.remote_tree.setHeaderLabels(["名称", "大小", "类型"])
++        self.remote_tree.setRootIsDecorated(False)
++        self.remote_tree.setAlternatingRowColors(True)
++        self.remote_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
++        self.remote_tree.header().resizeSection(1, 80)
++        self.remote_tree.header().resizeSection(2, 60)
++        self.remote_tree.itemDoubleClicked.connect(self._on_remote_double_click)
++        self.remote_tree.setContextMenuPolicy(Qt.CustomContextMenu)
++        self.remote_tree.customContextMenuRequested.connect(self._on_remote_context_menu)
++        remote_layout.addWidget(self.remote_tree)
++
++        # Remote navigation: path input + buttons
++        nav_layout = QHBoxLayout()
++        nav_layout.addWidget(QLabel("路径:"))
++        self.remote_path_input = QLineEdit("/")
++        self.remote_path_input.setFont(QFont("Consolas", 9))
++        self.remote_path_input.returnPressed.connect(self._on_go_path)
++        nav_layout.addWidget(self.remote_path_input, 1)
++        btn_go = QPushButton("转到")
++        btn_go.setFixedWidth(48)
++        btn_go.clicked.connect(self._on_go_path)
++        nav_layout.addWidget(btn_go)
++        btn_up = QPushButton("上级")
++        btn_up.setFixedWidth(48)
++        btn_up.clicked.connect(self._on_remote_up)
++        nav_layout.addWidget(btn_up)
++        btn_root = QPushButton("/")
++        btn_root.setFixedWidth(30)
++        btn_root.clicked.connect(lambda: self._navigate_remote("/"))
++        nav_layout.addWidget(btn_root)
++        remote_layout.addLayout(nav_layout)
++
++        splitter.addWidget(remote_frame)
++        splitter.setSizes([450, 450])
++        layout.addWidget(splitter)
++
++        # ── Progress Bar ──
++        self.progress = QProgressBar()
++        self.progress.setVisible(False)
++        self.progress.setTextVisible(True)
++        layout.addWidget(self.progress)
++
++        # ── Status Bar ──
++        self.statusBar().showMessage("就绪")
++
++    def _apply_style(self):
++        self.setStyleSheet("""
++            QWidget { font-family: 'Microsoft YaHei'; font-size: 10pt; }
++            QMainWindow { background: #eef2f7; }
++            QLabel#banner {
++                color: #ffffff;
++                font-family: 'Microsoft YaHei';
++                font-size: 17px;
++                font-weight: bold;
++                padding-left: 16px;
++                border-radius: 8px;
++                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
++                    stop:0 #2b5876, stop:1 #4e9fd1);
++            }
++            QToolBar {
++                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
++                    stop:0 #ffffff, stop:1 #e9eef4);
++                border: none;
++                border-bottom: 2px solid #4e9fd1;
++                spacing: 6px;
++                padding: 5px;
++            }
++            QToolBar QToolButton {
++                padding: 6px 14px;
++                border: 1px solid #c3cede;
++                border-radius: 6px;
++                background: #ffffff;
++                font-family: 'Microsoft YaHei';
++                font-size: 13px;
++                color: #2b3a4a;
++            }
++            QToolBar QToolButton:hover {
++                background: #4e9fd1;
++                border-color: #2b5876;
++                color: #ffffff;
++            }
++            QToolBar QToolButton:pressed { background: #2b5876; color: #ffffff; }
++            QToolBar QToolButton:disabled { color: #aeb8c4; background: #f3f5f8; }
++            QToolBar::separator { background: #d0d8e3; width: 1px; margin: 4px 2px; }
++            QFrame[panel="true"] {
++                background: #ffffff; border-radius: 8px; border: 1px solid #dde4ec;
++            }
++            QLabel { border: none; background: transparent; color: #2b3a4a; }
++            QScrollArea#optScroll { border: none; background: #ffffff; }
++            QScrollArea#optScroll > QWidget > QWidget { background: #ffffff; }
++            QTreeWidget {
++                border: 1px solid #dde4ec; border-radius: 6px;
++                font-size: 12px; background: #fbfcfe;
++                alternate-background-color: #f2f6fb;
++            }
++            QTreeWidget::item { padding: 4px; }
++            QTreeWidget::item:selected { background: #4e9fd1; color: #ffffff; }
++            QHeaderView::section {
++                background: #eaf1f8; border: none;
++                border-bottom: 2px solid #4e9fd1; padding: 5px;
++                font-weight: bold; color: #2b5876;
++            }
++            QProgressBar {
++                border: 1px solid #c3cede; border-radius: 6px;
++                text-align: center; height: 22px; background: #f3f5f8;
++                color: #2b3a4a;
++            }
++            QProgressBar::chunk {
++                border-radius: 5px;
++                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
++                    stop:0 #43cea2, stop:1 #4e9fd1);
++            }
++            QPushButton {
++                padding: 4px 10px; border: 1px solid #c3cede;
++                border-radius: 6px; background: #ffffff; color: #2b3a4a;
++            }
++            QPushButton:hover { background: #e8f2fc; border-color: #2677bd; color: #174e7d; }
++            QPushButton:pressed, QPushButton:checked { background: #2677bd; color: #ffffff; }
++            QPushButton:disabled { color: #8593a3; background: #f3f5f8; }
++            QComboBox, QLineEdit {
++                border: 1px solid #c3cede; border-radius: 5px;
++                padding: 4px 8px; background: #ffffff; color: #24364b;
++                selection-background-color: #2677bd; selection-color: #ffffff;
++            }
++            QComboBox { padding-right: 28px; }
++            QComboBox:focus, QLineEdit:focus { border-color: #2677bd; }
++            QComboBox:disabled, QLineEdit:disabled { color: #8593a3; background: #f3f5f8; }
++            QComboBox QAbstractItemView {
++                background: #ffffff; color: #24364b;
++                border: 1px solid #b5c6da; padding: 4px;
++                selection-background-color: #2677bd; selection-color: #ffffff;
++                outline: none;
++            }
++            QComboBox QAbstractItemView::item {
++                min-height: 28px; padding: 4px 10px;
++                border: none; color: #24364b; background: #ffffff;
++            }
++            QComboBox QAbstractItemView::item:hover {
++                background: #e8f2fc; color: #174e7d;
++            }
++            QComboBox QAbstractItemView::item:selected {
++                background: #2677bd; color: #ffffff;
++            }
++            QGroupBox {
++                border: 1px solid #dde4ec; border-radius: 6px;
++                margin-top: 1.2em; padding-top: 0; color: #2b5876;
++            }
++            QGroupBox::title {
++                subcontrol-origin: margin; subcontrol-position: top left;
++                left: 12px; padding: 0 4px; color: #2b5876;
++                background: #ffffff;
++            }
++            QCheckBox, QRadioButton { color: #24364b; spacing: 6px; }
++            QCheckBox:disabled, QRadioButton:disabled { color: #8593a3; }
++            QStatusBar { background: #e9eef4; color: #2b3a4a; }
++        """)
++
++    def _update_toolbar_state(self):
++        connected = self.device.is_connected()
++        idle = not self.import_in_progress and not self.quota_in_progress
++        self.btn_connect.setEnabled(not connected and idle)
++        self.btn_disconnect.setEnabled(connected and idle)
++        self.btn_upload.setEnabled(connected and idle)
++        self.btn_download.setEnabled(connected and idle)
++        self.btn_mkdir.setEnabled(connected and idle)
++        self.btn_delete.setEnabled(connected and idle)
++        self.btn_refresh.setEnabled(connected and idle)
++        self.btn_import.setEnabled(connected and idle)
++        self.cmb_chip.setEnabled(idle)
++        self.algorithm_edit.setEnabled(idle)
++        self.btn_bind_algorithm.setEnabled(idle)
++        self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
++        self.chk_opt.setEnabled(idle and self.current_chip is not None)
++        self.chk_quota.setEnabled(connected and idle)
++        self.spin_quota.setEnabled(connected and idle and self.chk_quota.isChecked())
++        self.btn_quota_save.setEnabled(connected and idle)
++        self.btn_quota_read.setEnabled(connected and idle)
++
++    def _set_import_state(self, active):
++        self.import_in_progress = active
++        self.remote_tree.setEnabled(not active)
++        self.remote_path_input.setEnabled(not active)
++        self._update_toolbar_state()
++
++    def _start_quota(self, save=False):
++        if not self.device.is_connected() or self.import_in_progress or self.quota_in_progress:
++            return
++        if self.worker is not None and self.worker.isRunning():
++            self.statusBar().showMessage("请等待当前设备操作完成，再设置或读取次数。")
++            return
++        self.quota_in_progress = True
++        self.remote_tree.setEnabled(False)
++        self.remote_path_input.setEnabled(False)
++        self._update_toolbar_state()
++        setting = (self.chk_quota.isChecked(), self.spin_quota.value()) if save else None
++        self.statusBar().showMessage("正在保存烧录次数..." if save else "正在读取剩余次数...")
++        self.quota_worker = QuotaWorker(self.device, setting)
++        self.quota_worker.finished.connect(lambda result, error: self._quota_done(result, error, save))
++        self.quota_worker.start()
++
++    def _quota_done(self, result, error, saved):
++        self.quota_in_progress = False
++        self.remote_tree.setEnabled(True)
++        self.remote_path_input.setEnabled(True)
++        if error:
++            self.lbl_quota.setText("剩余次数：读取或保存失败")
++            self.statusBar().showMessage(error)
++        else:
++            self.chk_quota.setChecked(result['enabled'])
++            if result['enabled']:
++                self.spin_quota.setValue(result['remaining'])
++            if result['fault']:
++                self.lbl_quota.setText("次数记录异常：请重新设置并保存到设备")
++            else:
++                text = f"{result['remaining']:03d}次" if result['enabled'] else "不限"
++                self.lbl_quota.setText("剩余次数：" + text)
++            self.statusBar().showMessage("烧录次数已保存到设备，断电后保留。" if saved else "已读取设备剩余次数。")
++        self._update_toolbar_state()
++
++    def _on_connect(self):
++        self.statusBar().showMessage("正在连接...")
++        self.btn_connect.setEnabled(False)
++        self.worker = ConnectWorker(self.device)
++        self.worker.finished.connect(self._connect_done)
++        self.worker.start()
++
++    def _connect_done(self, ok, msg):
++        if ok:
++            self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
++            self.lbl_status_text.setText("已连接")
++            self.statusBar().showMessage("设备已连接；可设置或读取烧录次数")
++            self.lbl_quota.setText("剩余次数：请点击“读取剩余次数”")
++            self._navigate_remote("/")
++        else:
++            self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
++            self.lbl_status_text.setText("未连接")
++            self.statusBar().showMessage(f"连接失败: {msg}")
++        self._update_toolbar_state()
++
++    def _on_disconnect(self):
++        self.device.disconnect()
++        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
++        self.lbl_status_text.setText("未连接")
++        self.remote_tree.clear()
++        self.statusBar().showMessage("已断开")
++        self.lbl_quota.setText("剩余次数：设备未连接")
++        self._update_toolbar_state()
++
++    # ── Remote Navigation ──
++
++    def _navigate_remote(self, path):
++        if self.quota_in_progress or not self.device.is_connected():
++            return
++        self.current_remote_path = path
++        self.lbl_path.setText(f"路径: {path}")
++        self.remote_path_input.setText(path)
++        self.statusBar().showMessage(f"正在列出 {path} ...")
++        self.worker = ListDirWorker(self.device, path)
++        self.worker.finished.connect(self._list_done)
++        self.worker.start()
++
++    def _list_done(self, entries, error):
++        self.remote_tree.clear()
++        if error:
++            self.statusBar().showMessage(f"错误: {error}")
++            return
++
++        # Add parent directory entry
++        if self.current_remote_path != "/":
++            item = QTreeWidgetItem(["..", "", "DIR"])
++            item.setData(0, Qt.UserRole, ("DIR", ".."))
++            item.setForeground(0, QColor("#4285f4"))
++            self.remote_tree.addTopLevelItem(item)
++
++        for entry_type, name in entries:
++            if entry_type == 'DIR':
++                item = QTreeWidgetItem([name, "", "DIR"])
++                item.setForeground(0, QColor("#4285f4"))
++                item.setForeground(2, QColor("#4285f4"))
++            else:
++                item = QTreeWidgetItem([name, "", "FILE"])
++            item.setData(0, Qt.UserRole, (entry_type, name))
++            self.remote_tree.addTopLevelItem(item)
++
++        self.statusBar().showMessage(f"{self.current_remote_path} 共 {len(entries)} 项")
++
++    def _on_remote_double_click(self, item, col):
++        entry_type, name = item.data(0, Qt.UserRole)
++        if entry_type == 'DIR':
++            if name == "..":
++                self._on_remote_up()
++            else:
++                new_path = self.current_remote_path.rstrip('/') + '/' + name
++                self._navigate_remote(new_path)
++
++    def _on_go_path(self):
++        path = self.remote_path_input.text().strip()
++        if not path:
++            path = "/"
++        if not path.startswith("/"):
++            path = "/" + path
++        self._navigate_remote(path)
++
++    def _on_remote_up(self):
++        if self.current_remote_path == "/":
++            return
++        parts = self.current_remote_path.rstrip('/').split('/')
++        parent = '/'.join(parts[:-1]) or '/'
++        self._navigate_remote(parent)
++
++    def _on_refresh(self):
++        self._navigate_remote(self.current_remote_path)
++
++    # ── Local Browser ──
++
++    def _on_browse_local(self):
++        folder = QFileDialog.getExistingDirectory(self, "Select Local Folder")
++        if folder:
++            self._load_local_folder(folder)
++
++    def _load_local_folder(self, folder):
++        self.local_path_edit.setText(folder)
++        self.local_tree.clear()
++        try:
++            entries = sorted(os.listdir(folder), key=lambda x: (not os.path.isdir(os.path.join(folder, x)), x.lower()))
++            for name in entries:
++                full = os.path.join(folder, name)
++                if os.path.isdir(full):
++                    item = QTreeWidgetItem([name, "", "DIR"])
++                    item.setForeground(0, QColor("#4285f4"))
++                    item.setData(0, Qt.UserRole, ("DIR", full))
++                else:
++                    size = os.path.getsize(full)
++                    size_str = self._format_size(size)
++                    item = QTreeWidgetItem([name, size_str, "FILE"])
++                    item.setData(0, Qt.UserRole, ("FILE", full))
++                self.local_tree.addTopLevelItem(item)
++        except Exception as e:
++            self.statusBar().showMessage(f"Error listing local folder: {e}")
++
++    def _on_local_double_click(self, item, col):
++        entry_type, path = item.data(0, Qt.UserRole)
++        if entry_type == 'DIR':
++            self._load_local_folder(path)
++
++    @staticmethod
++    def _format_size(size):
++        if size < 1024:
++            return f"{size} B"
++        elif size < 1024 * 1024:
++            return f"{size/1024:.1f} KB"
++        else:
++            return f"{size/1024/1024:.1f} MB"
++
++    # ── Upload / Download ──
++
++    def _on_upload(self):
++        if not self.device.is_connected():
++            return
++        files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Upload")
++        if not files:
++            return
++        for local_path in files:
++            filename = os.path.basename(local_path)
++            remote_path = self.current_remote_path.rstrip('/') + '/' + filename
++            self._start_transfer('push', local_path, remote_path)
++
++    def _on_download(self):
++        if not self.device.is_connected():
++            return
++        item = self.remote_tree.currentItem()
++        if not item:
++            QMessageBox.information(self, "提示", "请先在设备上选择一个文件。")
++            return
++        entry_type, name = item.data(0, Qt.UserRole)
++        if entry_type != 'FILE':
++            QMessageBox.information(self, "提示", "请选择文件(不是目录)。")
++            return
++
++        save_path, _ = QFileDialog.getSaveFileName(self, "另存为", name)
++        if not save_path:
++            return
++        remote_path = self.current_remote_path.rstrip('/') + '/' + name
++        self._start_transfer('pull', remote_path, save_path)
++
++    def _start_transfer(self, mode, src, dst):
++        self.progress.setVisible(True)
++        self.progress.setValue(0)
++        name = os.path.basename(src if mode == 'push' else dst)
++        direction = "上传" if mode == 'push' else "下载"
++        self.statusBar().showMessage(f"正在{direction} {name} ...")
++
++        self.worker = TransferWorker(self.device, mode, src, dst)
++        self.worker.progress.connect(self._transfer_progress)
++        self.worker.finished.connect(self._transfer_done)
++        self.worker.start()
++
++    def _transfer_progress(self, current, total):
++        if total > 0:
++            pct = current * 100 // total
++            self.progress.setValue(pct)
++            self.progress.setFormat(f"{self._format_size(current)} / {self._format_size(total)} ({pct}%)")
++
++    def _transfer_done(self, nbytes, error):
++        self.progress.setVisible(False)
++        if error:
++            self.statusBar().showMessage(f"传输失败: {error}")
++            QMessageBox.warning(self, "错误", f"传输失败:\n{error}")
++        else:
++            self.statusBar().showMessage(f"传输完成: {self._format_size(nbytes)}")
++            self._navigate_remote(self.current_remote_path)
++
++    # ── Mkdir / Delete ──
++
++    def _on_mkdir(self):
++        if not self.device.is_connected():
++            return
++        name, ok = QInputDialog.getText(self, "新建文件夹", "文件夹名称:")
++        if ok and name:
++            path = self.current_remote_path.rstrip('/') + '/' + name
++            self.worker = ActionWorker(self.device, 'mkdir', path)
++            self.worker.finished.connect(self._action_done)
++            self.worker.start()
++
++    def _on_delete(self):
++        if not self.device.is_connected():
++            return
++        item = self.remote_tree.currentItem()
++        if not item:
++            return
++        entry_type, name = item.data(0, Qt.UserRole)
++        if name == "..":
++            return
++        reply = QMessageBox.question(self, "确认删除", f"确定删除 '{name}' ？",
++                                     QMessageBox.Yes | QMessageBox.No)
++        if reply == QMessageBox.Yes:
++            path = self.current_remote_path.rstrip('/') + '/' + name
++            self.worker = ActionWorker(self.device, 'rm', path)
++            self.worker.finished.connect(self._action_done)
++            self.worker.start()
++
++    def _on_remote_context_menu(self, pos):
++        item = self.remote_tree.itemAt(pos)
++        if not item:
++            return
++        entry_type, name = item.data(0, Qt.UserRole)
++        if name == "..":
++            return
++
++        menu = QApplication.instance().style()  # just use a simple approach
++        from PyQt5.QtWidgets import QMenu
++        menu = QMenu(self)
++        if entry_type == 'FILE':
++            act_download = menu.addAction("下载")
++            act_download.triggered.connect(self._on_download)
++        act_delete = menu.addAction("删除")
++        act_delete.triggered.connect(self._on_delete)
++        menu.exec_(self.remote_tree.viewport().mapToGlobal(pos))
++
++    def _action_done(self, ok, msg):
++        if ok:
++            self.statusBar().showMessage("完成")
++        else:
++            self.statusBar().showMessage(f"错误: {msg}")
++        self._navigate_remote(self.current_remote_path)
++
++    # ── OPT Configuration ──
++
++    def _toggle_opt_panel(self):
++        visible = self.btn_opt_toggle.isChecked()
++        self.opt_scroll.setVisible(visible)
++        self.btn_opt_toggle.setText("OPT 配置 ▲" if visible else "OPT 配置 ▼")
++
++    @staticmethod
++    def _valid_name(name, require_bin=False):
++        try:
++            encoded = name.encode('ascii')
++        except UnicodeEncodeError:
++            return False
++        if not 1 <= len(encoded) <= 31:
++            return False
++        if name in ('.', '..') or any(c in name for c in '/\\:'):
++            return False
++        return not require_bin or name.lower().endswith('.bin')
++
++    def _bind_algorithm(self):
++        if not self.current_model:
++            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
++            return
++        name = self.algorithm_edit.text().strip()
++        if not self._valid_name(name, require_bin=True):
++            QMessageBox.warning(self, "Algorithm Error", "算法文件名必须是 1-31 个 ASCII 字符的 .bin 文件名。")
++            return
++        self.opt_config.set_algorithm(self.current_model, name)
++        self.algorithm_edit.setText(name)
++        self.statusBar().showMessage(f"已保存 {self.current_model} 的算法绑定: {name}")
++
++    def _on_chip_changed(self, model_name):
++        self.current_model = model_name or ''
++        self.algorithm_edit.setText(
++            self.opt_config.get_algorithm(self.current_model) if self.current_model else '')
++        if not model_name:
++            self.current_chip = None
++            self.chk_opt.setChecked(False)
++            self._clear_opt_ui()
++            self._update_toolbar_state()
++            return
++        self.current_chip = self.opt_config.get_chip(model_name)
++        self.chk_opt.setChecked(True)
++        self._build_opt_ui()
++        # auto-expand panel when chip selected
++        if not self.opt_scroll.isVisible():
++            self.btn_opt_toggle.setChecked(True)
++            self._toggle_opt_panel()
++        self._update_toolbar_state()
++
++    def _clear_opt_ui(self):
++        self._opt_widgets.clear()
++        if self.opt_content:
++            self.opt_content.deleteLater()
++        self.opt_content = QWidget()
++        self.opt_scroll.setWidget(self.opt_content)
++
++    def _build_opt_ui(self):
++        self._clear_opt_ui()
++        if not self.current_chip:
++            return
++
++        layout = QVBoxLayout(self.opt_content)
++        layout.setContentsMargins(4, 4, 8, 4)
++        layout.setSpacing(12)
++        layout.setSizeConstraint(QLayout.SetMinimumSize)
++
++        # Let the scroll area scroll rather than squeeze the field rows.
++        preview_grp = QGroupBox("OPT 数据预览", self.opt_content)
++        preview_grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
++        preview_layout = QHBoxLayout(preview_grp)
++        preview_layout.setContentsMargins(12, 12, 12, 12)
++        self.lbl_opt_preview = QLineEdit(preview_grp)
++        self.lbl_opt_preview.setReadOnly(True)
++        self.lbl_opt_preview.setFixedHeight(self.control_height)
++        self.lbl_opt_preview.setFont(QFont("Consolas", 10))
++        self.lbl_opt_preview.setStyleSheet(
++            "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
++        preview_layout.addWidget(self.lbl_opt_preview)
++        self.lbl_rdp_state = QLabel("", preview_grp)
++        self.lbl_rdp_state.setFixedWidth(76)
++        self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
++        self.lbl_rdp_state.setMinimumHeight(self.control_height)
++        preview_layout.addWidget(self.lbl_rdp_state)
++        layout.addWidget(preview_grp)
++
++        words = self.current_chip.get('opt_words', [])
++        label_width = max([120] + [
++            self.fontMetrics().horizontalAdvance(field['name']) + 12
++            for word in words for field in word.get('fields', [])
++        ])
++        for w in words:
++            grp = QGroupBox(f"{w['name']}  ({w['address']})", self.opt_content)
++            grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
++            grp_layout = QGridLayout(grp)
++            grp_layout.setContentsMargins(12, 12, 12, 12)
++            grp_layout.setHorizontalSpacing(16)
++            grp_layout.setVerticalSpacing(10)
++            grp_layout.setColumnStretch(1, 1)
++
++            for row, field in enumerate(w.get('fields', [])):
++                widget = self._build_field_widget(field, grp)
++                widget.setMinimumHeight(self.control_height)
++                label = QLabel(field['name'], grp)
++                label.setFixedWidth(label_width)
++                label.setMinimumHeight(self.control_height)
++                grp_layout.addWidget(label, row, 0, Qt.AlignVCenter)
++                grp_layout.addWidget(widget, row, 1)
++                self._opt_widgets[field['name']] = widget
++                # Connect change signals for live preview
++                self._connect_opt_signal(widget)
++
++            layout.addWidget(grp)
++
++        layout.addStretch()
++        self._update_opt_preview()
++
++    def _connect_opt_signal(self, widget):
++        """Connect widget change signals to update OPT preview."""
++        if isinstance(widget, QComboBox):
++            widget.currentIndexChanged.connect(self._update_opt_preview)
++        elif isinstance(widget, QCheckBox):
++            widget.stateChanged.connect(self._update_opt_preview)
++        elif isinstance(widget, QWidget) and hasattr(widget, '_btn_group'):
++            widget._btn_group.buttonClicked.connect(self._update_opt_preview)
++
++    def _update_opt_preview(self, *args):
++        """Compute current OPT bin and show hex in preview."""
++        if not self.current_chip:
++            return
++        try:
++            buf = self._build_opt_bytes()
++            hex_str = ' '.join(f'{b:02X}' for b in buf)
++            self.lbl_opt_preview.setText(hex_str)
++
++            # 直接把 RDP 结果标出来: A5 5A = 不加密, 7F 80 = 加密
++            if hasattr(self, 'lbl_rdp_state'):
++                rdp = (buf[0] | (buf[1] << 8)) if len(buf) >= 2 else 0xFFFF
++                if rdp == 0x5AA5:
++                    self.lbl_rdp_state.setText("未加密")
++                    self.lbl_rdp_state.setStyleSheet(
++                        "color:#b03a2e; font-weight:bold; border:1px solid #e6b0aa;"
++                        "border-radius:3px; background:#fdedec;")
++                elif rdp == 0x807F:
++                    self.lbl_rdp_state.setText("已加密")
++                    self.lbl_rdp_state.setStyleSheet(
++                        "color:#1e8449; font-weight:bold; border:1px solid #a9dfbf;"
++                        "border-radius:3px; background:#eafaf1;")
++                else:
++                    self.lbl_rdp_state.setText("RDP 异常")
++                    self.lbl_rdp_state.setStyleSheet(
++                        "color:#b9770e; font-weight:bold; border:1px solid #f5cba7;"
++                        "border-radius:3px; background:#fef5e7;")
++        except Exception:
++            pass
++
++    def _build_field_widget(self, field, parent):
++        options = field.get('options', [])
++        default = field.get('default')
++
++        if field.get('byte'):
++            combo = QComboBox(parent)
++            combo.setView(QListView())
++            combo.setFixedHeight(self.control_height)
++            default_idx = 0
++            for i, opt in enumerate(options):
++                combo.addItem(opt['label'], opt['value'])
++                if default is not None and opt['value'] == default:
++                    default_idx = i
++            combo.setCurrentIndex(default_idx)
++            return combo
++
++        if 'bit' in field:
++            has_labels = any(o['label'] not in ('0', '1') for o in options)
++            if has_labels:
++                # Wrap radio buttons in a container widget for proper parent chain
++                container = QWidget(parent)
++                hbox = QHBoxLayout(container)
++                hbox.setContentsMargins(0, 0, 0, 0)
++                hbox.setSpacing(20)
++                group = QButtonGroup(container)
++                for opt in options:
++                    radio = QRadioButton(opt['label'], container)
++                    group.addButton(radio, opt['value'])
++                    hbox.addWidget(radio)
++                    if default is not None and opt['value'] == default:
++                        radio.setChecked(True)
++                hbox.addStretch()
++                container._btn_group = group
++                return container
++            else:
++                cb = QCheckBox(parent)
++                if default is not None:
++                    cb.setChecked(default != 0)
++                return cb
++
++        return QLabel("", parent)
++
++    def _get_field_value(self, field_name):
++        widget = self._opt_widgets.get(field_name)
++        if widget is None:
++            return None
++        if isinstance(widget, QComboBox):
++            return widget.currentData()
++        if hasattr(widget, '_btn_group'):
++            btn = widget._btn_group.checkedButton()
++            if btn:
++                return widget._btn_group.id(btn)
++            return None
++        if isinstance(widget, QCheckBox):
++            return 1 if widget.isChecked() else 0
++        return None
++
++    @staticmethod
++    def _safe_filename(path):
++        """Return path with ASCII-only basename; copy file if renamed.
++        Returns (safe_path, original_was_unsafe).
++        """
++        dir_name = os.path.dirname(path)
++        base = os.path.basename(path)
++        name, ext = os.path.splitext(base)
++        safe = re.sub(r'[^\x00-\x7F]', '', name).strip(' _-')
++        if not safe:
++            safe = 'firmware'
++        if safe + ext == base:
++            return path, False
++        safe_path = os.path.join(dir_name, safe + ext)
++        if os.path.exists(safe_path):
++            os.remove(safe_path)
++        os.rename(path, safe_path)
++        return safe_path, True
++
++    # ── Import Program ──
++
++    def _on_import_program(self):
++        if self.quota_in_progress:
++            return
++        if not self.device.is_connected():
++            QMessageBox.warning(self, "Warning", "请先连接设备。")
++            return
++        if not self.current_model:
++            QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
++            return
++        algorithm_name = self.opt_config.get_algorithm(self.current_model)
++        if not algorithm_name:
++            QMessageBox.warning(self, "Warning",
++                                f"芯片 {self.current_model} 尚未绑定算法文件，请先在“算法文件”中填写并保存。")
++            return
++        if not self._valid_name(algorithm_name, require_bin=True):
++            QMessageBox.warning(self, "Warning",
++                                f"已保存的算法文件名无效: {algorithm_name}")
++            return
++        file_path, _ = QFileDialog.getOpenFileName(
++            self, "选择程序文件", "",
++            "Binary/Hex Files (*.bin *.hex);;Binary Files (*.bin);;Hex Files (*.hex);;All Files (*)")
++        if not file_path:
++            return
++
++        # Convert .hex to .bin if needed
++        if file_path.lower().endswith('.hex'):
++            try:
++                ih = IntelHex(file_path)
++                dir_name = os.path.dirname(file_path)
++                base_name = os.path.splitext(os.path.basename(file_path))[0]
++                safe_name = re.sub(r'[^\x00-\x7F]', '', base_name).strip(' _-')
++                if not safe_name:
++                    safe_name = 'firmware'
++                bin_path = os.path.join(dir_name, safe_name + '.bin')
++                ih.tobinfile(bin_path)
++                self.statusBar().showMessage(f"HEX -> BIN: {os.path.basename(bin_path)}")
++                file_path = bin_path
++            except Exception as e:
++                QMessageBox.warning(self, "HEX Error", f"HEX 转换失败:\n{e}")
++                return
++
++        # Sanitize filename for FATFS compatibility
++        file_path, renamed = self._safe_filename(file_path)
++        if renamed:
++            self.statusBar().showMessage(f"文件名已过滤: {os.path.basename(file_path)}")
++
++        prog_name = os.path.basename(file_path)
++        if not self._valid_name(prog_name, require_bin=True):
++            QMessageBox.warning(self, "Warning",
++                                f"程序文件名无效(需 1-31 个 ASCII 字符的 .bin): {prog_name}")
++            return
++
++        opt_path = None
++        if self.chk_opt.isChecked():
++            opt_path = self._generate_opt_bin(file_path)
++
++        self.progress.setVisible(True)
++        self.progress.setValue(0)
++        self.statusBar().showMessage("正在导入...")
++        self._set_import_state(True)
++
++        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path)
++        self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
++        self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
++        self.worker.finished.connect(self._import_done)
++        self.worker.start()
++
++    def _build_opt_bytes(self):
++        """按当前 UI 值构造 OPT 二进制（长度 = 配置里定义的 word 范围）。"""
++        chip = self.current_chip
++        words = chip['opt_words']
++
++        addresses = [int(w['address'], 16) for w in words]
++        base_addr = min(addresses)
++        end_addr = max(addresses) + 2
++        # 文件长度按实际定义的 word 生成(MM32G0001 为 10 字节: OPT0~WRP0)。
++        # 算法会按 opt_size(16B) 写入, 但固件已用 0xFF 预填缓冲区,
++        # 超出文件的部分写进去就是"未编程", 安全; 而校验也只比对文件长度,
++        # 不会去读 OPT 区后面那些读不回来的保留字节。
++        total = end_addr - base_addr
++        buf = bytearray([0xFF] * total)
++
++        for w in words:
++            offset = int(w['address'], 16) - base_addr
++            if offset + 2 > total:
++                continue
++
++            byte_fields = [f for f in w.get('fields', []) if f.get('byte')]
++            bit_fields = [f for f in w.get('fields', []) if 'bit' in f]
++
++            if byte_fields:
++                user_val = self._get_field_value(byte_fields[0]['name'])
++                low_byte = user_val if user_val is not None else byte_fields[0].get('default', 0xFF)
++            else:
++                low_byte = 0xFF
++                for f in bit_fields:
++                    user_val = self._get_field_value(f['name'])
++                    if user_val is None:
++                        user_val = f.get('default', 1)
++                    if user_val:
++                        low_byte |= (1 << f['bit'])
++                    else:
++                        low_byte &= ~(1 << f['bit'])
++
++            # 半字格式 = 低字节(值) + 高字节(值的反码)。
++            # 高字节必须严格等于 ~低字节, 芯片会按这个规则校验/规范化:
++            # 实测低字节 0xFF 时, 写 0xFFFF 读回是 0x00FF —— 反码位被纠正为 0x00。
++            # 所以这里统一按反码规则算, 不要特判 0xFF。
++            value = (((~low_byte) & 0xFF) << 8) | low_byte
++            buf[offset:offset + 2] = struct.pack('<H', value)
++
++        return buf
++
++    def _generate_opt_bin(self, program_path):
++        buf = self._build_opt_bytes()
++
++        base_name = os.path.splitext(program_path)[0]
++        opt_path = base_name + '_opt.bin'
++        with open(opt_path, 'wb') as f:
++            f.write(buf)
++
++        return opt_path
++
++    def _import_done(self, ok, msg):
++        self.progress.setVisible(False)
++        if ok:
++            # Device switches to offline mode and drops USB on purpose.
++            self.device.disconnect()
++            self.lbl_status_icon.setStyleSheet("color: red; font-size: 16px;")
++            self.lbl_status_text.setText("Disconnected")
++            self.remote_tree.clear()
++            self.statusBar().showMessage("导入完成，设备已准备离线烧录。再次导入前请让设备回到在线模式。")
++            QMessageBox.information(self, "导入完成",
++                                    "程序与算法已导入，设备已切换到离线烧录选择页，光标停在“开始烧录”。\n"
++                                    "在设备上按一下中键即可烧录。\n\n"
++                                    "设备已按预期断开 USB。再次导入前请让它回到在线模式。")
++        else:
++            self.statusBar().showMessage(f"导入失败: {msg}")
++            QMessageBox.warning(self, "导入错误", f"导入失败:\n{msg}")
++        self._set_import_state(False)
++
++    # ── Close ──
++
++    def closeEvent(self, event):
++        if self.quota_in_progress or self.import_in_progress:
++            self.statusBar().showMessage("请等待设备操作完成后关闭窗口。")
++            event.ignore()
++            return
++        self.device.disconnect()
++        event.accept()
++
++
++# ─── Entry Point ───────────────────────────────────────────────────────────────
++
++def main():
++    app = QApplication(sys.argv)
++    app.setApplicationName("DAPLINK 脱机编程器")
++    app.setStyle("Fusion")
++
++    window = DAPLinkManager()
++    window.show()
++
++    sys.exit(app.exec_())
++
++
++if __name__ == '__main__':
++    main()

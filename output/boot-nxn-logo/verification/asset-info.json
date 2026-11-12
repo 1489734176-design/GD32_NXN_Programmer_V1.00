@@ -1,0 +1,41 @@
+{
+  "logo_dimensions": [
+    120,
+    120
+  ],
+  "logo_position": [
+    60,
+    76
+  ],
+  "caption": "南芯能半导体",
+  "caption_dimensions": [
+    192,
+    32
+  ],
+  "caption_position": [
+    24,
+    212
+  ],
+  "group_bounds": [
+    24,
+    76,
+    216,
+    244
+  ],
+  "group_center": [
+    120,
+    160
+  ],
+  "caption_font": "Previous UI SimSun16 integer2x to32",
+  "boot_hold_ms": 1000,
+  "color_rgb565": "red0xF800 with16coverage levels",
+  "logo_rle_bytes": 1890,
+  "palette_bytes": 32,
+  "caption_bytes": 768,
+  "nonzero_horizontal_spans": 1104,
+  "supersampling": 16,
+  "caption_sha256": "dd38bed49ba8615ec4f976a1de1accb550ee674fddf25c9e9288d3e04c4ec086",
+  "arc_shape": "Top thick-left/thin-right; bottom exact180-degree rotation",
+  "approved_letter_pixels_preserved": true,
+  "letter_band_sha256": "d7dcba30bc552aca90e098f223ff1e68e6ef13427855c3a21eb0686781f1203f"
+}

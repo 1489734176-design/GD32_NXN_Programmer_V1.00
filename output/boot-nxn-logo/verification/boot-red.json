@@ -1,0 +1,8 @@
+{
+  "passed": [],
+  "failed": [
+    "Combined logo/caption not vertically centered: (48, 101, 192, 258)"
+  ],
+  "image_sha256": "aa7c993105ab53323d8f04dbeb6a7e2c4c1fe3f87a6f92ddc6daa4dbbd879824",
+  "hardware_tested": false
+}

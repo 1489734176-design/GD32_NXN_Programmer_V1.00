@@ -1,0 +1,64 @@
+{
+  "release": "portrait-ui-connection-fix",
+  "hardware_tested": false,
+  "application_base": "0x0800C000",
+  "image_end_exclusive": "0x801c764",
+  "rw_iram1_bytes": 19520,
+  "axf_sha256": "411cb2cbf7cbf444681da4fcbdaa99ded6d615a467830998d4fd3c54739cdada",
+  "source": "GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c",
+  "source_sha256": "d44ece33a68b84030c138b9c1d85e0be8bb513d19c4fd0edfd0e95be12c41d99",
+  "previous_bin_sha256": "443afb261cdf303659c21b3fd7faa5767b903d758ed7c216816a76acaa6d2a0c",
+  "screen_groups_passed": 10,
+  "application_groups_passed": 13,
+  "alignment_passed": true,
+  "files": {
+    "DAPlink.bin": {
+      "bytes": 67428,
+      "sha256": "b7182e87cbb7bc4dbba96a7dbdace9c0e380aa13070f322fc6a418ad2f591435"
+    },
+    "DAPlink.hex": {
+      "bytes": 189719,
+      "sha256": "bb4b35646dcccd6bbf1bdc051c95de601ac0246747091a73671dcf5716431f69"
+    },
+    "README.txt": {
+      "bytes": 779,
+      "sha256": "9959dda682a3c270cc6986fcabebfbb4abf5cc48329b21e48b19b0dc2394ded5"
+    },
+    "screen-preview.png": {
+      "bytes": 14811,
+      "sha256": "521f3f42bd3917047e0a6316a981d3844a441e0e7a3439c536452b15fe774821"
+    },
+    "verification/alignment-green.json": {
+      "bytes": 853,
+      "sha256": "ef61b79648541203800a4d0cc3a503e520aac8be8e81bc5843b58883b88bb783"
+    },
+    "verification/alignment-red.json": {
+      "bytes": 864,
+      "sha256": "92819531dd99daaa9e7adc5391e4bc4dcc22c66e9aa7a2ae9c63c84305191778"
+    },
+    "verification/application.json": {
+      "bytes": 1439,
+      "sha256": "d86c3b52204696b6aeacbbe1ccec851e3dc49cc734da09582c3349ab6e42fdcd"
+    },
+    "verification/build.log": {
+      "bytes": 2654,
+      "sha256": "1d684f2f6027eafbdca24059a042c476297bcee48c6ea9359c6e165c0654ffc6"
+    },
+    "verification/fix-report.md": {
+      "bytes": 1600,
+      "sha256": "d9b96ff590ef89205cf9cb8f7f45ee52255f7807801f37d5ad214ef672bd3aec"
+    },
+    "verification/fix-review.md": {
+      "bytes": 4336,
+      "sha256": "21243ca3a84f69abf09f2c6d0f4545fbb0ebe2246cc91ab0a903dd9aea46b0f5"
+    },
+    "verification/fix.diff": {
+      "bytes": 577,
+      "sha256": "03b033781b51053ed055f1df761487c93ee779235e024cd1a90766e679783592"
+    },
+    "verification/screen.json": {
+      "bytes": 557,
+      "sha256": "20d64d5d679a44826efa310a78bc9d7742e1a31ab3060d479dd0ad06d6075409"
+    }
+  }
+}

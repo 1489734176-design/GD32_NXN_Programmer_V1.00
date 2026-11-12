@@ -1,0 +1,7 @@
+{
+  "image_size": 62264,
+  "image_sha256": "98fbf11792b38889f258167cf26b37222d29360342883518567a276f95bfcf3e",
+  "start": "0x800c000",
+  "end": "0x801b337",
+  "hardware_tested": false
+}

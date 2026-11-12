@@ -1,0 +1,14 @@
+test_busy_burn_never_reaches_storage (__main__.ScopedUSBTests.test_busy_burn_never_reaches_storage) ... ok
+test_get_without_selected_file_returns_unlimited (__main__.ScopedUSBTests.test_get_without_selected_file_returns_unlimited) ... ok
+test_invalid_count_never_reaches_storage (__main__.ScopedUSBTests.test_invalid_count_never_reaches_storage) ... ok
+test_invalid_scopes_never_reach_storage (__main__.ScopedUSBTests.test_invalid_scopes_never_reach_storage) ... ok
+test_named_get_reads_requested_file (__main__.ScopedUSBTests.test_named_get_reads_requested_file) ... ok
+test_named_set_during_staging_targets_explicit_file (__main__.ScopedUSBTests.test_named_set_during_staging_targets_explicit_file) ... ok
+test_short_get_selects_current_file_and_reports_version_two (__main__.ScopedUSBTests.test_short_get_selects_current_file_and_reports_version_two) ... ok
+test_short_set_without_selected_file_does_not_change_quota (__main__.ScopedUSBTests.test_short_set_without_selected_file_does_not_change_quota) ... ok
+test_storage_failure_never_sets_quota (__main__.ScopedUSBTests.test_storage_failure_never_sets_quota) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.067s
+
+OK

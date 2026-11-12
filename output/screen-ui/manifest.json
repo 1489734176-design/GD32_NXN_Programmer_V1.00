@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-29",
+  "project": "GD32-HID/GD32-HID",
+  "application_base": "0x0800C000",
+  "size_bytes": 64924,
+  "sha256": "1b28692309c108683fa9f74eb525ae8f63d1b1dc25d49b6391f5e29a6dcb214e",
+  "text_size": 16,
+  "label_color_rgb565": "001F",
+  "value_color_rgb565": "FFE0",
+  "line_gap_pixels": 4,
+  "row_pitch_pixels": 20,
+  "firmware_field_height_pixels": 36,
+  "colon": ":",
+  "firmware_value_x": 80,
+  "firmware_rows": 2,
+  "first_row_ascii_capacity": 29,
+  "keil": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "screen_test_groups": 8,
+  "application_regression_groups": 13,
+  "programming_logic_unchanged": true,
+  "programming_body_display_change": "quota footer y=208 to y=204",
+  "hardware_tested": false,
+  "bootloader_check": "Preexisting undefined LCD_BlitGRAM; baseline original driver fails identically. Application update package only."
+}

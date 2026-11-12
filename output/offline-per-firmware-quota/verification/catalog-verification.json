@@ -1,0 +1,20 @@
+{
+  "executed": "Actual ARMCC production Thumb with only FatFs mocked",
+  "source_sha256": "5f5b40952258764bac85ff3a8aaa0c2763f5ef1c91d03d55f37a43c770563e11",
+  "checks": [
+    "Fresh empty root needs no file and loads unlimited",
+    "Absent unlimited state does not create a catalog",
+    "New state appends interoperable CRC record and matches filename case",
+    "Equal and absent unlimited states avoid writes",
+    "Latest matching record wins, unrelated state survives, trailing data ignored/overwritten",
+    "Lost, short or corrupt committed prefix fails closed even for absent firmware",
+    "Record schema, root CRC and root length validation are mandatory",
+    "Matching early record never bypasses validation of later committed records",
+    "I/O failures and full-prefix post-write corruption never publish a new root",
+    "Short I/O and failures after append/sync cannot publish a new root",
+    "Interrupted appended tail cannot supersede the internally committed prefix",
+    "Filename boundaries and quota ranges reject invalid requests before file operations",
+    "Seventy distinct firmware quotas survive without an internal-page count cap"
+  ],
+  "hardware_tested": false
+}

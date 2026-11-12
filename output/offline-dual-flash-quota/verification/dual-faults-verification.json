@@ -1,0 +1,129 @@
+{
+  "executed": "Current ARMCC-compiled production quota/catalog/mirror/auth Thumb code",
+  "hardware_tested": false,
+  "source_sha256": {
+    "burn_quota.c": "ce2f3134eca4d597f178b302cfceaa5e1cfe0fce0393db9d5c9502ff8539e44b",
+    "burn_quota_catalog.c": "07099647cda0ba49ae4d8579530fb8198f49d9b3c23b1327a6f23b55b6b2cf82",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad"
+  },
+  "results": [
+    {
+      "test": "initial_set",
+      "passed": true
+    },
+    {
+      "test": "failed_burn_refund",
+      "passed": true
+    },
+    {
+      "test": "firmware_switch",
+      "passed": true
+    },
+    {
+      "test": "legacy_migration",
+      "passed": true
+    },
+    {
+      "test": "interrupted_migration_explicit_repair",
+      "passed": true
+    }
+  ],
+  "details": [
+    {
+      "scenario": "initial explicit SET",
+      "mutations": 28,
+      "cases": {
+        "power_cut": 28,
+        "mutation_error": 28,
+        "fatfs_error": 11
+      },
+      "firmware_bounds": {
+        "A.bin": 7
+      }
+    },
+    {
+      "scenario": "one failed-burn refund",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "mutation_error": 26,
+        "fatfs_error": 14
+      },
+      "firmware_bounds": {
+        "A.bin": 5
+      }
+    },
+    {
+      "scenario": "known firmware switch A2 to B5",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "mutation_error": 26,
+        "fatfs_error": 30
+      },
+      "firmware_bounds": {
+        "A.bin": 2,
+        "B.bin": 5
+      }
+    },
+    {
+      "scenario": "unknown firmware switch A2 to C0",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "mutation_error": 26,
+        "fatfs_error": 30
+      },
+      "firmware_bounds": {
+        "A.bin": 2,
+        "C.bin": 0
+      }
+    },
+    {
+      "scenario": "BQT1 legacy migration",
+      "mutations": 27,
+      "cases": {
+        "power_cut": 27,
+        "mutation_error": 27,
+        "fatfs_error": 12
+      },
+      "firmware_bounds": {
+        "A.bin": 7
+      }
+    },
+    {
+      "scenario": "BQT2 legacy migration",
+      "mutations": 27,
+      "cases": {
+        "power_cut": 27,
+        "mutation_error": 27,
+        "fatfs_error": 18
+      },
+      "firmware_bounds": {
+        "A.bin": 7,
+        "B.bin": 5
+      }
+    },
+    {
+      "scenario": "interrupted migration explicit repair",
+      "version": 1,
+      "cut": 1
+    },
+    {
+      "scenario": "interrupted migration explicit repair",
+      "version": 1,
+      "cut": 2
+    },
+    {
+      "scenario": "interrupted migration explicit repair",
+      "version": 2,
+      "cut": 1
+    },
+    {
+      "scenario": "interrupted migration explicit repair",
+      "version": 2,
+      "cut": 2
+    }
+  ]
+}

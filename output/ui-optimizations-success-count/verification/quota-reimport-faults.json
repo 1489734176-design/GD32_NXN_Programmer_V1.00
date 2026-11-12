@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "source_sha256": {
+    "burn_quota.c": "85e493f38ce69099e3325395a0b44f3352f70ee6d1457de97925441c3bc6a63f",
+    "burn_quota_catalog.c": "3e8ddd9d735c124e802ecc3bcb28d56264a8673928c9bd113fbcc58e437585c7",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "burn_quota_mirror.c": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad"
+  },
+  "details": [
+    {
+      "scenario": "same-total reimport reset transaction",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "write_error": 26,
+        "fatfs_error": 14,
+        "short_io": 2
+      }
+    },
+    {
+      "scenario": "equal-remaining reimport reset transaction",
+      "mutations": 26,
+      "cases": {
+        "power_cut": 26,
+        "write_error": 26,
+        "fatfs_error": 14,
+        "short_io": 2
+      }
+    }
+  ]
+}

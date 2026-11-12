@@ -1,0 +1,11 @@
+{
+  "executed": "actual offline.axf Thumb dispatcher/service/mode4",
+  "checks": [
+    "SET defers all Flash writes to task service, exact 8-byte response",
+    "GET exact version/flags/LE32 packet",
+    "Malformed/range/disabled-count requests rejected",
+    "Burn/file/prepare/pending conflicts and service-time race blocked",
+    "Zero manual/auto quota renders failure/reason/000 and performs no target operation"
+  ],
+  "hardware_tested": false
+}

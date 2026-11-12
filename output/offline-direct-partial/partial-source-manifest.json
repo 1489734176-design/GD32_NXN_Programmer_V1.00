@@ -1,0 +1,56 @@
+[
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h",
+    "before": "d44acec18816e9b6582b70e67216d4620e402a13aaa1e0ae336d031d0de37c15",
+    "after": "c879b1220ba86597998a464146fb0c9c3fb344ae8cc030a5ada819dc33140973",
+    "encoding": "gbk"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c",
+    "before": "4fb5e7e0e008c06d02f0e70c32f4e41e38273549f3852385f8488a708b45be0b",
+    "after": "39c45d4c6a51649aa1916b9dfdf9ef36c6313307aff23c82df4ed2a8c180364d",
+    "encoding": "gbk"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/tools/daplink_manager.py",
+    "before": "dce606e1b336a8ed415ef45314f20b28631b770d2594e7f6ff5b32bdbd3511e0",
+    "after": "753964dddcc550bf779962fc3233d12b561fbde5920eba634b26f34f1e0c317f",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.c",
+    "before": "08ba24aae2d7dc34d001dd1c54374d74afd8c56963ae7711694bc3b11332d97b",
+    "after": "9f39e4cdf5c4b099203194e03e78fbc2b826267d053e054aef16ec024ba7e63d",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.h",
+    "before": "a3da9e3391685bfb62c830fa37ffc75ca7a2de728b877d39e4091472ac8adb30",
+    "after": "3d7b96d2192fc6197547abf8dc9d35768c8769f6af535f2b99859f2d3cf0b9d8",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_oled.c",
+    "before": "021897e71c02208ccf64cc6df45243cc6d1892dae135ed3b8fc5f5b26685d555",
+    "after": "422533976fc092ed2f4fb8c9cfb72922385fb22403df50431fda4f2ca5736195",
+    "encoding": "gbk"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/bsp_oled.h",
+    "before": "835729000fff23475e2c1721db4b06aa175ffcfe4a47e42a3d82314c1156c5f9",
+    "after": "3d6f9bc155c2749e0ed08b3dbeb8e4d4663ed650e79e11148532863853f8ef85",
+    "encoding": "gbk"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/usbd/Source/usbd_lld_core.c",
+    "before": "999c05b86b4a887f415672dcfb3274d01f0c7a408c78eb1d071bc7c2b9692b47",
+    "after": "15fe469303a97ac338de158d92ac2c39dcec69351045bf62c7771bc239ce0bfa",
+    "encoding": "gbk"
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/bsp_oled.c",
+    "before": "021897e71c02208ccf64cc6df45243cc6d1892dae135ed3b8fc5f5b26685d555",
+    "after": "d507fcc860a8bb2771cb21c69cfaa273ee56d1dee3ab37f53d44ae227d92a9e7",
+    "encoding": "gbk"
+  }
+]

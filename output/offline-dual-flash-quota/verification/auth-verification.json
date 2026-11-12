@@ -1,0 +1,27 @@
+{
+  "executed": "Actual ARMCC production Thumb; only UID mocked",
+  "source_sha256": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+  "checks": [
+    "SHA256 empty, abc and published multi-block padding vectors",
+    "RFC4231 cases 1,2,3,4,6,7 including long keys/multi-block data; empty HMAC",
+    "SHA/HMAC zero updates, byte updates and all 55/56/63/64/127/128 chunk/padding boundaries",
+    "All three UID words and record/catalog domains bind independently; streaming/one-shot 128-bit tags agree",
+    "Every record payload byte, length and empty tag are authenticated; 16-byte output never overruns",
+    "Comparison rejects each tag byte mismatch with identical instruction counts and handles zero length"
+  ],
+  "observed_stack_bytes_by_entry": {
+    "quota_sha256_init": 16,
+    "quota_sha256_update": 172,
+    "quota_sha256_final": 164,
+    "quota_hmac_init": 196,
+    "quota_auth_update": 172,
+    "quota_hmac_final": 220,
+    "quota_auth_init": 308,
+    "quota_auth_final": 260,
+    "quota_auth_tag": 500,
+    "quota_auth_equal": 12
+  },
+  "sha_context_bytes": 108,
+  "auth_context_bytes": 172,
+  "hardware_tested": false
+}

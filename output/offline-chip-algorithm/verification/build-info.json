@@ -1,0 +1,19 @@
+{
+  "image_size": 57540,
+  "image_sha256": "3cd183dc7551523e188091698c1632430e3b193e4bf75f4de9da52ddf38515f7",
+  "min_address": "0x800c000",
+  "max_address": "0x801a0c3",
+  "code": 45016,
+  "ro": 12200,
+  "rw": 792,
+  "zi": 16992,
+  "ram": 17784,
+  "hardware_tested": false,
+  "source_sha256": {
+    "GD32-HID/GD32-HID/USER/APP/run.c": "2f3b62226733831ed7fb24a34c1b48de07ef22464270ae0cb2f7d93b6c1ecb44",
+    "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h": "524067f0a2a2f035343e4b60386953704e9c16b7acabfbcc4d79e653703774ba",
+    "GD32-HID/GD32-HID/tools/daplink_manager.py": "ad9fc0f1977ce50f2fe166c168d3ea51e924f9d3e8627299f531ab2591a7575a",
+    "GD32-HID/GD32-HID/tools/opt_config.py": "4bf04ef054665b56b7b39bd42cd11944bd2960c2d47adab828e1be1da4e16980",
+    "GD32-HID/GD32-HID/tools/test_gui_layout.py": "38d211b2e8bde001e4fe613c38ceeef2cb07cbd467e1ca2b34e83710857065ff"
+  }
+}

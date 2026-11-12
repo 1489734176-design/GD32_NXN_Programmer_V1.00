@@ -1,0 +1,101 @@
+{
+  "release": "portrait-ui",
+  "date": "2026-10-29",
+  "hardware_tested": false,
+  "application_base": "0x0800C000",
+  "image_end_exclusive": "0x801c764",
+  "selection_storage_base": "0x0801F000",
+  "ram_bytes": 19664,
+  "ram_available": 20480,
+  "compiler_errors": 0,
+  "compiler_warnings": 0,
+  "screen_groups_passed": 10,
+  "application_groups_passed": 13,
+  "sources_sha256": {
+    "GD32-HID/GD32-HID/USER/BSP/bsp_lcd.c": "c87da843694e9b263a2c3b1a3d5686a3b3659977d4ac3e1427070b893be3208f",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_lcd.h": "7200ce1c7c490598727e69d509d5c562011660353394228472b5a290c441b5f7",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.c": "307eeb1a29a580b182c4acedf8f1f17704235a272fc38730ba2f01c095215b20",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.h": "78e2d1dfc958f1c030f24556f06f8b08a78cc10f9f121c79a833cfe613dd771d",
+    "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h": "8990bee33647e053c6338d39b3543f5aa9034eabe3346287a927d10431ec32f7",
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.c": "36dc21ebf0def23d032ef6c78d5a1ee2d000db2f797ecea81bd1d2bac4dbfe22",
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.h": "5c96fc9977eba1a33ff2b88a4545fe1c533f84693a8641a5229a036260db8a96",
+    "GD32-HID/GD32-HID/USER/APP/burn_quota_catalog.c": "3e8ddd9d735c124e802ecc3bcb28d56264a8673928c9bd113fbcc58e437585c7",
+    "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c": "302140df0e645111feb562dd12121a3506c342738aa26ea01f479aa6d7b985e2",
+    "GD32-HID/GD32-HID/USER/APP/run.c": "7cf9ffceb9171a41233ef33a2d44073a3208b2c1cf29a231c15e7e277fc02304",
+    "GD32-HID/GD32-HID/USER/APP/run.h": "3fdd0c33e4a29c060ca150e2ae3801b78553c2d0870f94829c3abf439fe891a5"
+  },
+  "files": {
+    "application-verification.json": {
+      "bytes": 1439,
+      "sha256": "9361f63aa74b64ce77f1c9af3ecf4f258e24312cf6bd8d6509bb92fff30ccb21"
+    },
+    "DAPlink.bin": {
+      "bytes": 67428,
+      "sha256": "443afb261cdf303659c21b3fd7faa5767b903d758ed7c216816a76acaa6d2a0c"
+    },
+    "DAPlink.hex": {
+      "bytes": 189719,
+      "sha256": "a3c6c0e69557c854143a96bf28b5cd256d16102359313c7d366e1e4fcc1a1c79"
+    },
+    "README.txt": {
+      "bytes": 2094,
+      "sha256": "e4c0473854d825c79575acb7b5b979836f4e5939c14ca13d782540262e383262"
+    },
+    "screen-preview.png": {
+      "bytes": 14811,
+      "sha256": "521f3f42bd3917047e0a6316a981d3844a441e0e7a3439c536452b15fe774821"
+    },
+    "screen-verification.json": {
+      "bytes": 557,
+      "sha256": "b262c52b91905d1d66e42910c1adc4e2b1e6976ee6ad9e2aeadf09f96a0f2a35"
+    },
+    "verification/application-report.md": {
+      "bytes": 3330,
+      "sha256": "abc597b51ed6d8fc9a4dd9aefc8354654d129127ed20bff6b975b52b9206b559"
+    },
+    "verification/application-review.md": {
+      "bytes": 6735,
+      "sha256": "64d4114e61a47f83420eb7e00e1806c219d8256f7b901c38c2f20643913b422f"
+    },
+    "verification/build.log": {
+      "bytes": 2654,
+      "sha256": "4ead0be152a9a9d9d02f381311a2ee494ead5af939114582119278cc69c2e633"
+    },
+    "verification/display-report.md": {
+      "bytes": 6078,
+      "sha256": "95271351bb920ce54afe98510ac7e509daa179349356e4722d74a6b684c2bbea"
+    },
+    "verification/display-review.md": {
+      "bytes": 3790,
+      "sha256": "819b5ce8db60f866f9790738f25c9a1856050b7107da061ec8ab10a1b2d2bda3"
+    },
+    "verification/integration-review.md": {
+      "bytes": 4763,
+      "sha256": "fcfe559d4eacd18eae610c41a9453be7e71d9e99bdf729db968c3b591f7b0685"
+    },
+    "verification/quota-catalog.json": {
+      "bytes": 1128,
+      "sha256": "8f15ae7083e113ba70594d44d1197225e4a2746359e757776f0676f0484a9f1c"
+    },
+    "verification/quota-faults.json": {
+      "bytes": 1829,
+      "sha256": "76cf4f46a40282f15cbea97c94fd763f35f42c5e40512a9debb5b6ac800123e9"
+    },
+    "verification/quota-migration.json": {
+      "bytes": 1414,
+      "sha256": "fd16ff87c12bdd80851aae15bc4a17f36371f4087905b3138b130682576109a4"
+    },
+    "verification/quota-report.md": {
+      "bytes": 8826,
+      "sha256": "a6a67a2f540ccd4bdd1b9354dd2bab64ddfae51b8fb8c254cff69eaf868cce58"
+    },
+    "verification/quota-review.md": {
+      "bytes": 3802,
+      "sha256": "7a1b0c6001b3e6976300abe89982e1b0fca13ec5917b21a9d5a02ea674843c19"
+    },
+    "verification/quota-stats.json": {
+      "bytes": 948,
+      "sha256": "689b291f088783960b8ebe7355e7e28584d07d1ff3e5f041a290865f7e0c4719"
+    }
+  }
+}

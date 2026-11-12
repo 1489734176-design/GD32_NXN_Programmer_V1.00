@@ -1,0 +1,17 @@
+{
+  "passed": [
+    "twelve_rows_and_icons",
+    "firmware_wrap_and_clear",
+    "navigation_stays_on_page",
+    "overlay_transition_and_stability",
+    "status_uses_same_page",
+    "quota_failure_uses_same_page",
+    "broken_file_does_not_trap_selection",
+    "opt_io_failure_cannot_disable_protection",
+    "automatic_waits_for_removal_before_next_burn",
+    "manual_repeat_and_connection_failure_refund"
+  ],
+  "failed": [],
+  "image_sha256": "443afb261cdf303659c21b3fd7faa5767b903d758ed7c216816a76acaa6d2a0c",
+  "hardware_tested": false
+}

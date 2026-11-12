@@ -1,0 +1,19 @@
+{
+  "passed": true,
+  "source_sha256": {
+    "burn_quota_catalog.c": "3e8ddd9d735c124e802ecc3bcb28d56264a8673928c9bd113fbcc58e437585c7",
+    "quota_auth.c": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9"
+  },
+  "checks": [
+    "Same-length same-CRC historical record replay fails authentication",
+    "Empty/unknown state is limited zero; explicit unlimited gets an authenticated record",
+    "Append root equals independent Python HMAC; latest record wins and tail is ignored",
+    "Missing, short or corrupt committed data fails even for unknown names",
+    "Invalid schema, malformed lengths/tags, and later damaged records are rejected",
+    "All FatFs errors, short writes and full-prefix readback corruption keep output root unchanged",
+    "Partial appended record cannot supersede the authenticated committed prefix",
+    "Filename and quota boundaries reject invalid requests before file operations",
+    "Seventy distinct balances survive without an internal page-count cap",
+    "CRC migration retains all bytes/balances and rejects missing, corrupt or unreadable prefixes"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "test": "test_quota_scope.py",
+      "passed": true,
+      "seconds": 7.34
+    },
+    {
+      "test": "test_catalog.py",
+      "passed": true,
+      "seconds": 3.0
+    },
+    {
+      "test": "test_scoped_host.py",
+      "passed": true,
+      "seconds": 0.56
+    },
+    {
+      "test": "test_scoped_usb.py",
+      "passed": true,
+      "seconds": 0.48
+    },
+    {
+      "test": "test_selection_store.py",
+      "passed": true,
+      "seconds": 42.5
+    },
+    {
+      "test": "test_usb_mutation_guard.py",
+      "passed": true,
+      "seconds": 0.47
+    },
+    {
+      "test": "test_quota_binding_race.py",
+      "passed": true,
+      "seconds": 4.52
+    },
+    {
+      "test": "test_application.py",
+      "passed": true,
+      "seconds": 77.83
+    }
+  ],
+  "image_sha256": "98fbf11792b38889f258167cf26b37222d29360342883518567a276f95bfcf3e",
+  "hardware_tested": false
+}

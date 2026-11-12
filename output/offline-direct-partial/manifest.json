@@ -1,0 +1,122 @@
+{
+  "boot-build.log": {
+    "size": 1783,
+    "sha256": "4f0530a989de7dba1f68869ce52a6802e1cbedc2d60e33c2d6c11e88039bb5d6"
+  },
+  "Bootloader-Quota.bin": {
+    "size": 33012,
+    "sha256": "8f348035e090b74024c165adf611f414a898495a9524cc598a67a90d425c132d"
+  },
+  "Bootloader-Quota.hex": {
+    "size": 92907,
+    "sha256": "4e1ec7f7b8ea001fb6fb4ba36f3d0b5668714fbe2cb6b126515f81b2252dc866"
+  },
+  "DAPlink-Quota-full.hex": {
+    "size": 252036,
+    "sha256": "b64476fc583408ac58736e94627cbfbc41ae81e8a64e9691fa807c919a20b976"
+  },
+  "DAPlink.bin": {
+    "size": 56572,
+    "sha256": "1c29e0c7e71f978162c5ab50325008fe888531260476cf97b4bd5243d5042f83"
+  },
+  "DAPlink.hex": {
+    "size": 159180,
+    "sha256": "51d5e9e9a1672fc3f87f8c6769875d53046618168f12c85afac9dbb1ccc2ec77"
+  },
+  "offline-build.log": {
+    "size": 2489,
+    "sha256": "59220c67c3c09ff8d88c8d314aaa6c2868f4e44cb926588f334058d68210882d"
+  },
+  "online-build.log": {
+    "size": 2489,
+    "sha256": "ffd5470d64faf470bccae70ba5c965ffab3df5d5c3fdcacbd5a87dac764daad8"
+  },
+  "opt-burn-verification.json": {
+    "size": 398,
+    "sha256": "95a377a3d7c9f7c7e9ee1879744421f7d9901ab14fa9fe290b0509d455c13b46"
+  },
+  "opt-display-verification.json": {
+    "size": 306,
+    "sha256": "389253602c03dce37a8b0f0dace84d83d5983627fbf912f110c74deb2883c885"
+  },
+  "partial-refresh-verification.json": {
+    "size": 969,
+    "sha256": "b5769a61f14879afb8cf7a10d49c1f40dd18f496d79a773ba8b75f2d7f50e8bf"
+  },
+  "partial-source-manifest.json": {
+    "size": 2496,
+    "sha256": "fdb0a8bb5f4c6e26832307b7169289e91d193d6f066b703d3be7426f90b9dbe4"
+  },
+  "partial-suite.json": {
+    "size": 7819,
+    "sha256": "0d62c062cdc5bfb801a1407fed819d142657fddedf24fb17e43cef30c833e669"
+  },
+  "partial-ui.diff": {
+    "size": 52115,
+    "sha256": "88f28b2f59611e82b5e513d3caab9ee4523213ebdd27758f7597f584f6776b17"
+  },
+  "quota-arm-verification.json": {
+    "size": 938,
+    "sha256": "b56a7b8afeaf8588c4c5800f4efe81a512f4ffaf98fcf38f8860950b1e9744b7"
+  },
+  "quota-boot-verification.json": {
+    "size": 285,
+    "sha256": "f5d8ed8387a87988e57701114d51109854c0385e31e9f2db059d0347710ee065"
+  },
+  "quota-host-verification.json": {
+    "size": 402,
+    "sha256": "a6296cae2536d7bf8b6a8e2597d912e25d1d9d7aa5aa6eb1b970524a3a735803"
+  },
+  "quota-integration-verification.json": {
+    "size": 461,
+    "sha256": "0574284b7c1c29c270c3a2cefd075db59de85995bb487f2308e1099d4e3ec2d3"
+  },
+  "README.md": {
+    "size": 4838,
+    "sha256": "6df32fcdccef8d2396cfe85deb8ae685b7837f96d8e4338f587293f6b9dc0048"
+  },
+  "source-chinese-comments.zip": {
+    "size": 138678,
+    "sha256": "8d721f0e0fe92edfaa18dc599ab535f055c0ef44ac570652d6674d89419a5a46"
+  },
+  "tools/algorithm_bindings.json": {
+    "size": 93,
+    "sha256": "94b3dde8f897e6edfbc239ca67a08bc95741564a932b8812020f68699226747d"
+  },
+  "tools/chip_config.json": {
+    "size": 10446,
+    "sha256": "54a2270d5efa45c26a7da78f9352baef1b9e1fc999329eda3d1ec469a4daecab"
+  },
+  "tools/daplink_manager.py": {
+    "size": 66883,
+    "sha256": "753964dddcc550bf779962fc3233d12b561fbde5920eba634b26f34f1e0c317f"
+  },
+  "tools/file_transfer.py": {
+    "size": 12467,
+    "sha256": "8eb65fca418519ad58315c7a06298c789ad71c5ec0788d248579d173f126f314"
+  },
+  "tools/opt_config.py": {
+    "size": 1506,
+    "sha256": "0f4c8d8e575a24b364babd95736238dd82beee81bf055444b39f541e307b587f"
+  },
+  "tools/run.bat": {
+    "size": 462,
+    "sha256": "0aefda2d07ca6a65851f09e1c344a0f291772d4b0f8259756c76c807de5b119d"
+  },
+  "verification.json": {
+    "size": 2606,
+    "sha256": "8a1cdd66490f47f98add52428206f22255b05740182b3c20b4487b7d741729f9"
+  },
+  "上位机.png": {
+    "size": 70481,
+    "sha256": "4d18adfd1d3303a568e6d6b574d7b5040e5d656756fb407660e2feb62fe05955"
+  },
+  "手动选择-320x240.png": {
+    "size": 2271,
+    "sha256": "b3a2da237b443349c157af6efb3f7f766c5645a65b626edff4ab7cf29df21393"
+  },
+  "自动待机-320x240.png": {
+    "size": 2278,
+    "sha256": "2b7940975f45198122409b0fb25b48b7d3e8e4b44be5f2b89183ad7eaa5683f1"
+  }
+}

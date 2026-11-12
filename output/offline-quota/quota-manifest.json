@@ -1,0 +1,122 @@
+[
+  {
+    "file": "Bootloader/Bootloader/USER/APP/run.c",
+    "before": "a199d91bc9d17a9ae55828ec752bd9f2a4367742348fdbda82f5aada9d0f7579",
+    "after": "dc49fa4a9f796eaf7798271ef980c2239569c5b064dfdaf2660f97e52d847b6f",
+    "size_before": 4511,
+    "size_after": 4795,
+    "encodings": [
+      "gbk"
+    ]
+  },
+  {
+    "file": "Bootloader/Bootloader/USER/BSP/ui_chinese_font.h",
+    "before": "6a86a92ecfbfbffb385ea7d2124a63034f1ffffb1884f91640037fdb793dfe2b",
+    "after": "ac879901310eff6a5fc15f4bcdc61ddb1dd303e49dc60c839c9629d3a7be4991",
+    "size_before": 7431,
+    "size_after": 7813,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx",
+    "before": "647f0d0656f5a0cc80422b9f138c2c4acbdc8c2481a92d0ef0a4fddced01f1cc",
+    "after": "8072f4061c4e034c65c16e996a187837c81040543a0b1817d99736064ba7417c",
+    "size_before": 34180,
+    "size_after": 34534,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include/usbd_custombulk.h",
+    "before": "f7f7863c76ce7e19dfb11328aee88bfe2cb460d9161d3fb3d1e012b975eabc0d",
+    "after": "5f38b3516e5ce9206bc79688fd73dffd5858b3e4784f933e2fdc33f46531720e",
+    "size_before": 2150,
+    "size_after": 2280,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ],
+    "snapshot_method": "Exact inverse of quota-only additions; earlier version reconstructed"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c",
+    "before": "0367e17cb42b11d2d6653082ed421349d367a04fd54c2fce141830ece818ef0d",
+    "after": "7e9169360d4bca1b85a6808d528919241e9ca44750b50981f4cc51f6e3ce73c5",
+    "size_before": 17437,
+    "size_after": 19899,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ],
+    "snapshot_method": "Exact inverse of quota-only additions; earlier version reconstructed"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.c",
+    "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "after": "50f708d4a6955e8ae7e9c670694c79a2f40d3d4fbe86c67bd50c9acc1a07063c",
+    "size_before": 0,
+    "size_after": 4896,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.h",
+    "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "after": "987aca0ef581515e31d8deacaa734b4c6ebe7e534c81ae3837a703133b364e77",
+    "size_before": 0,
+    "size_after": 1085,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_port.c",
+    "before": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "after": "ed6dcda0c659166ce280e3ca1f1c04ddb43141e2ea1bd6b595f06b20f79c1f5b",
+    "size_before": 0,
+    "size_after": 1186,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/run.c",
+    "before": "da87cdc1feee122ebae9de11400571286ca466a7009ac218aed56ebf9f0755a1",
+    "after": "3cf3f6401041656eb800696278a75388b5d959730200b121b65bad7d7d221f82",
+    "size_before": 44066,
+    "size_after": 45711,
+    "encodings": [
+      "utf-8"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h",
+    "before": "4719aa419c5c0f06b842b679ca7cdce9520d4ed821c4584f9ec46cfd4d5c1bcc",
+    "after": "b15e8ed63dd493c7703f1ae79f8e90dee4eceab71e83d2855aacff9b2b34cd18",
+    "size_before": 17936,
+    "size_after": 19464,
+    "encodings": [
+      "utf-8",
+      "gbk"
+    ]
+  },
+  {
+    "file": "GD32-HID/GD32-HID/tools/daplink_manager.py",
+    "before": "4717839ecf3fb45cb6e98326f1ce3bc759476ae46072bac0d3ff700b126d815a",
+    "after": "0eab543df6343d566e425e4eea7708f637f03e3542cdb8bffa017788a0bbdd21",
+    "size_before": 57335,
+    "size_after": 65496,
+    "encodings": [
+      "utf-8"
+    ]
+  }
+]

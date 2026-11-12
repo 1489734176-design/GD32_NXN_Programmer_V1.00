@@ -1,0 +1,47 @@
+[
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.c",
+    "sha256": "ce2f3134eca4d597f178b302cfceaa5e1cfe0fce0393db9d5c9502ff8539e44b",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota.h",
+    "sha256": "f334544c2063344347efa0f178ebb4494ca71454812e00558d0f2783f814adc7",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_port.c",
+    "sha256": "9d9cad5e28c0af8dd60086076587a8b472cac4c6ddf965da98b4c3264ad9e749",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_catalog.c",
+    "sha256": "07099647cda0ba49ae4d8579530fb8198f49d9b3c23b1327a6f23b55b6b2cf82",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_mirror.c",
+    "sha256": "e84466344f2a1d01b81a99828977e925bcd84911c52371971cecafce2940e0ad",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/burn_quota_mirror.h",
+    "sha256": "029b1072ae39e3d80298bb9685f983314acdd818a7d5ab6247c2735dcf901916",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/quota_auth.c",
+    "sha256": "9e5f1506ed4804dabaebdc3239fee50687ad6aaf352d324c5fcc41d61ea67ea9",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/USER/APP/quota_auth.h",
+    "sha256": "5252f0273baacb948ff9f46fa66cccb99a8b67b9c1998a93dbe4d15082e64175",
+    "encoding": "utf-8"
+  },
+  {
+    "file": "GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx",
+    "sha256": "dfd2d6f198632d8b38d4b7bf1ffc8daaeda79339df3e9ff6da726a9a32ef48fd",
+    "encoding": "utf-8"
+  }
+]

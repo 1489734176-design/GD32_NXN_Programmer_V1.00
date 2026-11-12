@@ -1,0 +1,170 @@
+{
+  "release": "ui-optimizations-success-count",
+  "hardware_tested": false,
+  "application_base": "0x800c000",
+  "image_end_exclusive": "0x801ca00",
+  "rw_iram1_bytes": 19736,
+  "ram_limit_bytes": 20480,
+  "axf_sha256": "3b2076b939110fd13f0cc60d90f8c9da39384f77e4e025a7c1590fb221f7559d",
+  "build_errors": 0,
+  "build_warnings": 0,
+  "main_screen_groups": 7,
+  "chooser_groups": 7,
+  "application_groups": 14,
+  "host_tests": 17,
+  "quota_fault_cases": 724,
+  "alignment_passed": true,
+  "source_files": {
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.c": "85e493f38ce69099e3325395a0b44f3352f70ee6d1457de97925441c3bc6a63f",
+    "GD32-HID/GD32-HID/USER/APP/burn_quota.h": "d701317a652fa458536293a5393f7f0368af854aa7109677a2ac9512f9f71776",
+    "GD32-HID/GD32-HID/USER/APP/run.c": "67bb0d9d4c2356c35b5e91599c3b57dbcb5d85f902ccc90b5bd75ba41f9a64c3",
+    "GD32-HID/GD32-HID/USER/APP/run.h": "46cd0c31a14e30e0229cd32b44c84160f1088e32084dc081da8186fe024ff4a9",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.c": "fafcb941882acb1f2f57a67c37176531c6ea22e634e813eed9799d7396611267",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_oled.h": "17b4d5b7e2cca0b4a517b08bae576d9cf507fa3cb2287bd050bb9b05e736b34a",
+    "GD32-HID/GD32-HID/USER/BSP/ui_chinese_font.h": "f5390c3ab9bcaf721a86ebe84a1aff4523f86eb8fc74a294596679bb6bb4b9e2",
+    "GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c": "d44ece33a68b84030c138b9c1d85e0be8bb513d19c4fd0edfd0e95be12c41d99",
+    "GD32-HID/GD32-HID/tools/daplink_manager.py": "401868a69881aab9824f0939158511565b8e469bd6b3da69fefa0e8d384a1b0c",
+    "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c": "302140df0e645111feb562dd12121a3506c342738aa26ea01f479aa6d7b985e2"
+  },
+  "test_files": {
+    "finish_test_inventory.py": "8b7606ab06237523707dd5b5789db16e730e88a0e460e794bca2411ef10923ef",
+    "package_release.py": "5fe638e78c6cbfa33ec82f09524258f9e8d3a564e78c04c91054a377614a087e",
+    "prepare.py": "94fe6ed94564c4b8948af105e4b1a7349c85f8c89b23a6fb983faecfcfb9b861",
+    "run_application_regression.py": "3f7067ad7821d3a8bc980e65f8fd98a4ea65f9beae075122a1f4af1dd477e39c",
+    "test_algorithm_alignment.py": "c6fa58a683f8a2eb978ab1fa4f4c88c56d3ce302597bdb2914d43e49575db2d3",
+    "test_portrait_ui.py": "c60e87e3bdc0c64b934a14d4c663dc1c082baae298ae8401b54e6e626b322196",
+    "host/daplink_manager.original.py": "ff46ac0e09e6adbf577cce41816bdfe184a75b43d22fbeac0f122741c7c5bdd3",
+    "host/test_host_refresh.py": "2cc93a575cf13a30f7ac0e550226ff66c2731f364b89345becaaba004788d846",
+    "host/test_usb_import.py": "114b84fdec768d0a0c88b6c41fe129da21e796f423a90aa054635b9c0491a242",
+    "quota/fixture.py": "f738dfa7346f7aa84077ad520dcfac8530a6c654af44e0d0e8f14ef0f09ea737",
+    "quota/make_report.py": "ff0db82ed8d8c8940380078cb9236c38f950c29d556bffa7a29a914bbdc5e56b",
+    "quota/review_checks.py": "6823f1e593f347d3d3eca47a473fccd0c15e811e5dc66e1de0af1e258a4837c6",
+    "quota/test_catalog_regression.py": "7a9dc304f3ce8a0e910ebdec1ff0e71d80bdbcd8cc6917f59aea2acfe29b0d5f",
+    "quota/test_commit_faults.py": "75945b6187bf4cc4bedd5b800fee1afbd2b2bdad94154021272ee3bea7a48ba6",
+    "quota/test_regression.py": "c09866573f77338f4876dce0bd7cc552f13d71f30588669820b8aaf0b6c98d0d",
+    "quota/test_reimport_faults.py": "06a77ebbde162900984b48683e042b404868c00d9888afb23b8175e41c2e6250",
+    "quota/test_success_commit.py": "ea833560a63e0c1f76ee26112eae47c2232e5db78b90f6e7fc4857f4656c89b1",
+    "task/ui/add_glyphs.py": "5d6cfe92834bffe89bda79bf2879db5457ea68d760a4ca6cf1d82188c54def2a",
+    "task/ui/preview_chooser.py": "03d25136ed65fed1cc402eca3326f1a1f9fb716f721d2b19772654222e6a2c21",
+    "task/ui/review_checks.py": "f32afbf5a2b9a798b5ef08219e9f2618b06c0b363bb0d476acc972f73c985a9b",
+    "task/ui/test_ui_chooser.py": "565741a1722483116e02dd023935e847f8e19ea3d2bba2fd03a738853385eff7"
+  },
+  "files": {
+    "chooser-preview.png": {
+      "bytes": 16605,
+      "sha256": "a3a75bfb17c1c53b38d1de96ec5333a9cda3ec897dddf52ef327664f58196492"
+    },
+    "DAPlink.bin": {
+      "bytes": 68096,
+      "sha256": "d6097d058f062597e0b5d660f8c8e88b702943136d21504ae6e003c148e13ca4"
+    },
+    "DAPlink.hex": {
+      "bytes": 191588,
+      "sha256": "a197060cf71f597d7880cfce4606b32a4ab565624c5378e061664e3972f268ed"
+    },
+    "README.txt": {
+      "bytes": 1892,
+      "sha256": "0e9a9fd232a406678fb2127e31fa5ca7bc5c28ba0bd771367a5d02e3b0072574"
+    },
+    "screen-preview.png": {
+      "bytes": 14934,
+      "sha256": "ece23f7bf867d9c8d886db014a3c8ef0134cd0bc418f7a20acc6f1f9a3166544"
+    },
+    "verification/alignment.json": {
+      "bytes": 854,
+      "sha256": "49c43bbff6aad8200823853451286b650acde7e9a60c40f08062e4cf3916e114"
+    },
+    "verification/application.json": {
+      "bytes": 1548,
+      "sha256": "c2baaee5392cb74daf79c4e5005e36388085874b2a722d3bfa096e0d9d134a94"
+    },
+    "verification/build.log": {
+      "bytes": 2654,
+      "sha256": "6de505da8e7d5c1dc7c5fd1540869f218ec90e2d0cea58d32b020c8f77457c07"
+    },
+    "verification/chooser-red.json": {
+      "bytes": 1237,
+      "sha256": "897d4cab71594777a2edbb0c681d43b1028b418c6203fe9b73ecc8e05104ff6e"
+    },
+    "verification/chooser.json": {
+      "bytes": 617,
+      "sha256": "cd4edc1873dd5f70c6c3d4c6841d5d94fb86ee86a960fc36eb24255a143c4067"
+    },
+    "verification/host-refresh.json": {
+      "bytes": 193,
+      "sha256": "882409a653c297bc8427bea2c5e5ec6a702db63a76ee2762be0a15f747a40e3b"
+    },
+    "verification/host-refresh.log": {
+      "bytes": 2622,
+      "sha256": "282e2f6ed31c8fd53359cb20cdc9a18c528e0b22af8ec1509ae6ac18a096d153"
+    },
+    "verification/host.diff": {
+      "bytes": 1258,
+      "sha256": "cd90f4472738bbc8e83001b71486b3407272cf26a55f1b894e89843ff23f1e6c"
+    },
+    "verification/main-screen.json": {
+      "bytes": 439,
+      "sha256": "2fa47b357ca161a9636f2f03166e093766ed1dde9f4c522727e1735c5c24e6ae"
+    },
+    "verification/quota-catalog.json": {
+      "bytes": 1128,
+      "sha256": "8f15ae7083e113ba70594d44d1197225e4a2746359e757776f0676f0484a9f1c"
+    },
+    "verification/quota-independent.json": {
+      "bytes": 1130,
+      "sha256": "da8d153c60f646498a08bfd3b3c2c9f1738588481375f25d59ad55de243ecfa9"
+    },
+    "verification/quota-regression.json": {
+      "bytes": 3901,
+      "sha256": "b12418ef81a7030e6cb574e31468dcce19db00dbdd3540fcf4ad944bdeb41975"
+    },
+    "verification/quota-reimport-faults.json": {
+      "bytes": 908,
+      "sha256": "bcf542b4ce28402799c9e0f5e2ba1057716ebaf188aed230be00e38136858a83"
+    },
+    "verification/quota-report.md": {
+      "bytes": 3711,
+      "sha256": "e59c05dc8354d593587af48761b7c0212ff862b41f96742b46b7bbafacce2ca1"
+    },
+    "verification/quota-review.md": {
+      "bytes": 3922,
+      "sha256": "f53191b2abb8a7e2eef9fd024e753b9081c525bf70b957c31b966d9183e4ce7b"
+    },
+    "verification/quota-success-faults.json": {
+      "bytes": 1821,
+      "sha256": "80a40b08d2df8f062c790ce00ac3f6fc9cd6dc0aba090add94276003aa439c11"
+    },
+    "verification/quota-success.json": {
+      "bytes": 773,
+      "sha256": "52cf35afb02404fdc7df1f73bdbb8c7837bb48b92a6d7ec553e806be6d77bb8e"
+    },
+    "verification/quota.diff": {
+      "bytes": 4223,
+      "sha256": "0130f50a54d051b024736a4faeff92804b224beeeab0056dfeeb9f9f618c7471"
+    },
+    "verification/ui-independent.json": {
+      "bytes": 665,
+      "sha256": "4b12eb04372a028e9034282315afbdf21d8ff0dce0b78d0e56d5d74b82c5b6ee"
+    },
+    "verification/ui-report.md": {
+      "bytes": 3412,
+      "sha256": "33c6c3bde5d24da50dda3c9c192a3840c92f334ecbde9e0fe4e2aef5383d722c"
+    },
+    "verification/ui-review.md": {
+      "bytes": 4071,
+      "sha256": "7ab2bdc8bdf118d9fa9eb62ed64a3ad0e6b07af4742c43d99041d79cf68c95f2"
+    },
+    "verification/ui.diff": {
+      "bytes": 20843,
+      "sha256": "41f3c032f2f314c2b81c5a48d79e8bfa94a43fc9b6d93fd5e320cb5b6018677f"
+    },
+    "verification/usb-import-report.md": {
+      "bytes": 2460,
+      "sha256": "251fc9f2507af14a9689b6d80a25025e7433a1b585b90a48affa4cb6aa982a47"
+    },
+    "verification/usb-import.json": {
+      "bytes": 1627,
+      "sha256": "f904f2ba1bad125812ef65b55ecdf924646ee651875679b2ca5212287028596a"
+    }
+  }
+}

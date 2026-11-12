@@ -1,0 +1,94 @@
+{
+  "baseline": {
+    "code": 49468,
+    "ro": 11068,
+    "rw": 852,
+    "zi": 19212,
+    "ram": 20064,
+    "rom": 60908
+  },
+  "offline": {
+    "code": 40696,
+    "ro": 11792,
+    "rw": 740,
+    "zi": 15772,
+    "ram": 16512,
+    "rom": 52816
+  },
+  "online": {
+    "code": 49948,
+    "ro": 11864,
+    "rw": 852,
+    "zi": 18228,
+    "ram": 19080,
+    "rom": 62184
+  },
+  "boot": {
+    "code": 26204,
+    "ro": 6312,
+    "rw": 444,
+    "zi": 15044,
+    "ram": 15488,
+    "rom": 32716
+  },
+  "ram_saved": 3552,
+  "rom_saved": 8092,
+  "image_size": 52816,
+  "sha256": "e28210a1040048a84dcde42007ae130cc5115f6325275ea0ea26ab6e3908d3b7",
+  "config_descriptor_size": 115,
+  "interface_numbers": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "online_symbols_removed": [
+    "DAP_ProcessCommand",
+    "DAP_ExecuteCommand",
+    "DAP_Thread",
+    "DAP_TransferAbort",
+    "USB_Request",
+    "USB_Response",
+    "USB_Request_len",
+    "USB_Response_len",
+    "USBD_HID0_SetReport",
+    "custom_hid_class",
+    "customhid_report_descriptor",
+    "hid_handler",
+    "UsbTask_Handler",
+    "EventGroupHandle",
+    "xEventGroupCreate",
+    "xEventGroupWaitBits",
+    "xTimerCreateTimerTask",
+    "prvTimerTask"
+  ],
+  "offline_symbols_preserved": [
+    "DAP_Data",
+    "DAP_Setup",
+    "SWD_Transfer",
+    "SWJ_Sequence",
+    "swd_init",
+    "target_opt_program_ext",
+    "custombulk_class",
+    "custombulk_prepare_service",
+    "custombulk_take_prepare_complete",
+    "cdc_class",
+    "mode2",
+    "mode3",
+    "mode4",
+    "run_task",
+    "key_task"
+  ],
+  "heap": {
+    "size": 6144,
+    "tcb_size": 92,
+    "initial_task_allocations": 5576,
+    "estimated_initial_free": 560,
+    "note": "Calculated from compiled structure size and task allocations, not measured on hardware."
+  },
+  "vectors": {
+    "initial_sp": "0x20003ff0",
+    "reset": "0x800c1b5"
+  },
+  "hardware_tested": false
+}

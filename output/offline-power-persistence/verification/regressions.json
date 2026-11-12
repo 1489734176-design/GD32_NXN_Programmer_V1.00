@@ -1,0 +1,607 @@
+{
+  "passed": true,
+  "image": {
+    "offline.axf": {
+      "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+      "size": 761908,
+      "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+    },
+    "offline.bin": {
+      "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+      "size": 59860,
+      "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+    },
+    "offline.map": {
+      "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+      "size": 455514,
+      "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+    }
+  },
+  "image_unchanged": true,
+  "historical_files_checked": 115,
+  "historical_files_changed": [],
+  "results": [
+    {
+      "test": "quota_arm",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_quota_arm.py",
+      "description": "真实额度Flash日志、999次精确计数与掉电/写入故障",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 7.266,
+      "output": "PASS Fresh device is unlimited\r\nPASS 100 -> 099, durable success, duplicate begin/settings blocked\r\nPASS Detected programming failure refunds once\r\nPASS Repeated finish never refunds twice\r\nPASS Exactly 100 successes, 101st denied including after reboot\r\nPASS Unlimited/zero/max settings and invalid inputs\r\nPASS Power interruption after reservation retains deduction\r\nPASS Every word boundary/torn word during reserve: no extra credit\r\nPASS Rollover erase/program interruption preserves committed count or blocks\r\nPASS Storage write failures prevent target programming\r\nPASS Interrupted refund never increases above original count\r\nPASS CRC damage fails closed and explicit PC reset repairs journal\r\nPASS 999 successes with failures/reboots/page rotations have exact accounting\r\nTotal fault cases 50\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "quota_arm",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_quota_arm.py",
+        "description": "真实额度Flash日志、999次精确计数与掉电/写入故障",
+        "passed": true,
+        "elapsed_seconds": 7.125,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 148,
+          "offline.map": 0
+        },
+        "source_reads": {},
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\quota-arm-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\quota_arm\\2026-10-23-disable-online-debug\\quota-arm-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "checksum_device",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_checksum_device.py",
+      "description": "SUM32准备协议、短读/缺失OPT/复位/上传失败与取消",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 6.937,
+      "output": "PASS legacy_checksum_response\r\nPASS expected_and_opt\r\nPASS failed_file_preparation\r\nPASS reset_during_prepare\r\nPASS failed_upload_close_cannot_prepare\r\nPASS incomplete_upload_close_cannot_prepare\r\nPASS changed_files_signal\r\nPASS checksum_lifecycle_and_read_close\r\nPASS malformed_expected_requests\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "checksum_device",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_device.py",
+        "description": "SUM32准备协议、短读/缺失OPT/复位/上传失败与取消",
+        "passed": true,
+        "elapsed_seconds": 6.813,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 25,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+            "size": 9429,
+            "sha256": "814b21519cae33e2a5f7aebce2f8b5bb58954ffe9a56d0862b620c45ee4dd632"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          }
+        },
+        "redirected_outputs": {},
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "checksum_lcd",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_checksum_lcd.py",
+      "description": "SUM32像素、主任务提交、固件列表切换与失效",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 7.235,
+      "output": "PASS 有效00000000/前导零/FFFFFFFF及3页16px行逐像素正确且不覆盖D\r\nPASS 末位改变仅更新1字符；失效后清旧值显示--------\r\nPASS 自动/手动布局保留次数16px，Checksum完整显示，同页无变化不写LCD\r\nPASS 真实主任务提交回传SUM32与文件名；先消费变更再提交；失败清旧值且不扣次数\r\nPASS 文件列表切换/空目录清旧Checksum，选择相同程序保留校验值\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "checksum_lcd",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_lcd.py",
+        "description": "SUM32像素、主任务提交、固件列表切换与失效",
+        "passed": true,
+        "elapsed_seconds": 7.109,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 3,
+          "offline.bin": 31,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+            "size": 9429,
+            "sha256": "814b21519cae33e2a5f7aebce2f8b5bb58954ffe9a56d0862b620c45ee4dd632"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_device.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_device.py",
+            "size": 14350,
+            "sha256": "2cf5b668df8ce5326f493a5d0fea68da385f7e920b28bd179c20ac8c73f5ad0f"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_list_reset.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_list_reset.py",
+            "size": 3008,
+            "sha256": "aa763619157fc227fe6be516927574822f985c4cf81df8eb48747dc3bfc9598c"
+          }
+        },
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\auto-checksum.png": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\checksum_lcd\\2026-10-23-disable-online-debug\\auto-checksum.png",
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\manual-checksum.png": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\checksum_lcd\\2026-10-23-disable-online-debug\\manual-checksum.png",
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\checksum-lcd-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\checksum_lcd\\2026-10-23-disable-online-debug\\checksum-lcd-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "import_quota_device",
+      "source": ".planning\\2026-10-27-import-quota\\test_device.py",
+      "description": "stage锁内重载100/0/999/不限、持久化、保存失败",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 7.078,
+      "output": "PASS 99→导入stage锁→0E加载100持久→prepare477→LCD100，重复导入均恢复\r\nPASS 0/999/不限保存与导入一致；0禁止烧录，导入不扣次数\r\nPASS 真实烧录/文件仍打开时SET返回BUSY，不提交程序\r\nPASS Flash第1/4/8字保存失败：stage仍阻止自动开始，取消后不提交\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "import_quota_device",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-27-import-quota\\test_device.py",
+        "description": "stage锁内重载100/0/999/不限、持久化、保存失败",
+        "passed": true,
+        "elapsed_seconds": 6.907,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 17,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_device.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_checksum_device.py",
+            "size": 14350,
+            "sha256": "2cf5b668df8ce5326f493a5d0fea68da385f7e920b28bd179c20ac8c73f5ad0f"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+            "size": 9429,
+            "sha256": "814b21519cae33e2a5f7aebce2f8b5bb58954ffe9a56d0862b620c45ee4dd632"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          }
+        },
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-27-import-quota\\device-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\import_quota_device\\2026-10-27-import-quota\\device-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "partial_refresh",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+      "description": "待机/进度局刷与烧录期间文件互斥",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 0.328,
+      "output": "PASS repeated_standby\r\nPASS repeated_progress\r\nPASS busy_file_access\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "partial_refresh",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+        "description": "待机/进度局刷与烧录期间文件互斥",
+        "passed": true,
+        "elapsed_seconds": 0.187,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 3,
+          "offline.map": 0
+        },
+        "source_reads": {},
+        "redirected_outputs": {},
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "partial_details",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+      "description": "字符逐像素局刷、温度/次数区域、USB延后与导入连接",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 3.594,
+      "output": "PASS 16/32像素字符、变短/变长/换行/中英文交替的增量绘制与新页面逐像素一致\r\nPASS 空目录提示切换为16像素文件行时清除旧字段超出的边缘\r\nPASS 温度变化只写底部温度字段，未变化采样不写LCD\r\nPASS 099→098只绘制末位数字，文件名/标题/温度均不重画\r\nPASS USB OUT中断不执行FatFs，主任务执行后应答，IN结束后解除忙状态\r\nPASS 烧录期间文件指令返回忙，状态查询保留，回到待机后文件指令恢复\r\nPASS 导入含OPT文件后直接进入烧录页，额度不变且USB可立即查询状态\r\nPASS 导入取消后释放待机暂停状态\r\nPASS USB断线回调不关闭文件，主任务关闭并释放传输状态\r\nPASS 编译镜像已移除一级模式菜单和文件传输页面\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "partial_details",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+        "description": "字符逐像素局刷、温度/次数区域、USB延后与导入连接",
+        "passed": true,
+        "elapsed_seconds": 3.469,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 37,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          }
+        },
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\auto-standby-partial.png": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\partial_details\\2026-10-23-disable-online-debug\\auto-standby-partial.png",
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\manual-selection-partial.png": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\partial_details\\2026-10-23-disable-online-debug\\manual-selection-partial.png",
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\partial-refresh-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\partial_details\\2026-10-23-disable-online-debug\\partial-refresh-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "partial_result_usb",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_partial_result_usb.py",
+      "description": "完整手动烧录后结果页允许USB次数查询",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 11.703,
+      "output": "PASS manual completed result allows USB quota without leaving result page\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "partial_result_usb",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_result_usb.py",
+        "description": "完整手动烧录后结果页允许USB次数查询",
+        "passed": true,
+        "elapsed_seconds": 11.578,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 1,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_opt_burn_flow.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_opt_burn_flow.py",
+            "size": 5391,
+            "sha256": "20b95d421349f454c814957ea73745ed69f70ee6cee319bb9ed878a64a89cc6c"
+          }
+        },
+        "redirected_outputs": {},
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "partial_cancel",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_partial_cancel.py",
+      "description": "失败导入取消关闭文件并解除busy",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 0.312,
+      "output": "PASS failed import cancellation closes pending file and releases busy\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "partial_cancel",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_cancel.py",
+        "description": "失败导入取消关闭文件并解除busy",
+        "passed": true,
+        "elapsed_seconds": 0.172,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 1,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+            "size": 9429,
+            "sha256": "814b21519cae33e2a5f7aebce2f8b5bb58954ffe9a56d0862b620c45ee4dd632"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          }
+        },
+        "redirected_outputs": {},
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "startup",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_partial_startup.py",
+      "description": "真实主任务首屏与后台USB连接",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 0.172,
+      "output": "PASS first page is automatic standby; USB connected before first page\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "startup",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_startup.py",
+        "description": "真实主任务首屏与后台USB连接",
+        "passed": true,
+        "elapsed_seconds": 0.063,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 1,
+          "offline.map": 0
+        },
+        "source_reads": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_details.py",
+            "size": 9429,
+            "sha256": "814b21519cae33e2a5f7aebce2f8b5bb58954ffe9a56d0862b620c45ee4dd632"
+          },
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_partial_refresh.py",
+            "size": 3347,
+            "sha256": "9ce108ed2a04f3c4fb7d5f0cc360b48c100f41701a351a4729f4f947b495c9e2"
+          }
+        },
+        "redirected_outputs": {},
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "opt_burn_flow",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_opt_burn_flow.py",
+      "description": "完整OPT保护/解除保护流程、缺失OPT失败退款",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 28.047,
+      "output": "PASS encrypted OPT completes without file-path corruption and consumes exactly one count\r\nPASS unprotected OPT completes without file-path corruption and consumes exactly one count\r\nPASS Actually missing OPT still fails and refunds the reserved count\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "opt_burn_flow",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_opt_burn_flow.py",
+        "description": "完整OPT保护/解除保护流程、缺失OPT失败退款",
+        "passed": true,
+        "elapsed_seconds": 27.906,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 3,
+          "offline.map": 0
+        },
+        "source_reads": {},
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\opt-burn-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\opt_burn_flow\\2026-10-23-disable-online-debug\\opt-burn-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    },
+    {
+      "test": "quota_integration",
+      "source": ".planning\\2026-10-23-disable-online-debug\\test_quota_integration.py",
+      "description": "USB次数指令冲突及手动/自动0次禁止目标操作",
+      "passed": true,
+      "exit_code": 0,
+      "elapsed_seconds": 0.266,
+      "output": "PASS SET defers all Flash writes to task service, exact 8-byte response\r\nPASS GET exact version/flags/LE32 packet\r\nPASS Malformed/range/disabled-count requests rejected\r\nPASS Burn/file/prepare/pending conflicts and service-time race blocked\r\nPASS Zero manual/auto quota renders failure/reason/000 and performs no target operation\r\nCURRENT IMAGE 42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a\r\n",
+      "trace": {
+        "test": "quota_integration",
+        "source": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\test_quota_integration.py",
+        "description": "USB次数指令冲突及手动/自动0次禁止目标操作",
+        "passed": true,
+        "elapsed_seconds": 0.156,
+        "image": {
+          "offline.axf": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.axf",
+            "size": 761908,
+            "sha256": "388e658a7159b193345f3c9a1148a356a3ff646343d561c6701b9add960f2fc8"
+          },
+          "offline.bin": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.bin",
+            "size": 59860,
+            "sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a"
+          },
+          "offline.map": {
+            "path": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\offline.map",
+            "size": 455514,
+            "sha256": "a0f391460d11de87ab15dbf729d951113be24a846bf969648b80ace9def87424"
+          }
+        },
+        "image_unchanged": true,
+        "redirected_image_reads": {
+          "offline.axf": 1,
+          "offline.bin": 3,
+          "offline.map": 0
+        },
+        "source_reads": {},
+        "redirected_outputs": {
+          "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-23-disable-online-debug\\quota-integration-verification.json": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-28-power-persistence\\regression-reports\\quota_integration\\2026-10-23-disable-online-debug\\quota-integration-verification.json"
+        },
+        "failure": null,
+        "hardware_tested": false
+      }
+    }
+  ],
+  "skipped": [
+    {
+      "test": ".planning\\2026-10-23-disable-online-debug\\test_partial_list_reset.py",
+      "reason": "完整list_change默认head=0并验证算法列表，已被本轮删除的菜单替代；checksum_lcd仍复用Directory类，以head=1检查固件列表。USB底层复位另由checksum_device覆盖。"
+    },
+    {
+      "test": ".planning\\2026-10-23-disable-online-debug\\verify_image.py",
+      "reason": "绑定历史多层source-manifest与旧产物，不能作为本轮源文件及镜像验证；由本轮独立镜像验证处理。"
+    }
+  ],
+  "hardware_tested": false
+}

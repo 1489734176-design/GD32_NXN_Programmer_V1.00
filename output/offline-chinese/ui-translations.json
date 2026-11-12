@@ -1,0 +1,337 @@
+[
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "FATFS FAIL",
+    "new": "文件系统异常"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "LOGO OK",
+    "new": "图标已加载"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "LOGO FAIL",
+    "new": "图标加载失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "USB files",
+    "new": "文件传输"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "File transfer",
+    "new": "文件传输"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "PC: send files",
+    "new": "电脑传输文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "MID: offline",
+    "new": "中键进入烧录"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "File:%2d%% \\0",
+    "new": "文件:%2d%%"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "AUTO:NO FILE",
+    "new": "自动:未选文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "AUTO:WAIT CHIP",
+    "new": "自动:等待芯片"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "AUTO:BURNING...",
+    "new": "自动:正在烧录"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "AUTO:OK",
+    "new": "自动:烧录成功"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "AUTO:FAIL",
+    "new": "自动:烧录失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "REMOVE CHIP",
+    "new": "请取出芯片"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ALG:%.17s",
+    "new": "算法:%.16s"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "BIN:%.17s",
+    "new": "固件:%.16s"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "R-long:MANU",
+    "new": "长按右键:手动"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Connecting...",
+    "new": "正在连接芯片"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "DIS: CPU busy",
+    "new": "芯片无法暂停"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "DIS: SWD failed",
+    "new": "SWD连接失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER0: Algo open",
+    "new": "ER0:算法打开失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Loading algorithm...",
+    "new": "正在加载算法"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER1: Algo read",
+    "new": "ER1:算法读取失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Erasing...",
+    "new": "正在擦除芯片"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Re-init...",
+    "new": "正在重新初始化"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER7: Re-init",
+    "new": "ER7:重新初始化失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Erase error: %04X",
+    "new": "擦除失败:%04X"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER2a: Reset/halt",
+    "new": "ER2a:复位暂停失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER2b: SRAM write",
+    "new": "ER2b:SRAM写入失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER2c: Algo init",
+    "new": "ER2c:算法初始化失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER2?: err=%u",
+    "new": "ER2:错误=%u"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER3: Erase failed",
+    "new": "ER3:擦除失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Programming...",
+    "new": "正在烧录固件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER6: Program failed",
+    "new": "ER6:烧录失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER5: Firmware read",
+    "new": "ER5:固件读取失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Verifying...",
+    "new": "正在校验固件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Verify OK",
+    "new": "固件校验通过"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Verify failed (FW)",
+    "new": "固件校验失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Programming OPT...",
+    "new": "正在写入OPT"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT OK",
+    "new": "OPT写入完成"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT program failed",
+    "new": "OPT写入失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT read failed",
+    "new": "OPT读取失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT file missing",
+    "new": "缺少OPT文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Verifying OPT...",
+    "new": "正在校验OPT"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Reading OPT file...",
+    "new": "正在读取OPT文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT OK (locked)",
+    "new": "OPT完成并已锁定"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "Checking OPT...",
+    "new": "正在检查OPT"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT read fail",
+    "new": "OPT读取失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT verify OK",
+    "new": "OPT校验通过"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT verify read error",
+    "new": "OPT校验读取失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "OPT verify file error",
+    "new": "OPT校验文件异常"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "FW OK, OPT failed",
+    "new": "固件完成,OPT失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "SUC, OPT=BAD",
+    "new": "烧录完成,OPT异常"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "SUC: OK (locked)",
+    "new": "烧录成功,已加密"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "SUC: Program OK",
+    "new": "烧录成功"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "ER4: Firmware open",
+    "new": "ER4:固件打开失败"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "No file selected",
+    "new": "请先选择文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "No files",
+    "new": "没有文件"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "DIS",
+    "new": "断开"
+  },
+  {
+    "project": "GD32-HID/GD32-HID",
+    "old": "CON",
+    "new": "连接"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "FATFS FAIL",
+    "new": "文件系统异常"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "BIN LOG FAIL",
+    "new": "更新文件信息异常"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "BIN FAIL",
+    "new": "未找到更新文件"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "APP UPDATE",
+    "new": "正在更新程序"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "LOG INIT",
+    "new": "初始化更新记录"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "LOG FAIL",
+    "new": "更新记录异常"
+  },
+  {
+    "project": "Bootloader/Bootloader",
+    "old": "FLASH UPDATE FAIL",
+    "new": "程序更新失败"
+  }
+]

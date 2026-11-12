@@ -1,0 +1,14 @@
+{
+  "screen": [
+    320,
+    240
+  ],
+  "chinese_pixels": 32,
+  "filename_pixels": 16,
+  "static_prompts_checked": 57,
+  "max_filename_bytes": 31,
+  "screen_count": 8,
+  "clipped": 0,
+  "source": "Actual C font tables and UI coordinates",
+  "hardware_tested": false
+}

@@ -1,0 +1,15 @@
+{
+  "protocol": "0D/0E version1 LE32",
+  "checks": [
+    "packet validation",
+    "100/099/000 zero padding",
+    "unlimited",
+    "fault response",
+    "worker save/read",
+    "USB actions locked during settings",
+    "quota controls fit 3 window sizes",
+    "import success keeps connection/list/quota controls",
+    "failed import cancellation packet"
+  ],
+  "hardware_tested": false
+}

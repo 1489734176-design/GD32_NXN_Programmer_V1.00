@@ -1,0 +1,16 @@
+{
+  "image": "D:\\mym\\NXN\\6.Programmer\\DAPlink\\.planning\\2026-10-29-screen-ui",
+  "image_sha256": "1b28692309c108683fa9f74eb525ae8f63d1b1dc25d49b6391f5e29a6dcb214e",
+  "passed": [
+    "inline_chip_colors",
+    "firmware_wrap_and_clear",
+    "sixteen_pixel_text_and_stable_refresh",
+    "color_only_cache_and_selection",
+    "manual_navigation",
+    "rgb565_driver_bytes",
+    "missing_glyph_transition_clears_cell",
+    "empty_chooser_stable_refresh"
+  ],
+  "failed": [],
+  "hardware_tested": false
+}

@@ -1,0 +1,81 @@
+============================================================
+MM32G001 Flash + OPT 一体化烧录算法 - 离线烧录器加载说明
+============================================================
+
+1. 基本信息
+   FLM 文件:     MM32G001-OPT.FLM
+   芯片型号:     MM32SPIN0230 32kB Flash
+   算法 RAM 基址: 0x20000000
+   算法大小:     700B (175 words)
+   最低 RAM 需求: 2048B
+
+2. 主 Flash 参数
+   基址:         0x08000000
+   大小:         0x8000 (32KB)
+   页大小:       1024B
+   编程函数:     ProgramPage @ 0x200001DD
+
+3. OPT (Option Bytes) 参数
+   基址:         0x1FFFF800
+   大小:         16 字节 (8 个半字)
+   编程函数:     ProgramOpt @ 0x20000233
+
+4. OPT 字节布局 (MM32G001)
+   偏移    内容       说明
+   0x00    RDPRT      读保护 (0x5AA5=解除保护)
+   0x02    DATA0      用户数据 0
+   0x04    DATA1      用户数据 1
+   0x06    WRP0       写保护 0
+   0x08    WRP1       写保护 1
+   0x0A    WRP2       写保护 2
+   0x0C    WRP3       写保护 3
+   0x0E    保留       -
+
+5. BIN 文件格式 (扩展结构 program_target_ext_t)
+   头部字段数:   17 (标准14 + OPT扩展3)
+   头部大小:     68 bytes
+   算法码大小:   700 bytes
+   BIN 总大小:   768 bytes
+
+   字段布局:
+   [ 0] init
+   [ 1] uninit
+   [ 2] erase_chip
+   [ 3] erase_sector
+   [ 4] program_page (主Flash)
+   [ 5] breakpoint
+   [ 6] static_base
+   [ 7] stack_pointer
+   [ 8] program_buffer
+   [ 9] algo_start
+   [10] program_buffer_size
+   [11] flash_addr (主Flash基址)
+   [12] flash_size (主Flash大小)
+   [13] algo_size
+   [14] opt_program (OPT编程函数)
+   [15] opt_addr (OPT基址 = 0x1FFFF800)
+   [16] opt_size (OPT大小 = 16)
+   [17+] algo_blob (算法机器码)
+
+6. 离线烧录器加载步骤
+   a) 将 .bin 文件复制到离线烧录器的算法目录
+   b) 在烧录器配置中选择此算法文件
+   c) 离线烧录器从 BIN 头部读取所有参数, 自动识别:
+      - 标准 14 字段 → 主 Flash 编程 (ProgramPage)
+      - 扩展 3 字段 → OPT 编程 (ProgramOpt)
+   d) 配置待烧录的主 Flash 数据和 OPT 数据
+   e) 执行烧录 (先主 Flash, 后 OPT)
+
+7. 源文件位置
+   FLM 文件:     MM32G001-OPT.FLM
+   FLM C 源代码: D:\电机\DAPlink\_Template-opt\
+     FlashPrg.c  — Flash/OPT 编程实现
+     FlashDev.c  — FlashDevice 设备描述
+     FlashOS.h   — CMSIS 算法接口定义
+     FlashStk.s  — 栈配置 (STACK_SIZE=0x64)
+
+8. 注意事项
+   - ProgramOpt 函数内部包含 OPT 块擦除步骤, 烧录前自动擦除
+   - 烧录错误的 OPT 值 (尤其是 RDPRT) 可能导致芯片锁定
+   - 解除读保护: RDPRT = 0x5AA5
+   - 算法在 RAM (0x20000000) 中执行, 不掉电

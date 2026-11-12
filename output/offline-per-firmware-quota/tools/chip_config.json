@@ -1,0 +1,241 @@
+{
+  "MM32G0001A": {
+    "flash_start": "0x08000000",
+    "flash_end": "0x08003FFF",
+    "page_size": 1024,
+    "page_count": 16,
+    "opt_base": "0x1FFFF800",
+    "opt_size": 16,
+    "opt_words": [
+      {
+        "index": 0,
+        "name": "OPT0",
+        "address": "0x1FFFF800",
+        "fields": [
+          {
+            "name": "RPO",
+            "byte": true,
+            "note": "读保护",
+            "default": 165,
+            "options": [
+              {"label": "读保护关闭 (芯片数据可读)", "value": 165},
+              {"label": "读保护开启 (芯片锁定)",     "value": 127}
+            ]
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "OPT1",
+        "address": "0x1FFFF802",
+        "fields": [
+          {
+            "name": "nRST_STOP",
+            "bit": 1,
+            "default": 1,
+            "options": [
+              {"label": "进入停止模式时不复位", "value": 1},
+              {"label": "进入停止模式时复位",   "value": 0}
+            ]
+          },
+          {
+            "name": "WDG_SW",
+            "bit": 0,
+            "default": 1,
+            "options": [
+              {"label": "软件看门狗", "value": 1},
+              {"label": "硬件看门狗", "value": 0}
+            ]
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "OPT2 (Data0)",
+        "address": "0x1FFFF804",
+        "fields": [
+          {"name": "Data0_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      },
+      {
+        "index": 3,
+        "name": "OPT3 (Data1)",
+        "address": "0x1FFFF806",
+        "fields": [
+          {"name": "Data1_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      },
+      {
+        "index": 4,
+        "name": "OPT4 (WRP0)",
+        "address": "0x1FFFF808",
+        "fields": [
+          {"name": "WRP0_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      }
+    ]
+  },
+  "MM32SPIN0230": {
+    "flash_start": "0x08000000",
+    "flash_end": "0x08007FFF",
+    "page_size": 1024,
+    "page_count": 32,
+    "opt_base": "0x1FFFF800",
+    "opt_size": 16,
+    "opt_words": [
+      {
+        "index": 0,
+        "name": "OPT0",
+        "address": "0x1FFFF800",
+        "fields": [
+          {
+            "name": "RPO",
+            "byte": true,
+            "note": "读保护",
+            "default": 165,
+            "options": [
+              {"label": "读保护关闭 (芯片数据可读)", "value": 165},
+              {"label": "读保护开启 (芯片锁定)",     "value": 127}
+            ]
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "OPT1",
+        "address": "0x1FFFF802",
+        "fields": [
+          {
+            "name": "BOOT0SEL",
+            "bit": 7,
+            "default": 1,
+            "options": [
+              {"label": "BOOT0SEL=1", "value": 1},
+              {"label": "BOOT0SEL=0", "value": 0}
+            ]
+          },
+          {
+            "name": "nBOOT0",
+            "bit": 6,
+            "default": 1,
+            "options": [
+              {"label": "nBOOT0=1", "value": 1},
+              {"label": "nBOOT0=0", "value": 0}
+            ]
+          },
+          {
+            "name": "OBR_nRST",
+            "bit": 5,
+            "default": 1,
+            "options": [
+              {"label": "NRST复用",        "value": 1},
+              {"label": "NRST作PA10 GPIO", "value": 0}
+            ]
+          },
+          {
+            "name": "nBOOT1",
+            "bit": 4,
+            "default": 1,
+            "options": [
+              {"label": "nBOOT1=1", "value": 1},
+              {"label": "nBOOT1=0", "value": 0}
+            ]
+          },
+          {
+            "name": "nRST_STDBY",
+            "bit": 2,
+            "default": 1,
+            "options": [
+              {"label": "进入待机模式时不复位", "value": 1},
+              {"label": "进入待机模式时复位",   "value": 0}
+            ]
+          },
+          {
+            "name": "nRST_STOP",
+            "bit": 1,
+            "default": 1,
+            "options": [
+              {"label": "进入停止模式时不复位", "value": 1},
+              {"label": "进入停止模式时复位",   "value": 0}
+            ]
+          },
+          {
+            "name": "WDG_SW",
+            "bit": 0,
+            "default": 1,
+            "options": [
+              {"label": "软件看门狗", "value": 1},
+              {"label": "硬件看门狗", "value": 0}
+            ]
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "OPT2 (Data0)",
+        "address": "0x1FFFF804",
+        "fields": [
+          {"name": "Data0_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data0_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      },
+      {
+        "index": 3,
+        "name": "OPT3 (Data1)",
+        "address": "0x1FFFF806",
+        "fields": [
+          {"name": "Data1_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "Data1_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      },
+      {
+        "index": 4,
+        "name": "OPT4 (WRP0)",
+        "address": "0x1FFFF808",
+        "fields": [
+          {"name": "WRP0_bit7", "bit": 7, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit6", "bit": 6, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit5", "bit": 5, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit4", "bit": 4, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit3", "bit": 3, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit2", "bit": 2, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit1", "bit": 1, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]},
+          {"name": "WRP0_bit0", "bit": 0, "default": 1, "options": [{"label":"0","value":0},{"label":"1","value":1}]}
+        ]
+      }
+    ]
+  }
+}

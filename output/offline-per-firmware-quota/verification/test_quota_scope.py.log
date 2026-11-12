@@ -1,0 +1,8 @@
+PASS A/B quotas independent across switch, case alias and restart
+PASS Reimport resets only destination; absent legacy firmware unlimited
+PASS Zero blocks, ordinary failure refunds, reboot preserves debit and reservation cannot switch
+PASS Empty selection cannot burn and invalid/aliasing names rejected
+PASS 38 cut/error positions preserve source and destination quotas
+PASS Page rotations retain debit; lost committed catalog blocks rather than unlimited
+PASS BQT1 migration binds only last persisted firmware
+PASS 17 torn first-initialization positions repair only through explicit quota setting

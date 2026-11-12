@@ -1,0 +1,9 @@
+{
+  "executed": "actual boot.axf Thumb start_up/IAP writer",
+  "checks": [
+    "0/7/over-limit update rejected before log/file writes",
+    "Current app and maximum allowed image upgrade preserve both quota pages"
+  ],
+  "maximum_app_bytes": 79872,
+  "hardware_tested": false
+}

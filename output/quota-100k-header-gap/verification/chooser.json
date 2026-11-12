@@ -1,0 +1,12 @@
+{
+  "passed": [
+    "main_coordinates_and_yellow_icons",
+    "twelve_short_and_mixed_capacity",
+    "ordinal_width_nine_to_ten_and_wrap",
+    "highlight_resize_and_top_cache",
+    "busy_shrink_error_and_protected_selection",
+    "filtered_ordinals_confirm_and_usb_return"
+  ],
+  "failed": [],
+  "image_sha256": "ebaba73fcc86ba933d35217e5ccb582e1cd82375937f8be6a123c69b4ff87f28"
+}

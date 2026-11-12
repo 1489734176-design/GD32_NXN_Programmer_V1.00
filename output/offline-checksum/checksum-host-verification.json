@@ -1,0 +1,31 @@
+{
+  "tests": 13,
+  "failures": 0,
+  "errors": 0,
+  "passed": true,
+  "hardware_tested": false,
+  "formula": "所有最终上传主BIN字节相加，取低32位；8位大写十六进制",
+  "vectors": {
+    "00 01 7F 80 FF": "000001FF",
+    "empty": "00000000",
+    "00..FF repeated 257": "007FFF80",
+    "FF repeated 16843010": "000000FE",
+    "HEX 01 at 08001000, 02 at 08001004; BIN 01 FF FF FF 02": "00000300"
+  },
+  "checks": [
+    "__main__.ChecksumHostTests.test_checksum_and_opt_quota_controls_fit_three_window_sizes",
+    "__main__.ChecksumHostTests.test_checksum_arguments_reject_out_of_range_before_usb",
+    "__main__.ChecksumHostTests.test_corrupted_upload_is_not_committed_and_cancels_staged_algorithm",
+    "__main__.ChecksumHostTests.test_expected_checksum_packet_is_little_endian_and_has_opt_flag",
+    "__main__.ChecksumHostTests.test_expected_checksum_requires_exact_matching_five_byte_reply",
+    "__main__.ChecksumHostTests.test_gui_failed_hex_conversion_clears_previous_checksum",
+    "__main__.ChecksumHostTests.test_gui_import_displays_checksum_and_clears_on_start_or_failure",
+    "__main__.ChecksumHostTests.test_hex_conversion_holes_are_part_of_imported_bin_sum32",
+    "__main__.ChecksumHostTests.test_import_sums_all_program_bytes_excludes_opt_and_has_no_tail_padding",
+    "__main__.ChecksumHostTests.test_legacy_reply_does_not_confirm_a_checksum_import",
+    "__main__.ChecksumHostTests.test_old_call_and_old_reply_remain_compatible",
+    "__main__.ChecksumHostTests.test_prepare_response_timeout_allows_device_spi_flash_checksum_read",
+    "__main__.ChecksumHostTests.test_sum32_vectors_cover_empty_multi_chunk_and_unsigned_wrap"
+  ],
+  "failed_tests": []
+}

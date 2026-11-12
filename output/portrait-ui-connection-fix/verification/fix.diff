@@ -1,0 +1,13 @@
+--- before/GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c
++++ after/GD32-HID/GD32-HID/USER/BSP/bsp_gd25qxx.c
+@@ -205,8 +205,8 @@
+ 	};	    
+ } 
+ 
+-/* GD25QXX_Write使用的扇区暂存区（4KB），占用静态RAM。 */
+-uint8_t DATA_BUFFER[4096];		 
++/* 4KB扇区暂存区也用于读取program_target_t算法头，须满足Cortex-M3的LDRD字对齐。 */
++__align(4) uint8_t DATA_BUFFER[4096];
+ /* 带擦除的写入：按4KB扇区读回-判断-擦除-改写，可跨扇区。
+  * pBuffer        - 源数据缓冲区
+  * WriteAddr      - 起始地址（24位有效）

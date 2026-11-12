@@ -1,0 +1,38 @@
+{
+  "image_size": 59860,
+  "image_sha256": "42c506e63503d58477df92a6676d2f1e63e67261255d1df8c98f0d41e44abe4a",
+  "min_address": "0x800c000",
+  "max_address": "0x801a9d3",
+  "code": 47336,
+  "ro": 12200,
+  "rw": 804,
+  "zi": 17068,
+  "ram": 17872,
+  "selection_region": [
+    "0x0801F000",
+    "0x0801F7FF"
+  ],
+  "quota_region": [
+    "0x0801F800",
+    "0x0801FFFF"
+  ],
+  "source_sha256": {
+    "GD32-HID\\GD32-HID\\USER\\APP\\run.c": "b879a9bdbe0fa2631b81ebf0621e035317857c25e33450a600930d322c31a884",
+    "GD32-HID\\GD32-HID\\USER\\APP\\run.h": "ba2465570630771bdedab2eff352ef8444c75e45c00cd0cd5047f856a06491f3",
+    "GD32-HID\\GD32-HID\\USER\\APP\\selection_store.c": "5804be017a6937b1bfc86b6762a71d0dec92b3a145a1cec695d8861e3bb9232d",
+    "GD32-HID\\GD32-HID\\USER\\APP\\selection_store.h": "7f8aa3ad11bdcd0c49ee5e4ccdffd427f3a12d9f9f6626eb400b092f47b42310",
+    "GD32-HID\\GD32-HID\\USER\\APP\\selection_store_port.c": "2e4156394bbc5437a0afa723adb8ecafcf3c63b2d3e4d4eee9bafa874eac32c2",
+    "GD32-HID\\GD32-HID\\DAPlink\\MDK-ARM\\DAPlink.uvprojx": "7d92ec287f89d89580b6a3740b80afadd374da3a40b28fde16bf751947621d45",
+    "GD32-HID\\GD32-HID\\GD32F10x_Firmware_Library\\GD32F10x_usbd_library\\class\\device\\custombulk\\Source\\usbd_custombulk.c": "cbee9f1b9c4063ed4c2d30a0af67f8b0a2e2beb9f168681cfbc2ad8ec0407ab0"
+  },
+  "source_encoding": {
+    "GD32-HID/GD32-HID/USER/APP/run.c": "utf-8",
+    "GD32-HID/GD32-HID/USER/APP/run.h": "utf-8",
+    "GD32-HID/GD32-HID/USER/APP/selection_store.c": "gbk",
+    "GD32-HID/GD32-HID/USER/APP/selection_store.h": "gbk",
+    "GD32-HID/GD32-HID/USER/APP/selection_store_port.c": "gbk",
+    "GD32-HID/GD32-HID/DAPlink/MDK-ARM/DAPlink.uvprojx": "utf-8",
+    "GD32-HID/GD32-HID/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Source/usbd_custombulk.c": "gbk"
+  },
+  "hardware_tested": false
+}

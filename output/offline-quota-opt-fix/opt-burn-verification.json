@@ -1,0 +1,9 @@
+{
+  "executed": "actual compiled mode4 with controlled external file/target boundaries",
+  "checks": [
+    "encrypted OPT completes without file-path corruption and consumes exactly one count",
+    "unprotected OPT completes without file-path corruption and consumes exactly one count",
+    "Actually missing OPT still fails and refunds the reserved count"
+  ],
+  "hardware_tested": false
+}

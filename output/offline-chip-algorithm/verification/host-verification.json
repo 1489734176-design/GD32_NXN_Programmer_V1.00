@@ -1,0 +1,9 @@
+{
+  "hardware_tested": false,
+  "new_chip_algorithm_tests": {"passed": 3, "failed": 0},
+  "import_quota_host_tests": {"passed": 10, "failed": 0},
+  "checksum_host_tests": {"passed": 13, "failed": 0},
+  "quota_host_script": "PASS protocol, workers and controls in 3 window sizes",
+  "native_windows_layout": "PASS 2 chips x 3 sizes, OPT previews/toggle, popup colors, mouse and keyboard",
+  "source": "Current GD32-HID/GD32-HID/tools files; isolated USB/file-dialog boundary replacements, no physical device calls"
+}

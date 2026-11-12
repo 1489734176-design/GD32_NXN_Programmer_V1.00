@@ -1,0 +1,28 @@
+{
+  "image": ".planning\\2026-10-29-compact-numbered-ui\\offline.axf",
+  "sha256": "0756aa8fd4735d752dbf6a4981ec672f56cf2e5126c4e0e80209166283e7dfd3",
+  "data_buffer": "0x200026d0",
+  "data_buffer_bytes": 4096,
+  "containing_elf_section_alignment": 8,
+  "preceding_r0_literal_load": {
+    "pc": "0x8014232",
+    "pool": "0x80145c8",
+    "value": "0x200026d0"
+  },
+  "compiled_header_read": {
+    "pc": "0x8014244",
+    "registers": [
+      10,
+      1
+    ],
+    "base_register": 0,
+    "offset": 56,
+    "instruction": "LDRD r10,r1,[r0,#56]",
+    "bytes": "d0e90ea1"
+  },
+  "effective_address": "0x20002708",
+  "address_mod4": 0,
+  "passed": true,
+  "reason": "ARMv7-M LDRD/STRD require 4-byte alignment independently of CCR.UNALIGN_TRP.",
+  "scope": "Compiled-image contract check; no hardware exception emulation is claimed."
+}

@@ -1,0 +1,32 @@
+Retained exact PASS lines from successful first-run tool outputs. These are
+conversation tool-output receipts, not a redirected process log. Each PASS was
+printed after that scenario's complete assertion loop. The sixth scenario then
+stopped on an overstrict explicit-reimport repair assertion, as documented below.
+
+Tool output chunk 24f91c, session 16211:
+PASS 100000 successful commit {'power_cut': 26, 'write_error': 26, 'fatfs_error': 14, 'short_io': 2, 'readback_corruption': 1}
+PASS 100000 success across journal page rollover {'power_cut': 27, 'write_error': 27, 'fatfs_error': 14, 'short_io': 2, 'readback_corruption': 1}
+
+Tool output chunk 5d1315, session 16211:
+PASS First BQT4 success becomes BQT5 preserving old history/catalog {'power_cut': 26, 'write_error': 26, 'fatfs_error': 20, 'short_io': 2, 'readback_corruption': 1}
+
+Tool output chunk 74c5b3, session 16211:
+PASS Wide catalog append and A/B root commit {'power_cut': 27, 'write_error': 27, 'fatfs_error': 42, 'short_io': 18, 'readback_corruption': 1}
+
+Tool output chunk 5e043b, session 16211 (process exited1 in next scenario):
+PASS First BQC2/BQT4 switch appends BQC3 and commits BQT5 {'power_cut': 27, 'write_error': 27, 'fatfs_error': 37, 'short_io': 13, 'readback_corruption': 1}
+
+The following reimport scenario failed because it required STORAGE for f_open
+occurrence1. The exact diagnostic rerun (chunk f252a7) showed:
+AssertionError: ('reimport probe', 'f_open', 1, 0, (1, 100000, 0), (1, 100000, 0))
+
+This is the unchanged explicit SET/reimport repair path: initial mirror read
+fails, verify_pair latches quota_fault, then append(repair=true) can commit a
+fully authenticated new tuple. Independent reviewer verified f_open/read/close1
+and shortread1, persistent failure, and nonempty-catalog rejection. Product
+source remained unchanged. Only this prewrite reimport branch now permits OK
+and requires exact new tuple, pair, reboot and RAM-only begin. All other fault
+positions remain strict STORAGE. test_reimport_tail.py re-runs the final two
+scenarios; merge_fault_results.py binds both portions to the exact source and
+original fixture binary hashes. Root explicitly authorized reuse of these five
+completed receipts rather than repeating their unchanged cases.
