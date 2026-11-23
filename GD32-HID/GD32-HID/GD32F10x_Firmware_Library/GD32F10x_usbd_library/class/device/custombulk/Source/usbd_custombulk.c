@@ -5,6 +5,9 @@
 #include "ff.h"
 #include <string.h>
 #include "burn_quota.h"
+#include "image_task.h"
+
+extern uint8_t image_apply(uint8_t id);
 
 /* External FatFs objects from run.c */
 extern FATFS fs;
@@ -59,6 +62,13 @@ static uint16_t safe_strnlen(const char *s, uint16_t max)
     uint16_t n = 0;
     while (n < max && s[n] != '\0') n++;
     return n;
+}
+
+/* Raw index banks have no FatFs path; only 0:/download/stg.dat is writable. */
+static uint8_t image_bank_path(const uint8_t *path)
+{
+    return (uint8_t)(!strncmp((const char *)path, "0:/img/a/", 9) ||
+                     !strncmp((const char *)path, "0:/img/b/", 9));
 }
 
 usb_class custombulk_class = {
@@ -269,6 +279,7 @@ static void cmd_open_write(usb_dev *udev, uint8_t *buf, uint16_t len)
         return;
     }
     path[path_len] = '\0';
+    if (image_bank_path(path)) { send_response(udev, STATUS_ERR, NULL, 0); return; }
 
 
     /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
@@ -336,9 +347,12 @@ static void cmd_close_file(usb_dev *udev)
     FRESULT res;
     uint8_t writing = (cb_handler.file_opened == 2); /* 只对写上传错误撤销导入，读取关闭不影响已有Checksum。 */
 
-    if (cb_handler.file_opened == 0 ||
-        (cb_handler.file_opened == 2 &&
-         cb_handler.bytes_transferred != cb_handler.file_size)) {
+    if (cb_handler.file_opened == 0) {
+        send_response(udev, STATUS_OK, NULL, 0);
+        return;
+    }
+    if (cb_handler.file_opened == 2 &&
+        cb_handler.bytes_transferred != cb_handler.file_size) {
         if (cb_handler.file_opened)
             f_close(&cb_fd);
         if(writing) {
@@ -414,6 +428,8 @@ static void cmd_read_data(usb_dev *udev, uint8_t *buf, uint16_t len)
     if (req_len > CB_MAX_DATA) req_len = CB_MAX_DATA;
 
     if (cb_handler.bytes_transferred >= cb_handler.file_size) {
+        f_close(&cb_fd);
+        cb_handler.file_opened = 0;
         send_response(udev, STATUS_EOF, NULL, 0);
         return;
     }
@@ -428,6 +444,8 @@ static void cmd_read_data(usb_dev *udev, uint8_t *buf, uint16_t len)
     cb_handler.bytes_transferred += br;
 
     if (br == 0 || cb_handler.bytes_transferred >= cb_handler.file_size) {
+        f_close(&cb_fd);
+        cb_handler.file_opened = 0;
         send_response(udev, STATUS_EOF, data_buf, br);
     } else {
         send_response(udev, STATUS_OK, data_buf, br);
@@ -441,6 +459,7 @@ static void cmd_delete_file(usb_dev *udev, uint8_t *path, uint16_t path_len)
 
     if (path_len >= CB_MAX_PATH) path_len = CB_MAX_PATH - 1;
     path[path_len] = '\0';
+    if (image_bank_path(path)) { send_response(udev, STATUS_ERR, NULL, 0); return; }
 
 
     /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
@@ -498,6 +517,8 @@ static void cmd_rename(usb_dev *udev, uint8_t *buf, uint16_t len)
     }
 
     uint8_t *new_path = &buf[1 + old_len + 1];
+    if (image_bank_path(old_path) || image_bank_path(new_path))
+    { send_response(udev, STATUS_ERR, NULL, 0); return; }
 
     /* 先保存选择失效记录；失败或USB复位时不得改动原文件。 */
     if (!app_selection_invalidate() || file_cleanup_pending) {
@@ -884,6 +905,153 @@ void custombulk_quota_service(usb_dev *udev)
                   (result == BURN_QUOTA_BUSY ? STATUS_BUSY : STATUS_ERR), response, sizeof(response));
 }
 
+/* --- Image task commands 0x0F-0x15 ---------------------------------------
+ * These run in the main task (custombulk_file_service), so FatFs and raw
+ * SPI flash access are allowed. Responses fit the 63-byte data limit. */
+static void image_clear_import_session(void)
+{
+    staged_algorithm[0] = 0;
+    prepare_algorithm[0] = 0;
+    prepare_program[0] = 0;
+    prepare_opt_required = 0;
+    prepare_request_pending = 0;
+    prepare_response_pending = 0;
+    prepare_complete_pending = 0;
+    prepare_has_checksum = 0;
+    prepare_expected_checksum = 0;
+    quota_import_program[0] = 0;
+    quota_write_program[0] = 0;
+    quota_import_consumed = 0;
+}
+
+/* INFO -> [ver][slots][effective][flags][seq:4] */
+static void cmd_image_info(usb_dev *udev)
+{
+    uint8_t resp[8], flags = 0;
+    uint32_t seq = image_store_seq();
+    if(image_store_valid()) flags |= 1U;
+    if(image_store_fault()) flags |= 2U;
+    resp[0] = (uint8_t)IMAGE_BANK_VERSION;
+    resp[1] = (uint8_t)IMAGE_SLOTS;
+    resp[2] = image_store_current();
+    resp[3] = flags;
+    resp[4] = (uint8_t)seq; resp[5] = (uint8_t)(seq >> 8);
+    resp[6] = (uint8_t)(seq >> 16); resp[7] = (uint8_t)(seq >> 24);
+    send_response(udev, STATUS_OK, resp, sizeof(resp));
+}
+
+/* COMMIT [expected_seq:4][stage_crc:4] -> [detail][new_seq:4][effective][bank_crc:4] */
+static void cmd_image_commit(usb_dev *udev, uint8_t *buf, uint16_t len)
+{
+    uint8_t resp[10], detail = 0, err;
+    uint32_t seq, crc, new_seq, bank_crc;
+    if(len < 9) { send_response(udev, STATUS_ERR, NULL, 0); return; }
+    seq = (uint32_t)buf[1] | ((uint32_t)buf[2] << 8) |
+          ((uint32_t)buf[3] << 16) | ((uint32_t)buf[4] << 24);
+    crc = (uint32_t)buf[5] | ((uint32_t)buf[6] << 8) |
+          ((uint32_t)buf[7] << 16) | ((uint32_t)buf[8] << 24);
+    if(g_programming_active || cb_handler.file_opened) {
+        send_response(udev, STATUS_BUSY, NULL, 0); return;
+    }
+    image_clear_import_session();
+    if(f_open(&cb_fd, "0:/download/stg.dat", FA_READ) != FR_OK) {
+        detail = 6;
+        send_response(udev, STATUS_ERR, &detail, 1); return;
+    }
+    if(!image_store_commit_from_file(&cb_fd, seq, crc, &detail)) {
+        f_close(&cb_fd);
+        image_store_init();
+        (void)image_apply(image_store_current());
+        send_response(udev, STATUS_ERR, &detail, 1); return;
+    }
+    f_close(&cb_fd);
+    err = image_apply(image_store_current());
+    if(err != IMG_OK) detail = (uint8_t)(0x80U | err);
+    new_seq = image_store_seq();
+    bank_crc = image_store_crc();
+    resp[0] = detail;
+    resp[1] = (uint8_t)new_seq; resp[2] = (uint8_t)(new_seq >> 8);
+    resp[3] = (uint8_t)(new_seq >> 16); resp[4] = (uint8_t)(new_seq >> 24);
+    resp[5] = image_store_current();
+    resp[6] = (uint8_t)bank_crc; resp[7] = (uint8_t)(bank_crc >> 8);
+    resp[8] = (uint8_t)(bank_crc >> 16); resp[9] = (uint8_t)(bank_crc >> 24);
+    send_response(udev, STATUS_OK, resp, sizeof(resp));
+}
+
+/* ABORT -> delete stage file and re-apply the active current image. */
+static void cmd_image_abort(usb_dev *udev)
+{
+    uint8_t detail = 0, err, resp[2];
+    image_clear_import_session();
+    if(cb_handler.file_opened) { f_close(&cb_fd); cb_handler.file_opened = 0; }
+    (void)f_unlink("0:/download/stg.dat");
+    image_store_init();
+    err = image_apply(image_store_current());
+    if(err != IMG_OK) detail = err;
+    resp[0] = detail; resp[1] = image_store_current();
+    send_response(udev, STATUS_OK, resp, sizeof(resp));
+}
+
+/* QUOTA_PEEK [name] -> [enabled][known][remaining:4] (read-only, no switch). */
+static void cmd_quota_peek(usb_dev *udev, uint8_t *buf, uint16_t len)
+{
+    uint8_t name[CB_MAX_NAME + 1], enabled = 0, resp[6];
+    uint32_t remaining = 0;
+    burn_quota_stats_t stats;
+    uint16_t n = (len > 1) ? (uint16_t)(len - 1) : 0;
+    if(n == 0 || n > CB_MAX_NAME) { send_response(udev, STATUS_ERR, NULL, 0); return; }
+    memcpy(name, &buf[1], n); name[n] = 0;
+    if(!valid_quota_name(name, n) ||
+       !burn_quota_peek(name, &enabled, &remaining, &stats)) {
+        send_response(udev, STATUS_ERR, NULL, 0); return;
+    }
+    resp[0] = enabled; resp[1] = stats.known;
+    resp[2] = (uint8_t)remaining; resp[3] = (uint8_t)(remaining >> 8);
+    resp[4] = (uint8_t)(remaining >> 16); resp[5] = (uint8_t)(remaining >> 24);
+    send_response(udev, STATUS_OK, resp, sizeof(resp));
+}
+
+/* GET_FREE -> [free_kb:4][total_kb:4] */
+static void cmd_get_free(usb_dev *udev)
+{
+    FATFS *pfs = 0;
+    DWORD nclst = 0;
+    uint8_t resp[8];
+    uint32_t free_kb, total_kb;
+    if(f_getfree("0:", &nclst, &pfs) != FR_OK || !pfs) {
+        send_response(udev, STATUS_ERR, NULL, 0); return;
+    }
+    free_kb = (uint32_t)nclst * pfs->csize / 2U;
+    total_kb = (pfs->n_fatent > 2U) ?
+               (uint32_t)(pfs->n_fatent - 2U) * pfs->csize / 2U : 0U;
+    resp[0] = (uint8_t)free_kb; resp[1] = (uint8_t)(free_kb >> 8);
+    resp[2] = (uint8_t)(free_kb >> 16); resp[3] = (uint8_t)(free_kb >> 24);
+    resp[4] = (uint8_t)total_kb; resp[5] = (uint8_t)(total_kb >> 8);
+    resp[6] = (uint8_t)(total_kb >> 16); resp[7] = (uint8_t)(total_kb >> 24);
+    send_response(udev, STATUS_OK, resp, sizeof(resp));
+}
+
+/* GET_RECORD [index][offset 0/56] -> [len][data <=56] */
+static void cmd_image_get_record(usb_dev *udev, uint8_t *buf, uint16_t len)
+{
+    image_record_t rec;
+    uint8_t resp[1 + CB_MAX_DATA];
+    uint16_t off, n;
+    if(len < 3) { send_response(udev, STATUS_ERR, NULL, 0); return; }
+    if(buf[1] >= IMAGE_SLOTS || buf[2] > IMAGE_RECORD_SIZE) {
+        send_response(udev, STATUS_ERR, NULL, 0); return;
+    }
+    if(!image_store_read_record(buf[1], &rec)) {
+        send_response(udev, STATUS_ERR, NULL, 0); return;
+    }
+    off = buf[2];
+    n = (uint16_t)(IMAGE_RECORD_SIZE - off);
+    if(n > CB_MAX_DATA) n = CB_MAX_DATA;
+    resp[0] = (uint8_t)n;
+    memcpy(&resp[1], (const uint8_t *)&rec + off, n);
+    send_response(udev, STATUS_OK, resp, (uint16_t)(1U + n));
+}
+
 /* Command dispatcher */
 static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
@@ -935,6 +1103,24 @@ static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
     case CMD_GET_BURN_QUOTA:
     case CMD_SET_BURN_QUOTA:
         cmd_burn_quota(udev, buf, len);
+        break;
+    case CMD_IMAGE_INFO:
+        cmd_image_info(udev);
+        break;
+    case CMD_IMAGE_COMMIT:
+        cmd_image_commit(udev, buf, len);
+        break;
+    case CMD_IMAGE_ABORT:
+        cmd_image_abort(udev);
+        break;
+    case CMD_QUOTA_PEEK:
+        cmd_quota_peek(udev, buf, len);
+        break;
+    case CMD_GET_FREE:
+        cmd_get_free(udev);
+        break;
+    case CMD_IMAGE_GET_RECORD:
+        cmd_image_get_record(udev, buf, len);
         break;
     default:
         send_response(udev, STATUS_ERR, NULL, 0);

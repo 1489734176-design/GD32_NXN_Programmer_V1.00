@@ -76,6 +76,10 @@ void LCD_BlitMonoColor(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
 /* 1倍字模叠画：split_x为绝对填充右边界，左侧黑字彩底，右侧彩字黑底。
  * 只更新绝对横向区间[clip_x, clip_x+clip_width)，并自动裁剪屏幕边界。
  * 点阵格式与LCD_BlitMono相同；不申请临时像素数组，支持软件反显。 */
+/* 兼容旧 OLED 128x64 页式显存：整屏放大居中写入 LCD。
+ * gram - 8页×128列，每字节低位在上。 */
+void LCD_BlitGRAM(const uint8_t gram[8][128]);
+
 void LCD_BlitMonoSplit(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
                       uint16_t stride, const uint8_t *bitmap, uint8_t column_pages,
                       uint16_t split_x, uint16_t color,

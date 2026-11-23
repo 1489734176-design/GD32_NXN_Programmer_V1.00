@@ -24,14 +24,17 @@ import re
 # 方案：显式指定 QT_PLUGIN_PATH / QT_QPA_PLATFORM_PLUGIN_PATH 为真实 Unicode 路径。
 def _fix_qt_plugin_path():
     try:
-        import PyQt5 as _pyqt5
-        _pkg_dir = os.path.dirname(os.path.abspath(_pyqt5.__file__))
+        # 用 find_spec 定位 PyQt5 安装目录，绝不能在设置环境变量前 import PyQt5：
+        # 某些 Python/PyQt5 组合会在 import 时提前加载 QtCore 并缓存坏插件路径。
+        import importlib.util
+        spec = importlib.util.find_spec("PyQt5")
+        if spec is None or not spec.submodule_search_locations:
+            return
+        _pkg_dir = os.path.abspath(next(iter(spec.submodule_search_locations)))
         _plugins = os.path.join(_pkg_dir, "Qt5", "plugins")
         _platforms = os.path.join(_plugins, "platforms")
         if os.path.isdir(_platforms):
-            os.environ.setdefault("QT_PLUGIN_PATH", _plugins)
-            os.environ.setdefault("QT_QPA_PLATFORM_PLUGIN_PATH", _platforms)
-            # Qt 会优先读这两个变量，覆盖它自己算出来的（被 ANSI 破坏的）路径
+            # 无条件覆盖：Qt 会优先读这两个变量，覆盖它自己算出的 ANSI 坏路径。
             os.environ["QT_PLUGIN_PATH"] = _plugins
             os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = _platforms
     except Exception:
@@ -68,6 +71,12 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QColor
 
 from opt_config import OptConfig
+from image_tool import (
+    CMD_IMAGE_INFO, CMD_IMAGE_COMMIT, CMD_IMAGE_ABORT, CMD_QUOTA_PEEK,
+    CMD_GET_FREE, CMD_IMAGE_GET_RECORD, IMAGE_TIMEOUT, IMAGE_RECORD_SIZE,
+    IMAGE_SLOTS, IMAGE_ID_NONE, ImageCommitError, commit_detail_text,
+)
+from image_dialog import ImageTaskDialog
 
 # ─── USB Protocol Constants ────────────────────────────────────────────────────
 
@@ -169,7 +178,12 @@ class DAPLinkDevice:
     def _send_cmd(self, cmd_data):
         with self._command_lock:
             self.ep_out.write(cmd_data, timeout=TIMEOUT)
-            response_timeout = PREPARE_TIMEOUT if cmd_data and cmd_data[0] == CMD_PREPARE_DOWNLOAD else TIMEOUT
+            if cmd_data and cmd_data[0] == CMD_PREPARE_DOWNLOAD:
+                response_timeout = PREPARE_TIMEOUT
+            elif cmd_data and cmd_data[0] in (CMD_IMAGE_COMMIT, CMD_IMAGE_ABORT):
+                response_timeout = IMAGE_TIMEOUT
+            else:
+                response_timeout = TIMEOUT
             data = self.ep_in.read(PACKET_SIZE, timeout=response_timeout)  # 只延长0x0C准备响应，普通USB指令仍等待5秒。
             return bytes(data)
 
@@ -222,6 +236,18 @@ class DAPLinkDevice:
         if not close_resp or close_resp[0] != STATUS_OK:
             raise RuntimeError(f"Close failed after checking: {remote_path}")
         return True
+
+    def file_size(self, remote_path):
+        """OPEN_READ 返回的文件大小；打不开返回 None，随后 CLOSE 幂等。"""
+        resp = self._send_cmd(bytes([CMD_OPEN_READ]) + self._fix_path(remote_path).encode('utf-8'))
+        if not resp or resp[0] != STATUS_OK or len(resp) < 5:
+            return None
+        size = struct.unpack_from('<I', resp, 1)[0]
+        try:
+            self._send_cmd(bytes([CMD_CLOSE_FILE]))
+        except Exception:
+            pass
+        return size
 
     def stage_algorithm(self, algorithm_name):
         if len(algorithm_name.encode('ascii')) > 31:  # 空名称用于取消失败的导入会话。
@@ -315,19 +341,26 @@ class DAPLinkDevice:
             raise RuntimeError(f"Open read failed: {remote_path}")
         file_size = struct.unpack('<I', resp[1:5])[0]
         received = 0
-        with open(local_path, 'wb') as f:
-            while received < file_size:
-                req_len = min(MAX_DATA, file_size - received)
-                resp = self._send_cmd(bytes([CMD_READ_DATA, req_len]))
-                if resp[0] == STATUS_ERR:
-                    raise RuntimeError(f"Read error at {received}")
-                data = resp[1:]
-                f.write(data)
-                received += len(data)
-                if callback:
-                    callback(received, file_size)
-                if resp[0] == STATUS_EOF:
-                    break
+        try:
+            with open(local_path, 'wb') as f:
+                while received < file_size:
+                    req_len = min(MAX_DATA, file_size - received)
+                    resp = self._send_cmd(bytes([CMD_READ_DATA, req_len]))
+                    if resp[0] == STATUS_ERR:
+                        raise RuntimeError(f"Read error at {received}")
+                    data = resp[1:]
+                    f.write(data)
+                    received += len(data)
+                    if callback:
+                        callback(received, file_size)
+                    if resp[0] == STATUS_EOF:
+                        break
+        finally:
+            # 新固件在 EOF 时自动关闭；旧固件需要显式 CLOSE。关闭失败不掩盖读取结果。
+            try:
+                self._send_cmd(bytes([CMD_CLOSE_FILE]))
+            except Exception:
+                pass
         return received
 
     def mkdir(self, path):
@@ -339,6 +372,74 @@ class DAPLinkDevice:
         resp = self._send_cmd(bytes([CMD_DELETE_FILE]) + self._fix_path(path).encode('utf-8'))
         if resp[0] != STATUS_OK:
             raise RuntimeError(f"Delete failed: {path}")
+
+    # ── Image task protocol (0x0F-0x15) ─────────────────────────────────
+
+    def image_info(self):
+        resp = self._send_cmd(bytes([CMD_IMAGE_INFO]))
+        if not resp:
+            raise RuntimeError("镜像 INFO 响应为空")
+        if resp[0] == STATUS_BUSY:
+            raise RuntimeError("设备正在传输或烧录")
+        if resp[0] != STATUS_OK:
+            raise RuntimeError("设备不支持镜像功能，请升级固件")
+        if len(resp) < 9:
+            raise RuntimeError("镜像 INFO 响应无效")
+        return dict(version=resp[1], slots=resp[2], current=resp[3],
+                    flags=resp[4], seq=struct.unpack_from('<I', resp, 5)[0])
+
+    def image_get_record(self, index):
+        if not 0 <= index < IMAGE_SLOTS:
+            return None
+        out = bytearray()
+        for offset in (0, 56):
+            resp = self._send_cmd(bytes([CMD_IMAGE_GET_RECORD, index, offset]))
+            if not resp or resp[0] != STATUS_OK:
+                return None
+            n = resp[1]
+            data = resp[2:2 + n]
+            if len(data) != n:
+                return None
+            out.extend(data)
+        return bytes(out) if len(out) == IMAGE_RECORD_SIZE else None
+
+    def image_commit(self, expected_seq, stage_crc):
+        request = bytes([CMD_IMAGE_COMMIT]) + struct.pack('<II', int(expected_seq), int(stage_crc))
+        resp = self._send_cmd(request)
+        if not resp:
+            raise RuntimeError("镜像提交响应为空")
+        if resp[0] == STATUS_BUSY:
+            raise RuntimeError("设备正在传输或烧录，镜像提交被拒绝")
+        if resp[0] != STATUS_OK:
+            raise ImageCommitError(resp[1] if len(resp) > 1 else None)
+        if len(resp) < 11:
+            raise RuntimeError("镜像提交响应无效")
+        return dict(detail=resp[1],
+                    new_seq=struct.unpack_from('<I', resp, 2)[0],
+                    current=resp[6],
+                    bank_crc=struct.unpack_from('<I', resp, 7)[0])
+
+    def image_abort(self):
+        resp = self._send_cmd(bytes([CMD_IMAGE_ABORT]))
+        if not resp or resp[0] != STATUS_OK:
+            raise RuntimeError("镜像恢复失败")
+        return dict(detail=resp[1] if len(resp) > 1 else 0,
+                    current=resp[2] if len(resp) > 2 else IMAGE_ID_NONE)
+
+    def quota_peek(self, program_name):
+        name = self._quota_name_bytes(program_name)
+        resp = self._send_cmd(bytes([CMD_QUOTA_PEEK]) + name)
+        if not resp or resp[0] != STATUS_OK or len(resp) < 7:
+            return None
+        return dict(enabled=bool(resp[1]), known=bool(resp[2]),
+                    remaining=struct.unpack_from('<I', resp, 3)[0])
+
+    def get_free(self):
+        resp = self._send_cmd(bytes([CMD_GET_FREE]))
+        if not resp or resp[0] != STATUS_OK or len(resp) < 9:
+            raise RuntimeError("设备不支持剩余空间查询")
+        return dict(free_kb=struct.unpack_from('<I', resp, 1)[0],
+                    total_kb=struct.unpack_from('<I', resp, 5)[0])
 
 
 # ─── Worker Threads ─────────────────────────────────────────────────────────────
@@ -738,6 +839,20 @@ class DAPLinkManager(QMainWindow):
         self.quota_frame.setToolTip("每个主固件文件独立保存次数。每次导入程序（包括同名重新导入）都会按当前设置重新加载该文件的次数，并清零已用次数；设100次即恢复100次。取消勾选后该文件为不限，其他文件不受影响。单独保存/读取针对设备当前选择的固件；手动切换文件会恢复该文件自己的剩余次数。仅确认烧录成功后扣一次，失败或成功前断电均不扣，成功次数掉电保存。")
         layout.addWidget(self.quota_frame)
 
+        # ── Image task summary + dialog entry ──
+        self.image_frame = QGroupBox("镜像任务")
+        image_layout = QHBoxLayout(self.image_frame)
+        image_layout.setContentsMargins(12, 2, 12, 4)
+        self.lbl_image_summary = QLabel("镜像号：--")
+        self.lbl_image_summary.setWordWrap(True)
+        self.btn_image_task = QPushButton("镜像任务…")
+        self.btn_image_task.setToolTip("管理 100 个编号镜像：下载、切换、删除；表格在独立对话框内。")
+        self.btn_image_task.clicked.connect(self._open_image_dialog)
+        image_layout.addWidget(self.lbl_image_summary)
+        image_layout.addStretch()
+        image_layout.addWidget(self.btn_image_task)
+        layout.addWidget(self.image_frame)
+
         # ── Splitter: Local + Remote ──
         splitter = QSplitter(Qt.Horizontal)
 
@@ -960,6 +1075,7 @@ class DAPLinkManager(QMainWindow):
         self.spin_quota.setEnabled(connected and idle and self.chk_quota.isChecked())
         self.btn_quota_save.setEnabled(connected and idle)
         self.btn_quota_read.setEnabled(connected and idle)
+        self.btn_image_task.setEnabled(connected and idle)
 
     def _set_import_state(self, active):
         self.import_in_progress = active
@@ -1024,6 +1140,7 @@ class DAPLinkManager(QMainWindow):
             self.statusBar().showMessage("设备已连接；可设置或读取烧录次数")
             self.lbl_quota.setText("当前固件剩余：请点击“读取当前剩余”")
             self._navigate_remote("/")
+            self._refresh_image_summary()
         else:
             self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
             self.lbl_status_text.setText("未连接")
@@ -1037,7 +1154,35 @@ class DAPLinkManager(QMainWindow):
         self.remote_tree.clear()
         self.statusBar().showMessage("已断开")
         self.lbl_quota.setText("当前固件剩余：设备未连接")
+        self.lbl_image_summary.setText("镜像号：--")
         self._update_toolbar_state()
+
+    # ── Image tasks ──
+
+    def _open_image_dialog(self):
+        if not self.device.is_connected():
+            QMessageBox.warning(self, "未连接", "请先连接设备")
+            return
+        dialog = ImageTaskDialog(self.device, self.opt_config, self)
+        dialog.exec_()
+        self._refresh_image_summary()
+
+    def _refresh_image_summary(self):
+        if not self.device.is_connected():
+            self.lbl_image_summary.setText("镜像号：--")
+            return
+        try:
+            info = self.device.image_info()
+        except Exception as exc:
+            self.lbl_image_summary.setText("镜像号：不可用")
+            self.lbl_image_summary.setToolTip(str(exc))
+            return
+        current = info.get("current", IMAGE_ID_NONE)
+        if info.get("flags", 0) & 1 and current < IMAGE_SLOTS:
+            self.lbl_image_summary.setText(f"镜像号：{current:03d}")
+        else:
+            self.lbl_image_summary.setText("镜像号：---")
+        self.lbl_image_summary.setToolTip(f"镜像表 seq={info.get('seq', 0)}")
 
     # ── Remote Navigation ──
 

@@ -369,6 +369,36 @@ void LCD_BlitMonoColor(uint16_t x, uint16_t y, uint16_t width, uint16_t height,
     }
 }
 
+/* 兼容旧 128x64 OLED 页式显存：整屏放大后居中写入 LCD。
+ * gram - 8页×128列，每字节低位在上；ui_flip/ui_invert 与旧接口一致。 */
+#define LCD_UI_SCALE   ((LCD_WIDTH == 240) ? 1U : 2U)
+#define LCD_UI_X       ((uint16_t)((LCD_WIDTH - 128U * LCD_UI_SCALE) / 2U))
+#define LCD_UI_Y       ((uint16_t)((LCD_HEIGHT - 64U * LCD_UI_SCALE) / 2U))
+void LCD_BlitGRAM(const uint8_t gram[8][128])
+{
+    uint16_t row, offset, pixel;
+    uint8_t sx, sy, bit;
+    for(row = 0; row < 64U * LCD_UI_SCALE; row++)
+    {
+        sy = (uint8_t)(row / LCD_UI_SCALE);
+        if(ui_flip) sy = (uint8_t)(63U - sy);
+        for(offset = 0; offset < 128U * LCD_UI_SCALE; offset += LCD_CHUNK_PIXELS)
+        {
+            SPI0_LCDSelect();
+            window((uint16_t)(LCD_UI_X + offset), (uint16_t)(LCD_UI_Y + row), LCD_CHUNK_PIXELS);
+            for(pixel = 0; pixel < LCD_CHUNK_PIXELS; pixel++)
+            {
+                sx = (uint8_t)((offset + pixel) / LCD_UI_SCALE);
+                if(ui_flip) sx = (uint8_t)(127U - sx);
+                bit = (uint8_t)(((gram[sy >> 3][sx] >> (sy & 7U)) & 1U) ^ ui_invert);
+                data16(bit ? LCD_WHITE : LCD_BLACK);
+            }
+            SPI0_LCDRelease();
+            if(!SPI0_BusOK()) return;
+        }
+    }
+}
+
 /* 同一次字模写出依据绝对列坐标选择背景；进度填充经过字模时同步反色。
  * 横向裁剪不改变字模原点，因此可以只重绘填充变化所穿过的若干列。 */
 void LCD_BlitMonoSplit(uint16_t x, uint16_t y, uint16_t width, uint16_t height,

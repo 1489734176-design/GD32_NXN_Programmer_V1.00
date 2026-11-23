@@ -715,6 +715,11 @@
               <FilePath>..\..\USER\APP\run.c</FilePath>
             </File>
             <File>
+              <FileName>image_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\USER\APP\image_task.c</FilePath>
+            </File>
+            <File>
               <FileName>burn_quota.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\USER\APP\burn_quota.c</FilePath>

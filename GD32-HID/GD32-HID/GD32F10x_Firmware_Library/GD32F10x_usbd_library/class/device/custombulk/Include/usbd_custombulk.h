@@ -29,6 +29,13 @@
 #define CMD_PREPARE_DOWNLOAD        0x0CU
 #define CMD_GET_BURN_QUOTA          0x0DU
 #define CMD_SET_BURN_QUOTA          0x0EU
+#define CMD_IMAGE_INFO            0x0FU
+#define CMD_IMAGE_COMMIT          0x10U
+#define CMD_IMAGE_STATUS          0x11U
+#define CMD_IMAGE_ABORT           0x12U
+#define CMD_QUOTA_PEEK            0x13U
+#define CMD_GET_FREE              0x14U
+#define CMD_IMAGE_GET_RECORD      0x15U
 
 /* Response status codes */
 #define STATUS_OK                   0x00U

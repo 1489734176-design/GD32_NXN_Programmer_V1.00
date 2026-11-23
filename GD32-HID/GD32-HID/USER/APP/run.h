@@ -47,6 +47,10 @@ extern app_TypeDef app_data;
 extern volatile uint8_t g_programming_active;
 /* 主任务在修改文件前持久化不可烧录状态；失败返回0并拒绝文件变更。 */
 uint8_t app_selection_invalidate(void);
+/* 应用指定镜像：校验算法/固件/OPT/SUM/次数，保存选择并更新当前镜像。
+ * id - 0..99；IMAGE_ID_NONE 表示清空选择。
+ * 返回 - IMG_OK 或 image_task.h 中的 IMG_ERR_*。 */
+uint8_t image_apply(uint8_t id);
 /* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 extern EventGroupHandle_t  EventGroupHandle;

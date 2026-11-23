@@ -302,6 +302,22 @@ uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining)
 uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total)
 { return set_quota(enabled, total, 1); }
 
+/* 只读查询：直接从已提交账本取指定名字的额度，不调用 select，
+ * 不写 .chk/.dat、不改当前绑定。用于上位机覆盖确认/镜像面板。 */
+uint8_t burn_quota_peek(const uint8_t *name, uint8_t *enabled, uint32_t *remaining,
+                        burn_quota_stats_t *stats)
+{
+    uint8_t normalized[BURN_QUOTA_NAME_SIZE], e;
+    uint32_t r;
+    burn_quota_stats_t s;
+    if(!name || !normalize_name(normalized, name) || !normalized[0]) return 0;
+    if(!burn_quota_catalog_load_stats(&quota_catalog, normalized, &e, &r, &s)) return 0;
+    if(enabled) *enabled = e;
+    if(remaining) *remaining = r;
+    if(stats) *stats = s;
+    return 1;
+}
+
 uint8_t burn_quota_begin(void)
 {
     if(quota_reserved) return BURN_QUOTA_BUSY;

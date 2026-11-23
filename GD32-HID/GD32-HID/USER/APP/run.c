@@ -8,8 +8,8 @@
 #include "usbd_custombulk.h"
 #include "burn_quota.h"
 #include "selection_store.h"
+#include "image_task.h"
 #include "bsp_lcd.h"
-#include "ui_boot_logo.h"
 
 
 usb_dev usb_hid;
@@ -113,6 +113,10 @@ static uint32_t g_file_count, g_file_index, g_file_first;
 static uint8_t g_file_list_ready, g_file_visible;
 static const char *g_file_error;
 static const char *g_file_footer_drawn;
+/* 镜像页使用独立索引/分页状态，行文本复用g_file_list（mode3/mode5互斥）。 */
+static uint8_t g_image_list_ready, g_image_index, g_image_first, g_image_visible;
+static const char *g_image_footer_drawn;
+static char g_image_error[20];
 static void draw_main(void);
 static void show_counts(void);
 static void reset_feedback(void);
@@ -164,6 +168,7 @@ uint8_t app_selection_invalidate(void)
     app_data.bin_name[0] = 0;
     app_data.opt_enable = 0;
     g_program_checksum_valid = 0;
+    image_store_clear_current_ram();
     reset_feedback();
     oled.Refresh_flag = 1;
     capture_program_selection(&selection);
@@ -300,10 +305,23 @@ static void show_chip_name(uint16_t y)
     UI_FieldColor(0, 80, y, 152, 16, selected_chip_name(), 16, 1, LCD_YELLOW);
 }
 
+/* 主界面显示真实文件名：物理名 "001_xxx.bin" 去掉当前镜像号前缀；
+ * 手动选择/非当前镜像保持原样。烧录仍用 app_data.bin_name 的物理名。 */
+static const char *firmware_display_name(void)
+{
+    const char *name = (const char *)app_data.bin_name;
+    uint8_t id = image_store_current();
+    if(id < IMAGE_SLOTS && name[0] == (char)('0' + id / 100U) &&
+       name[1] == (char)('0' + (id / 10U) % 10U) &&
+       name[2] == (char)('0' + id % 10U) && name[3] == '_')
+        return name + 4;
+    return name;
+}
+
 /* 固件固定占两行，行间隔4像素：首行接标题，次行与内容起点对齐。 */
 static void show_firmware_name(uint16_t y)
 {
-    UI_FieldColor(1, 80, y, 152, 36, (const char *)app_data.bin_name, 16, 1, LCD_YELLOW);
+    UI_FieldColor(1, 80, y, 152, 36, firmware_display_name(), 16, 1, LCD_YELLOW);
 }
 
 /* 底部按键标题蓝色，切换目标模式黄色；字段9在主界面不用于进度。 */
@@ -324,6 +342,21 @@ static void show_counts(void)
     show_quota(228);
 }
 
+/* 主界面镜像号：有效时显示 000-099，加密镜像追加 *；无表/无当前显示 ---。 */
+static void show_image_no(void)
+{
+    char text[8];
+    uint8_t id = image_store_current();
+    const image_record_t *rec = image_store_current_record();
+    if(id < IMAGE_SLOTS && rec)
+    {
+        if(rec->flags & IMAGE_REC_FLAG_OPT) sprintf(text, "%03u*", (unsigned)id);
+        else sprintf(text, "%03u", (unsigned)id);
+    }
+    else strcpy(text, "---");
+    UI_FieldColor(9, 64, 48, 168, 16, text, 16, 1, LCD_YELLOW);
+}
+
 /* 静态标题只画一次；状态栏下方与开始烧录上方各留一空行。 */
 static void draw_main(void)
 {
@@ -341,16 +374,17 @@ static void draw_main(void)
         UI_TextColor(8, 228, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
         UI_TextColor(8, 268, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
         UI_TextColor(8, 288, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
-        UI_TextColor(64, 48, "000", 16, 1, LCD_YELLOW);
         UI_TextColor(80, 68, "3.3V", 16, 1, LCD_YELLOW);
         g_ui_ready = 1;
         show_top(1);
     }
+    show_image_no();
     show_chip_name(88);
     show_firmware_name(148);
     UI_FieldColor(2, 80, 108, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);
     show_checksum(128);
     show_counts();
+    UI_FieldColor(10, 0, 48, 8, 16, !g_auto_en && app_data.head == 3 ? ">" : "", 16, 1, LCD_YELLOW);
     UI_FieldColor(7, 0, 148, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
     UI_FieldColor(8, 0, 268, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
     show_top(0);
@@ -434,6 +468,7 @@ static uint8_t select_firmware(const char *name)
     strcpy((char *)app_data.bin_name, name);
     app_data.opt_enable = opt_enabled;
     g_program_checksum = checksum; g_program_checksum_valid = 1;
+    image_store_clear_current_ram();
     mark_selection_dirty(); g_burn_done = 0; reset_feedback(); return 1;
 invalid_opt:
     g_file_error = "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"; return 0;
@@ -461,6 +496,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     /* 仅在设备回读校验并确认导入后提交校验值；算法/OPT不计入SUM32。 */
     g_program_checksum = custombulk_prepared_checksum();
     g_program_checksum_valid = 1;
+    image_store_clear_current_ram(); /* USB 导入不是镜像任务，显示 ---。 */
     mark_selection_dirty();
     g_ui_ready = 0; g_file_list_ready = 0; /* 导入可从列表页返回，主界面必须重画。 */
     app_data.mode = 2;
@@ -471,6 +507,172 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     g_auto_tprobe = auto_now_ms();
     g_burn_done = 0; reset_feedback();
     oled.Refresh_flag = 1;
+}
+
+/* 校验镜像记录对应的算法/固件/OPT/SUM，返回 IMG_*。
+ * sum_out - 返回实际主固件 SUM32；无 SUM 位的旧迁移记录也会计算并接受。 */
+static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_out)
+{
+    char path[80];
+    uint32_t size, done, got, sum, request, i, hdr_size, max_algo;
+    uint8_t ret;
+    program_target_ext_t ext;
+    const char *dot;
+    uint8_t has_opt;
+
+    if(!rec || !(rec->flags & IMAGE_REC_FLAG_VALID)) return IMG_ERR_FMT;
+    if(!rec->algo[0] || !rec->bin[0]) return IMG_ERR_FMT;
+    if(!memchr(rec->algo, 0, sizeof(rec->algo)) ||
+       !memchr(rec->bin, 0, sizeof(rec->bin))) return IMG_ERR_FMT;
+
+    has_opt = (rec->flags & IMAGE_REC_FLAG_OPT) ? 1 : 0;
+    hdr_size = has_opt ? PROG_TARGET_EXT_HDR_SIZE : (PROG_TARGET_EXT_HDR_SIZE - 12U);
+    max_algo = has_opt ? 1980U : 1992U;
+
+    sprintf(path, "0:/download/firmware/%s", rec->algo);
+    if(f_open(&fd, path, FA_READ) != FR_OK) return IMG_ERR_FILE;
+    size = f_size(&fd);
+    if(size < PROG_TARGET_EXT_HDR_SIZE) { f_close(&fd); return IMG_ERR_FILE; }
+    memset(&ext, 0, sizeof(ext));
+    got = 0;
+    ret = f_read(&fd, &ext, sizeof(ext), &got);
+    if(f_close(&fd) != FR_OK || ret != FR_OK || got != sizeof(ext)) return IMG_ERR_FILE;
+    if(ext.algo_size > max_algo || size != ext.algo_size + hdr_size) return IMG_ERR_FILE;
+    if(has_opt)
+    {
+        if(!ext.opt_program || !ext.opt_addr || !ext.opt_size || ext.opt_size > 128U)
+            return IMG_ERR_OPT;
+        dot = strrchr(rec->bin, '.');
+        if(dot && (dot - rec->bin) < 30)
+            sprintf(path, "0:/download/bin/%.*s_opt.bin", (int)(dot - rec->bin), rec->bin);
+        else
+            strcpy(path, "0:/download/bin/default_opt.bin");
+        if(f_open(&fd, path, FA_READ) != FR_OK) return IMG_ERR_OPT;
+        size = f_size(&fd);
+        if(!size || f_close(&fd) != FR_OK) return IMG_ERR_OPT;
+    }
+
+    sprintf(path, "0:/download/bin/%s", rec->bin);
+    if(f_open(&fd, path, FA_READ) != FR_OK) return IMG_ERR_FILE;
+    size = f_size(&fd);
+    /* v1 只校验 100KB 上限；算法头 flash_size 语义未验证，避免误拒绝已验证可烧的组合。 */
+    if(!size || size > IMAGE_FW_MAX)
+    { f_close(&fd); return IMG_ERR_FILE; }
+    sum = 0; done = 0; ret = FR_OK;
+    while(done < size)
+    {
+        request = size - done;
+        if(request > sizeof(DATA_BUFFER)) request = sizeof(DATA_BUFFER);
+        got = 0;
+        ret = f_read(&fd, DATA_BUFFER, request, &got);
+        if(ret != FR_OK || got != request) break;
+        for(i = 0; i < got; i++) sum += DATA_BUFFER[i];
+        done += got;
+    }
+    if(f_close(&fd) != FR_OK || ret != FR_OK || done != size) return IMG_ERR_FILE;
+    if((rec->flags & IMAGE_REC_FLAG_SUM) && rec->checksum != sum) return IMG_ERR_SUM;
+    if(sum_out) *sum_out = sum;
+    return IMG_OK;
+}
+
+/* 让主界面镜像号与当前 app_data 选择一致；有效但无匹配显示 ---。 */
+static void sync_image_display_to_selection(void)
+{
+    uint8_t id;
+    image_record_t rec;
+    uint32_t sum = 0;
+    if(app_data.bin_name[0] && app_data.firmware_name[0] &&
+       image_store_find_match(app_data.firmware_name, app_data.bin_name,
+                              app_data.opt_enable, g_program_checksum,
+                              g_program_checksum_valid, &id) &&
+       image_store_read_record(id, &rec) &&
+       image_validate_record(&rec, &sum) == IMG_OK)
+        image_store_select_ram(id);
+    else
+        image_store_clear_current_ram();
+}
+
+/* 回滚到旧选择并尽量持久化；失败置保存错误锁存。 */
+static uint8_t restore_selection_object(const program_selection_t *sel)
+{
+    memcpy(app_data.firmware_name, sel->algorithm_name, sizeof(app_data.firmware_name));
+    memcpy(app_data.bin_name, sel->program_name, sizeof(app_data.bin_name));
+    app_data.opt_enable = sel->opt_enabled;
+    g_program_checksum = sel->checksum;
+    g_program_checksum_valid = sel->checksum_valid;
+    mark_selection_dirty();
+    if(!save_program_selection())
+    {
+        g_selection_save_failed = 1;
+        return 0;
+    }
+    image_store_init();
+    sync_image_display_to_selection();
+    return 1;
+}
+
+/* 应用镜像：校验 → 写 app_data → 绑定次数 → 保存选择 → 更新 bank current。
+ * id - 0..99；IMAGE_ID_NONE 清空当前选择并持久化表 current=0xFF。
+ * 返回 - IMG_OK 或 IMG_ERR_*。只在主任务、USB 空闲且未烧录时调用。 */
+uint8_t image_apply(uint8_t id)
+{
+    image_record_t rec;
+    program_selection_t old_sel;
+    uint32_t sum = 0;
+    uint8_t err;
+
+    if(custombulk_is_busy() || g_programming_active) return IMG_ERR_BUSY;
+    if(g_selection_save_failed) return IMG_ERR_SAVE;
+    if(!image_store_valid()) return IMG_ERR_STORAGE;
+
+    if(id == IMAGE_ID_NONE)
+    {
+        capture_program_selection(&old_sel);
+        app_data.bin_name[0] = 0;
+        app_data.firmware_name[0] = 0;
+        app_data.opt_enable = 0;
+        g_program_checksum = 0;
+        g_program_checksum_valid = 0;
+        mark_selection_dirty();
+        if(!save_program_selection()) { restore_selection_object(&old_sel); return IMG_ERR_SAVE; }
+        if(!image_store_set_current(IMAGE_ID_NONE))
+        { restore_selection_object(&old_sel); return IMG_ERR_TABLE; }
+        reset_feedback(); g_ui_ready = 0; oled.Refresh_flag = 1;
+        return IMG_OK;
+    }
+
+    if(id >= IMAGE_SLOTS) return IMG_ERR_FMT;
+    if(!image_store_read_record(id, &rec)) return IMG_ERR_STORAGE;
+    err = image_validate_record(&rec, &sum);
+    if(err != IMG_OK) return err;
+
+    capture_program_selection(&old_sel);
+    memcpy(app_data.firmware_name, rec.algo, sizeof(app_data.firmware_name));
+    memcpy(app_data.bin_name, rec.bin, sizeof(app_data.bin_name));
+    app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = 0;
+    app_data.bin_name[sizeof(app_data.bin_name) - 1] = 0;
+    app_data.opt_enable = (rec.flags & IMAGE_REC_FLAG_OPT) ? 1 : 0;
+    g_program_checksum = sum;
+    g_program_checksum_valid = 1;
+    mark_selection_dirty();
+
+    if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK || burn_quota_fault())
+    {
+        restore_selection_object(&old_sel);
+        return IMG_ERR_QUOTA;
+    }
+    if(!save_program_selection())
+    {
+        restore_selection_object(&old_sel);
+        return IMG_ERR_SAVE;
+    }
+    if(!image_store_set_current(id))
+    {
+        restore_selection_object(&old_sel);
+        return IMG_ERR_TABLE;
+    }
+    reset_feedback(); g_ui_ready = 0; oled.Refresh_flag = 1;
+    return IMG_OK;
 }
 
 /* 关闭所有中断（PRIMASK置1），用于保护不可被打断的短临界区。
@@ -489,46 +691,123 @@ void INTX_ENABLE(void)
 
 /* 启动时恢复选择和次数，直接进入同一个竖屏界面。
  * 返回 - 无 */
-/* Draw the supplied NXN logo and caption as one centered group.
- * Red antialias levels are stored in Flash as short horizontal spans.
- * All writes complete synchronously before the 1000ms RTOS hold begins. */
+/* 开机 logo/caption 放在外部 SPI Flash 的 /system/boot_logo.bin，流式读取，
+ * 不再占用内部 Flash。文件缺失/损坏时退回一个红色 NXN 文字，不阻塞启动。
+ * 文件格式见 tools/make_boot_logo_bin.py：48B 头 + RLE + 1bpp caption。 */
+#define BOOT_LOGO_PATH      "0:/system/boot_logo.bin"
+#define BOOT_LOGO_HDR_SIZE  48U
+
 static void show_boot_logo(void)
 {
-    uint16_t logo_x = (LCD_WIDTH - BOOT_LOGO_WIDTH) / 2U;
-    uint16_t group_height = BOOT_LOGO_HEIGHT + 16U + BOOT_CAPTION_HEIGHT;
-    uint16_t logo_y = (LCD_HEIGHT - group_height) / 2U;
-    uint16_t i, row = 0, col = 0, span;
-    uint8_t token;
+    uint8_t hdr[BOOT_LOGO_HDR_SIZE], rowbuf[24], token;
+    uint16_t palette[16];
+    uint16_t rle_len, logo_w, logo_h, cap_w, cap_h, cap_stride;
+    uint16_t i, col = 0, row = 0, span;
+    uint16_t logo_x, logo_y, cap_x, cap_y;
+    UINT br = 0;
+    FRESULT res = FR_NO_FILE;
+
     OLED_Clear();
-    for(i = 0; i < sizeof(boot_logo_rle); i++)
+    if(f_open(&fd, BOOT_LOGO_PATH, FA_READ) == FR_OK)
     {
-        token = boot_logo_rle[i];
-        span = (token & 15U) + 1U;
-        if(token >> 4)
-            LCD_Fill(logo_x + col, logo_y + row, span, 1,
-                     boot_logo_palette[token >> 4]);
-        col += span;
-        if(col == BOOT_LOGO_WIDTH) { col = 0; row++; }
+        res = f_read(&fd, hdr, BOOT_LOGO_HDR_SIZE, &br);
+        if(res == FR_OK && br == BOOT_LOGO_HDR_SIZE &&
+           hdr[0] == 'N' && hdr[1] == 'X' && hdr[2] == 'N' && hdr[3] == '1')
+        {
+            rle_len = (uint16_t)(hdr[4] | ((uint16_t)hdr[5] << 8));
+            logo_w = (uint16_t)(hdr[6] | ((uint16_t)hdr[7] << 8));
+            logo_h = (uint16_t)(hdr[8] | ((uint16_t)hdr[9] << 8));
+            cap_w = (uint16_t)(hdr[10] | ((uint16_t)hdr[11] << 8));
+            cap_h = (uint16_t)(hdr[12] | ((uint16_t)hdr[13] << 8));
+            cap_stride = (uint16_t)(hdr[14] | ((uint16_t)hdr[15] << 8));
+            for(i = 0; i < 16U; i++)
+                palette[i] = (uint16_t)(hdr[16U + i * 2U] | ((uint16_t)hdr[17U + i * 2U] << 8));
+            if(logo_w && logo_h && logo_w <= LCD_WIDTH && logo_h <= LCD_HEIGHT &&
+               cap_w && cap_h && cap_stride >= (uint16_t)((cap_w + 7U) / 8U) &&
+               cap_stride <= sizeof(rowbuf))
+            {
+                logo_x = (LCD_WIDTH - logo_w) / 2U;
+                logo_y = (LCD_HEIGHT - (logo_h + 16U + cap_h)) / 2U;
+                cap_x = (LCD_WIDTH - cap_w) / 2U;
+                cap_y = logo_y + logo_h + 16U;
+                for(i = 0; i < rle_len && row < logo_h; i++)
+                {
+                    if(f_read(&fd, &token, 1, &br) != FR_OK || br != 1U) break;
+                    span = (uint16_t)((token & 15U) + 1U);
+                    if(span > (uint16_t)(logo_w - col)) span = (uint16_t)(logo_w - col);
+                    if(token >> 4)
+                        LCD_Fill((uint16_t)(logo_x + col), (uint16_t)(logo_y + row),
+                                 span, 1U, palette[token >> 4]);
+                    col = (uint16_t)(col + span);
+                    if(col >= logo_w) { col = 0; row++; }
+                }
+                if(row >= logo_h && f_lseek(&fd, BOOT_LOGO_HDR_SIZE + rle_len) == FR_OK)
+                {
+                    for(i = 0; i < cap_h; i++)
+                    {
+                        if(f_read(&fd, rowbuf, cap_stride, &br) != FR_OK || br != cap_stride) break;
+                        LCD_BlitMonoColor(cap_x, (uint16_t)(cap_y + i), cap_w, 1U,
+                                          cap_stride, rowbuf, 0, 1, 1, LCD_RED);
+                    }
+                }
+            }
+        }
+        f_close(&fd);
     }
-    LCD_BlitMonoColor((LCD_WIDTH - BOOT_CAPTION_WIDTH) / 2U,
-                      logo_y + BOOT_LOGO_HEIGHT + 16U,
-                      BOOT_CAPTION_WIDTH, BOOT_CAPTION_HEIGHT,
-                      BOOT_CAPTION_STRIDE, boot_caption_bitmap, 0, 1, 1, LCD_RED);
+    if(res != FR_OK || row < logo_h)
+        UI_TextColor((LCD_WIDTH - 24U) / 2U, (LCD_HEIGHT - 16U) / 2U, "NXN", 16, 1, LCD_RED);
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
 void start_page(void)
 {
-    uint8_t ret;
+    uint8_t ret, legacy_ok;
     program_selection_t legacy_selection;
+    program_selection_t current_selection;
     burn_quota_init(); selection_store_init();
     ret = f_mount(&fs, "0:", 1);
     if(ret == FR_OK)
     {
         restore_program_selection();
-        if(selection_store_load(&legacy_selection)) burn_quota_migrate_legacy(legacy_selection.program_name);
+        legacy_ok = selection_store_load(&legacy_selection);
+        if(legacy_ok) burn_quota_migrate_legacy(legacy_selection.program_name);
         else burn_quota_migrate_legacy((const uint8_t *)"");
         burn_quota_select(app_data.bin_name);
+        /* 镜像索引在裸扇区；无有效表时把 restore 校验后的当前选择迁移成镜像 000。 */
+        image_store_init();
+        if(!image_store_valid())
+        {
+            capture_program_selection(&current_selection);
+            if(current_selection.program_name[0] && current_selection.algorithm_name[0])
+                image_store_migrate_from_selection(&current_selection);
+        }
+        /* 表有效时：有效选择只贴镜像号、不覆盖选择；选择为空才用表 current 兜底。 */
+        if(image_store_valid())
+        {
+            if(app_data.bin_name[0] && app_data.firmware_name[0])
+            {
+                sync_image_display_to_selection();
+            }
+            else
+            {
+                image_record_t rec;
+                uint32_t sum = 0;
+                uint8_t id = image_store_current();
+                if(id < IMAGE_SLOTS && image_store_read_record(id, &rec) &&
+                   image_validate_record(&rec, &sum) == IMG_OK)
+                {
+                    memcpy(app_data.firmware_name, rec.algo, sizeof(app_data.firmware_name));
+                    memcpy(app_data.bin_name, rec.bin, sizeof(app_data.bin_name));
+                    app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = 0;
+                    app_data.bin_name[sizeof(app_data.bin_name) - 1] = 0;
+                    app_data.opt_enable = (rec.flags & IMAGE_REC_FLAG_OPT) ? 1 : 0;
+                    g_program_checksum = sum;
+                    g_program_checksum_valid = 1;
+                    mark_selection_dirty();
+                }
+                else image_store_clear_current_ram();
+            }
+        }
     }
     app_data.mode = 2; app_data.head = 2; g_ui_ready = 0;
     reset_feedback();
@@ -567,7 +846,7 @@ static void power_down(void)
 void mode2(void)
 {
     if(g_auto_en) app_data.head = 2;
-    else if(app_data.head != 1 && app_data.head != 2) app_data.head = 1;
+    else if(app_data.head != 1 && app_data.head != 2 && app_data.head != 3) app_data.head = 1;
     if(key_val.mesg)
     {
         switch(key_val.key)
@@ -576,8 +855,16 @@ void mode2(void)
                 if(!custombulk_is_busy()) power_down();
                 key_val.mesg = 0; return;
             case key_d_mid: break;
-            case key_left: case key_l_left: case key_rep_left: case key_right:
-                if(!g_auto_en) app_data.head = app_data.head == 1 ? 2 : 1;
+            /* 手动模式：短按左/右在 1→2→3 之间循环；长按/连发不移动焦点。 */
+            case key_left:
+                if(!g_auto_en) app_data.head = (app_data.head == 1) ? 3 :
+                                              ((app_data.head == 2) ? 1 : 2);
+                break;
+            case key_right:
+                if(!g_auto_en) app_data.head = (app_data.head == 1) ? 2 :
+                                              ((app_data.head == 2) ? 3 : 1);
+                break;
+            case key_l_left: case key_rep_left: case key_rep_right:
                 break;
             case key_l_right:
                 g_auto_en = !g_auto_en; g_auto_st = AUTO_ST_WAIT;
@@ -591,6 +878,11 @@ void mode2(void)
                 {
                     g_ui_ready = 0; g_file_list_ready = 0;
                     app_data.mode = 3; key_val.mesg = 0; return;
+                }
+                else if(!g_auto_en && app_data.head == 3)
+                {
+                    g_ui_ready = 0; g_image_list_ready = 0; g_image_error[0] = 0;
+                    app_data.mode = 5; key_val.mesg = 0; return;
                 }
                 else
                 {
@@ -1399,6 +1691,130 @@ void mode3(void)
     show_top(0); oled.Refresh_flag = 0;
 }
 
+/* 重建镜像页当前 12 行文字；行文本复用g_file_list，进入/换页各读一次。 */
+/* 镜像页显示：自定义说明优先；否则物理名去掉 "<id>_" 前缀，
+ * 只显示真实文件名。 */
+static const char *image_display_name(const image_record_t *rec, uint8_t id)
+{
+    if(rec->desc[0] && strncmp(rec->desc, "IMAGE 000", sizeof(rec->desc)) != 0)
+        return rec->desc;
+    if(rec->bin[0] == (char)('0' + id / 100U) &&
+       rec->bin[1] == (char)('0' + (id / 10U) % 10U) &&
+       rec->bin[2] == (char)('0' + id % 10U) && rec->bin[3] == '_')
+        return rec->bin + 4;
+    return rec->bin;
+}
+
+static void scan_image_page(void)
+{
+    uint8_t row, id, count = 0;
+    image_record_t rec;
+    g_image_first = (uint8_t)((g_image_index / FILE_LIST_ROWS) * FILE_LIST_ROWS);
+    UI_ClearFields(0, FILE_LIST_ROWS);
+    for(row = 0; row < FILE_LIST_ROWS; row++)
+    {
+        id = (uint8_t)(g_image_first + row);
+        if(id >= IMAGE_SLOTS) break;
+        if(image_store_read_record(id, &rec) &&
+           (rec.flags & IMAGE_REC_FLAG_VALID) && rec.bin[0] &&
+           memchr(rec.bin, 0, sizeof(rec.bin)))
+        {
+            sprintf(g_file_list[row], "%.24s", image_display_name(&rec, id));
+        }
+        else strcpy(g_file_list[row], "---");
+        count++;
+    }
+    g_image_visible = count;
+}
+
+/* 镜像页移动：短按/连发±1，第一次长按±10；跨页时重建。 */
+static void image_move(int8_t delta)
+{
+    int16_t next = (int16_t)g_image_index + delta;
+    while(next < 0) next += (int16_t)IMAGE_SLOTS;
+    while(next >= (int16_t)IMAGE_SLOTS) next -= (int16_t)IMAGE_SLOTS;
+    g_image_index = (uint8_t)next;
+    g_image_error[0] = 0;
+    if(g_image_index < g_image_first ||
+       g_image_index >= (uint8_t)(g_image_first + g_image_visible))
+        scan_image_page();
+}
+
+static void leave_image_list(void)
+{
+    app_data.mode = 2; app_data.head = 3;
+    key_val.mesg = 0; g_image_list_ready = 0; g_ui_ready = 0;
+    oled.Refresh_flag = 1;
+    draw_main();
+}
+
+/* 镜像选择页：100 槽，12 行/页；中键应用，长中返回。
+ * 自动模式不能进入；进入后 run_task 不再调用 mode2，自动探测自然暂停。 */
+void mode5(void)
+{
+    uint8_t row;
+    uint16_t y;
+    char page[16];
+    const char *footer;
+    if(key_val.mesg && key_val.key == key_l_mid)
+    { leave_image_list(); return; }
+    if(!g_image_list_ready)
+    {
+        if(custombulk_is_busy()) { key_val.mesg = 0; return; }
+        UI_EnterPage(12);
+        g_image_index = image_store_current();
+        if(g_image_index >= IMAGE_SLOTS) g_image_index = 0;
+        g_image_error[0] = 0;
+        scan_image_page();
+        UI_TextColor(8, 28, "\xBE\xB5\xCF\xF1\xD1\xA1\xD4\xF1", 16, 1, LCD_BLUE); /* 镜像选择 */
+        g_image_list_ready = 1;
+        g_image_footer_drawn = NULL;
+        show_top(1);
+    }
+    if(key_val.mesg)
+    {
+        if(!custombulk_is_busy())
+        {
+            switch(key_val.key)
+            {
+                case key_left: image_move(-1); break;
+                case key_l_left: image_move(-10); break;
+                case key_rep_left: image_move(-1); break;
+                case key_right: image_move(1); break;
+                case key_l_right: image_move(10); break;
+                case key_rep_right: image_move(1); break;
+                case key_mid:
+                {
+                    uint8_t err = image_apply(g_image_index);
+                    if(err == IMG_OK) { leave_image_list(); return; }
+                    sprintf(g_image_error, "IMG ERR %u", (unsigned)err);
+                    g_image_footer_drawn = NULL;
+                    break;
+                }
+                default: break;
+            }
+        }
+        key_val.mesg = 0;
+    }
+    y = 48;
+    for(row = 0; row < g_image_visible; row++)
+        y += UI_ImageItem(row, y, (uint16_t)(g_image_first + row), g_file_list[row],
+                          (g_image_first + row) == g_image_index) + UI_LINE_GAP;
+    sprintf(page, "%u/9", (unsigned)(g_image_first / FILE_LIST_ROWS + 1));
+    UI_FieldColor(12, 128, 28, 104, 16, page, 16, 1, LCD_YELLOW);
+    footer = g_image_error[0] ? g_image_error :
+             (image_store_valid() ?
+              "\xD6\xD0\xBC\xFC\xC8\xB7\xC8\xCF \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8" :
+              "\xCE\xDE\xBE\xB5\xCF\xF1 \xB3\xA4\xB0\xB4\xD6\xD0\xBC\xFC\xB7\xB5\xBB\xD8");
+    if(footer != g_image_footer_drawn)
+    {
+        UI_Fill(8, 288, 224, 16, 0);
+        UI_TextColor(8, 288, footer, 16, 1, g_image_error[0] ? LCD_RED : LCD_BLUE);
+        g_image_footer_drawn = footer;
+    }
+    show_top(0); oled.Refresh_flag = 0;
+}
+
 /* 初始化硬件并创建任务；循环先处理上位机延后请求，再运行当前界面/烧录状态机。
  * pvParameters - FreeRTOS任务入参，本任务不使用（创建时传NULL）
  * 返回         - 不返回（FreeRTOS任务，内部死循环） */
@@ -1485,6 +1901,7 @@ void run_task(void *pvParameters)
 			{
 				case 2:mode2();break;
 				case 3:mode3();break;
+				case 5:mode5();break;
 				case 4:
                     /* 待处理文件包优先完成；只在真正烧录时拦截USB，结果页解除占用。 */
                     if(!g_burn_done && custombulk_is_busy()) break;

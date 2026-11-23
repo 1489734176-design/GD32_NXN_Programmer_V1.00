@@ -24,6 +24,9 @@ uint8_t burn_quota_stats_known(void);
 uint32_t burn_quota_total(void);
 uint32_t burn_quota_used(void);
 uint8_t burn_quota_set(uint8_t enabled, uint32_t remaining);
+/* 只读查询指定固件的次数，不切换当前账本；返回0=未知/账本异常。 */
+uint8_t burn_quota_peek(const uint8_t *name, uint8_t *enabled, uint32_t *remaining,
+                        burn_quota_stats_t *stats);
 /* A completed host import resets history even when its limit is unchanged. */
 uint8_t burn_quota_reimport(uint8_t enabled, uint32_t total);
 /* Authenticate and open a RAM-only session; no debit until finish(1).

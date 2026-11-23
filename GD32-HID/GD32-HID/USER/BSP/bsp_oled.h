@@ -50,6 +50,15 @@ uint16_t UI_NumberedItemHeight(uint32_t number, const char *name);
 /* 绘制x=8的编号列表项，返回实际高度；使用指定字段缓存，选中项为黄底黑字。 */
 uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
                          const char *name, uint8_t selected);
+/* 镜像列表项：固定16px单行，前缀为三位镜像号 000-099；选中黄底黑字。
+ * id     - 字段缓存编号0~15
+ * y      - 行顶坐标
+ * number - 镜像号0~99
+ * name   - 说明/固件名，超宽截断
+ * selected - 非0选中
+ * 返回   - 固定16 */
+uint16_t UI_ImageItem(uint8_t id, uint16_t y, uint16_t number,
+                      const char *name, uint8_t selected);
 /* 彩色单行文本，参数与UI_Text相同；超出右边界截断。 */
 void UI_TextColor(uint16_t x, uint16_t y, const char *text, uint8_t size,
                   uint8_t mode, uint16_t color);

@@ -547,6 +547,36 @@ uint16_t UI_NumberedItem(uint8_t id, uint16_t y, uint32_t number,
     return height;
 }
 
+/* 镜像列表项：三位号 + 空格 + 名称，固定16px单行；黄底黑字选中。
+ * 与UI_NumberedItem共用ui_fields缓存，不分配新文字表或帧缓冲。 */
+uint16_t UI_ImageItem(uint8_t id, uint16_t y, uint16_t number,
+                      const char *name, uint8_t selected)
+{
+    char prefix[8], text[64];
+    uint16_t indent, previous;
+    uint8_t mode = selected ? 0 : 1;
+    ui_field_t *field;
+    if(id >= 16 || !name) return 0;
+    sprintf(prefix, "%03u", (unsigned)number);
+    sprintf(text, "%s %.31s", prefix, name);
+    indent = 4U * 8U;
+    field = &ui_fields[id];
+    if(field->valid && field->x == 8 && field->y == y && field->width == 224 &&
+       field->height == 16 && field->mode == mode && field->color == LCD_YELLOW &&
+       !strcmp(field->text, text)) return 16;
+    previous = ui_text_color; ui_text_color = LCD_YELLOW;
+    if(field->valid && (field->y != y || field->height != 16))
+        UI_Fill(field->x, field->y, field->width, field->height, 0);
+    UI_Fill(8, y, 224, 16, selected);
+    UI_TextLine(8, y, indent, prefix, 16, mode);
+    UI_TextLine(8 + indent, y, 224 - indent, name, 16, mode);
+    ui_text_color = previous;
+    strcpy(field->text, text);
+    field->x = 8; field->y = y; field->width = 224; field->height = 16;
+    field->size = 16; field->mode = mode; field->color = LCD_YELLOW; field->valid = 1;
+    return 16;
+}
+
 /* 兼容旧OLED行列坐标接口：在128×64虚拟坐标系中画一个点，放大两倍显示。
  * row  - 虚拟行坐标，0~63；越界不绘制
  * col  - 虚拟列坐标，0~127；越界不绘制

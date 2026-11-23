@@ -17,7 +17,8 @@
 
 #define FLASH_SECTOR_SIZE 	512			  	 			    	
 #define FLASH_BLOCK_SIZE   	8 
-uint16_t	FLASH_SECTOR_COUNT = (8*1024*1024/FLASH_SECTOR_SIZE);
+/* FAT 卷 15.9375MB；顶部 64KB (0x00FF0000-0x00FFFFFF) 留给镜像索引裸扇区 */
+uint16_t	FLASH_SECTOR_COUNT = (0x00FF0000UL/FLASH_SECTOR_SIZE);
 
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
