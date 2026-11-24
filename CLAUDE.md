@@ -94,5 +94,5 @@ There is no automated test suite; verification is done by flashing real hardware
 ## Gotchas
 
 - Chinese-comment source files (`run.c`, `font.h`) are **GBK-encoded** — Keil expects GBK; saving as UTF-8 corrupts existing comments. `tools/gbk_edit.py` does safe GBK find/replace on such files.
-- SWD pin mapping is `SWCLK=PB13 SWDIO=PB15 nRESET=PB12` (non-V1); guarded by `#define V1` in `DAP_config.h`.
+- Target channel A SWD pin mapping (GD32F103RCT6 board) is `SWCLK=PA15 SWDIO=PC10 nRESET=PC12` in `USER/DAPlink/DAP_config.h`; channel B pins (`PB15/PC6/PC8`) are defined but not implemented yet.
 - The flashing flow races to grab SWD before the target firmware can disable the debug port (retry loop in `run.c` `mode2()`), and `EraseChip` writes RDP key `0x5AA5` to *un*-protect before mass-erasing a previously encrypted chip.

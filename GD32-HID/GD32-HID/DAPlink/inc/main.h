@@ -17,6 +17,7 @@ extern "C" {
 #include "run.h"
 #include "bsp_key.h"
 #include "bsp_led.h"
+#include "bsp_buzzer.h"
 #include "bsp_gd25qxx.h"
 #include "bsp_oled.h"
 #include "bsp_adc.h"
@@ -29,12 +30,17 @@ extern "C" {
 #include "bsp_pwr.h"
 
 
-#define KEY_M_Pin GPIO_PIN_0
-#define KEY_M_GPIO_Port GPIOA
+/* ================= GD32F103RCT6 双通道板引脚 ================= */
+
+/* 按键：高电平有效，外部 10k 下拉 */
+#define KEY_M_Pin GPIO_PIN_1
+#define KEY_M_GPIO_Port GPIOC
 #define KEY_L_Pin GPIO_PIN_1
 #define KEY_L_GPIO_Port GPIOA
 #define KEY_R_Pin GPIO_PIN_2
 #define KEY_R_GPIO_Port GPIOA
+
+/* 电池检测与外部 SPI Flash */
 #define BAT_ADC_Pin GPIO_PIN_3
 #define BAT_ADC_GPIO_Port GPIOA
 #define SPI_CS_Pin GPIO_PIN_4
@@ -45,6 +51,8 @@ extern "C" {
 #define SPI_MISO_GPIO_Port GPIOA
 #define SPI_MOSI_Pin GPIO_PIN_7
 #define SPI_MOSI_GPIO_Port GPIOA
+
+/* 串口与 USB、本机 SWD（PA13/PA14） */
 #define UART_TX_Pin GPIO_PIN_10
 #define UART_TX_GPIO_Port GPIOB
 #define UART_RX_Pin GPIO_PIN_11
@@ -57,54 +65,71 @@ extern "C" {
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
 #define SWCLK_GPIO_Port GPIOA
-#define PWR_CRTL_Pin GPIO_PIN_4
-#define PWR_CRTL_GPIO_Port GPIOB
 
-/* CDC_LED 已飞线到 PA9（原 PB5，低电平点亮）。PA9 原为 TGT_TDI，不再作 JTAG TDI */
-#define CDC_LED_Pin GPIO_PIN_9
-#define CDC_LED_GPIO_Port GPIOA
+/* 指示灯：低电平点亮；编号与旧板 1:1 对应（LED1=HID, LED2=MSC, LED3=CDC） */
+#define HID_LED_Pin GPIO_PIN_0
+#define HID_LED_GPIO_Port GPIOA
+#define MSC_LED_Pin GPIO_PIN_4
+#define MSC_LED_GPIO_Port GPIOC
+#define CDC_LED_Pin GPIO_PIN_5
+#define CDC_LED_GPIO_Port GPIOC
 
-#define MSC_LED_Pin GPIO_PIN_6
-#define MSC_LED_GPIO_Port GPIOB
-#define HID_LED_Pin GPIO_PIN_7
-#define HID_LED_GPIO_Port GPIOB
-#define IIC_SCL_Pin GPIO_PIN_8
-#define IIC_SCL_GPIO_Port GPIOB
-#define IIC_SDA_Pin GPIO_PIN_9
-#define IIC_SDA_GPIO_Port GPIOB
-#define TGT_NTRST_Pin GPIO_PIN_10
-#define TGT_NTRST_GPIO_Port GPIOA
-/* 注意：PA9 已改作 CDC_LED 输出，TGT_TDI 实际不可用，仅保留符号避免旧代码报错 */
-#define TGT_TDI_Pin GPIO_PIN_9
-#define TGT_TDI_GPIO_Port GPIOA
-#define TGT_TDO_Pin GPIO_PIN_8
-#define TGT_TDO_GPIO_Port GPIOA
-/* TGT_SWDIO 网络：板上 PB14/PB15 原本短接在一起。已割断 PB15 一侧，
-   SWDIO 改由 PB14 单独驱动/回读（见 DAP_config.h 的 JTAG_TMS_Pin），
-   PB15 不再属于该网络，可另作他用。以下两个宏仅为兼容保留，实际未使用 */
-#define TGT_TMS_Pin GPIO_PIN_14
-#define TGT_TMS_GPIO_Port GPIOB
-#define TGT_TMS_IN_Pin GPIO_PIN_14
-#define TGT_TMS_IN_GPIO_Port GPIOB
-#define TGT_TCK_Pin GPIO_PIN_13
-#define TGT_TCK_GPIO_Port GPIOB
-#define TGT_REREST_Pin GPIO_PIN_12
-#define TGT_REREST_GPIO_Port GPIOB
-/* USB_EN 已飞线到 PA8（原 PB3，R25 10k 上拉到 3.3V，低有效），PB3 保持浮空 */
-#define USB_EN_Pin GPIO_PIN_8
-#define USB_EN_GPIO_Port GPIOA
-#define PWR_EN_Pin GPIO_PIN_4
-#define PWR_EN_GPIO_Port GPIOB
-#define BAT_CHARG_Pin GPIO_PIN_0
-#define BAT_CHARG_GPIO_Port GPIOB
-#define BAT_FULL_Pin GPIO_PIN_1
-#define BAT_FULL_GPIO_Port GPIOB
+/* 电源与充电状态：CHRG/STDBY 开漏低有效 */
+#define BAT_CHARG_Pin GPIO_PIN_2
+#define BAT_CHARG_GPIO_Port GPIOC
+#define BAT_FULL_Pin GPIO_PIN_3
+#define BAT_FULL_GPIO_Port GPIOC
+#define USB_EN_Pin GPIO_PIN_14
+#define USB_EN_GPIO_Port GPIOC
+#define PWR_EN_Pin GPIO_PIN_0
+#define PWR_EN_GPIO_Port GPIOC
 
-/* 目标供电控制（PA15，P沟道MOS管栅极） */
-#define TARGET_PWR_Pin        GPIO_PIN_15
-#define TARGET_PWR_GPIO_Port  GPIOA
+/* 烧录通道 A：VCC_EN 经 PMOS 控制，低电平给目标上电 */
+#define TARGET_PWR_Pin        GPIO_PIN_11
+#define TARGET_PWR_GPIO_Port  GPIOC
 #define TARGET_PWR_ON         gpio_bit_reset(TARGET_PWR_GPIO_Port, TARGET_PWR_Pin)
 #define TARGET_PWR_OFF        gpio_bit_set(TARGET_PWR_GPIO_Port, TARGET_PWR_Pin)
+
+#define TGT_A_VCC_EN_Pin GPIO_PIN_11
+#define TGT_A_VCC_EN_GPIO_Port GPIOC
+#define TGT_A_SWCLK_Pin GPIO_PIN_15
+#define TGT_A_SWCLK_GPIO_Port GPIOA
+#define TGT_A_SWDIO_Pin GPIO_PIN_10
+#define TGT_A_SWDIO_GPIO_Port GPIOC
+#define TGT_A_RST_Pin GPIO_PIN_12
+#define TGT_A_RST_GPIO_Port GPIOC
+#define TGT_A_START_Pin GPIO_PIN_9
+#define TGT_A_START_GPIO_Port GPIOC
+#define TGT_A_BUSY_Pin GPIO_PIN_10
+#define TGT_A_BUSY_GPIO_Port GPIOA
+#define TGT_A_NG_Pin GPIO_PIN_9
+#define TGT_A_NG_GPIO_Port GPIOA
+#define TGT_A_OK_Pin GPIO_PIN_8
+#define TGT_A_OK_GPIO_Port GPIOA
+
+/* 烧录通道 B：本期只定义，初始化时安全停车，不参与烧录流程 */
+#define TGT_B_VCC_EN_Pin GPIO_PIN_7
+#define TGT_B_VCC_EN_GPIO_Port GPIOC
+#define TGT_B_SWCLK_Pin GPIO_PIN_15
+#define TGT_B_SWCLK_GPIO_Port GPIOB
+#define TGT_B_SWDIO_Pin GPIO_PIN_6
+#define TGT_B_SWDIO_GPIO_Port GPIOC
+#define TGT_B_RST_Pin GPIO_PIN_8
+#define TGT_B_RST_GPIO_Port GPIOC
+#define TGT_B_START_Pin GPIO_PIN_2
+#define TGT_B_START_GPIO_Port GPIOB
+#define TGT_B_BUSY_Pin GPIO_PIN_14
+#define TGT_B_BUSY_GPIO_Port GPIOB
+#define TGT_B_NG_Pin GPIO_PIN_13
+#define TGT_B_NG_GPIO_Port GPIOB
+#define TGT_B_OK_Pin GPIO_PIN_12
+#define TGT_B_OK_GPIO_Port GPIOB
+
+/* 蜂鸣器：高电平经 NPN 驱动；BUZZER1 对应通道 A */
+#define BUZZER1_Pin GPIO_PIN_1
+#define BUZZER1_GPIO_Port GPIOB
+#define BUZZER2_Pin GPIO_PIN_0
+#define BUZZER2_GPIO_Port GPIOB
 
 #ifdef __cplusplus
 }

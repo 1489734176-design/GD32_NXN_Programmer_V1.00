@@ -14,16 +14,16 @@
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
-          <Device>GD32F103CB</Device>
+          <Device>GD32F103RC</Device>
           <Vendor>GigaDevice</Vendor>
           <PackID>GigaDevice.GD32F10x_DFP.2.0.0</PackID>
           <PackURL>http://www.keil.com/pack/</PackURL>
-          <Cpu>IRAM(0x20000000,0x00005000) IROM(0x08000000,0x00020000) CPUTYPE("Cortex-M3") CLOCK(12000000) ELITTLE</Cpu>
+          <Cpu>IRAM(0x20000000,0x0000C000) IROM(0x08000000,0x00040000) CPUTYPE("Cortex-M3") CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
           <StartupFile></StartupFile>
-          <FlashDriverDll>UL2CM3(-S0 -C0 -P0 -FD20000000 -FC1000 -FN1 -FF0GD32F10x_MD -FS08000000 -FL020000 -FP0($$Device:GD32F103CB$Flash\GD32F10x_MD.FLM))</FlashDriverDll>
+          <FlashDriverDll>UL2CM3(-S0 -C0 -P0 -FD20000000 -FC1000 -FN1 -FF0GD32F10x_HD -FS08000000 -FL040000 -FP0($$Device:GD32F103RC$Flash\GD32F10x_HD.FLM))</FlashDriverDll>
           <DeviceId>0</DeviceId>
-          <RegisterFile>$$Device:GD32F103CB$Device\Include\gd32f10x.h</RegisterFile>
+          <RegisterFile>$$Device:GD32F103RC$Device\Include\gd32f10x.h</RegisterFile>
           <MemoryEnv></MemoryEnv>
           <Cmp></Cmp>
           <Asm></Asm>
@@ -33,7 +33,7 @@
           <SLE66CMisc></SLE66CMisc>
           <SLE66AMisc></SLE66AMisc>
           <SLE66LinkerMisc></SLE66LinkerMisc>
-          <SFDFile>$$Device:GD32F103CB$SVD\GD32F10x\GD32F10x_MD.svd</SFDFile>
+          <SFDFile>$$Device:GD32F103RC$SVD\GD32F10x\GD32F10x_HD.svd</SFDFile>
           <bCustSvd>1</bCustSvd>
           <UseEnv>0</UseEnv>
           <BinPath></BinPath>
@@ -247,12 +247,12 @@
               <IRAM>
                 <Type>0</Type>
                 <StartAddress>0x20000000</StartAddress>
-                <Size>0x5000</Size>
+                <Size>0xc000</Size>
               </IRAM>
               <IROM>
                 <Type>1</Type>
                 <StartAddress>0x8000000</StartAddress>
-                <Size>0x20000</Size>
+                <Size>0x40000</Size>
               </IROM>
               <XRAM>
                 <Type>0</Type>
@@ -277,7 +277,7 @@
               <OCR_RVCT4>
                 <Type>1</Type>
                 <StartAddress>0x800c000</StartAddress>
-                <Size>0x13000</Size>
+                <Size>0x30000</Size>
               </OCR_RVCT4>
               <OCR_RVCT5>
                 <Type>1</Type>
@@ -302,7 +302,7 @@
               <OCR_RVCT9>
                 <Type>0</Type>
                 <StartAddress>0x20000000</StartAddress>
-                <Size>0x5000</Size>
+                <Size>0xc000</Size>
               </OCR_RVCT9>
               <OCR_RVCT10>
                 <Type>0</Type>
@@ -338,7 +338,7 @@
             <v6Rtti>0</v6Rtti>
             <VariousControls>
               <MiscControls>--c99</MiscControls>
-              <Define>USE_STDPERIPH_DRIVER,GD32F10X_MD,USBD_BOS_ENABLE</Define>
+              <Define>USE_STDPERIPH_DRIVER,GD32F10X_HD,USBD_BOS_ENABLE</Define>
               <Undefine></Undefine>
               <IncludePath>..\inc;..\..\GD32F10x_Firmware_Library\CMSIS\GD\GD32F10x\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_standard_peripheral\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hid\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\custombulk\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\cdc\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\class\device\hidmsccdc;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\device\Include;..\..\GD32F10x_Firmware_Library\GD32F10x_usbd_library\usbd\Include;..\..\GD32F10x_Firmware_Library\CMSIS;..\..\USER\FREERTOS\portable\RVDS\ARM_CM3;..\..\USER\FREERTOS\include;..\..\USER\BSP;..\..\USER\APP;..\..\USER\FATFS;..\..\USER\DAPlink;..\..\USER\ALGO;..\..\LCD</IncludePath>
             </VariousControls>
@@ -400,9 +400,9 @@
               <FilePath>..\src\gd32f10x_usbd_hw.c</FilePath>
             </File>
             <File>
-              <FileName>startup_gd32f10x_md.s</FileName>
+              <FileName>startup_gd32f10x_hd.s</FileName>
               <FileType>2</FileType>
-              <FilePath>..\..\GD32F10x_Firmware_Library\CMSIS\GD\GD32F10x\Source\ARM\startup_gd32f10x_md.s</FilePath>
+              <FilePath>..\..\GD32F10x_Firmware_Library\CMSIS\GD\GD32F10x\Source\ARM\startup_gd32f10x_hd.s</FilePath>
             </File>
           </Files>
         </Group>
@@ -704,6 +704,11 @@
               <FileType>1</FileType>
               <FilePath>..\..\USER\BSP\bsp_pwr.c</FilePath>
             </File>
+            <File>
+              <FileName>bsp_buzzer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\USER\BSP\bsp_buzzer.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -877,13 +882,13 @@
         <targetInfos/>
       </file>
       <file attr="config" category="source" condition="Compiler ARMCC" name="Device\Source\ARM\startup_gd32f10x_hd.s" version="2.0.1">
-        <instance index="0" removed="1">RTE\Device\GD32F103CB\startup_gd32f10x_hd.s</instance>
+        <instance index="0" removed="1">RTE\Device\GD32F103RC\startup_gd32f10x_hd.s</instance>
         <component Cclass="Device" Cgroup="Startup" Cvendor="GigaDevice" Cversion="2.0.1" condition="GD32F10xHD"/>
         <package name="GD32F10x_DFP" schemaVersion="1.2" url="http://gd32mcu.com/data/documents/pack/" vendor="GigaDevice" version="2.0.2"/>
         <targetInfos/>
       </file>
       <file attr="config" category="source" name="Device\Source\system_gd32f10x.c" version="2.0.1">
-        <instance index="0" removed="1">RTE\Device\GD32F103CB\system_gd32f10x.c</instance>
+        <instance index="0" removed="1">RTE\Device\GD32F103RC\system_gd32f10x.c</instance>
         <component Cclass="Device" Cgroup="Startup" Cvendor="GigaDevice" Cversion="2.0.1" condition="GD32F10xHD"/>
         <package name="GD32F10x_DFP" schemaVersion="1.2" url="http://gd32mcu.com/data/documents/pack/" vendor="GigaDevice" version="2.0.2"/>
         <targetInfos/>

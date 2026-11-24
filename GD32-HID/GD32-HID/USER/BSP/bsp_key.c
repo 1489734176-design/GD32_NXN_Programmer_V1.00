@@ -13,6 +13,7 @@ key_TypeDef key_val =
 void key_init(void)
 {
 		rcu_periph_clock_enable(RCU_GPIOA);
+		rcu_periph_clock_enable(RCU_GPIOC);
 		gpio_init(KEY_M_GPIO_Port, GPIO_MODE_IPD, GPIO_OSPEED_50MHZ, KEY_M_Pin);
 		gpio_init(KEY_L_GPIO_Port, GPIO_MODE_IPD, GPIO_OSPEED_50MHZ, KEY_L_Pin);
 		gpio_init(KEY_R_GPIO_Port, GPIO_MODE_IPD, GPIO_OSPEED_50MHZ, KEY_R_Pin);

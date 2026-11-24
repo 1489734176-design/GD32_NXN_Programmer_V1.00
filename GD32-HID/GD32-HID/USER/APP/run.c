@@ -415,6 +415,8 @@ static void finish_burn_ui(void)
     if(g_auto_en) { g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms(); }
     app_data.mode = 2; key_val.mesg = 0; oled.Refresh_flag = 1;
     draw_main();
+    /* 结果提示：成功 1 声，失败 2 声；通道 A 使用 BUZZER1。 */
+    buzzer_beep(0, g_burn_ok ? 1 : 2);
 }
 
 /* 列表排除目录、OPT数据和无法安全存入选择记录的文件名。 */
@@ -1827,6 +1829,7 @@ void run_task(void *pvParameters)
 
 		pwr_init();
 		led_init();
+		buzzer_init();
 		key_init();
 		OLED_Init();
 		GD25QXX_Init();
@@ -1937,7 +1940,7 @@ void usb_task(void *pvParameters)
 void led_task(void *pvParameters)
 {
 #if CDC_LED_SELFTEST
-	/* 上电自检：CDC_LED 已飞线到 PA9，这里闪 3 下确认接线正确。
+	/* 上电自检：CDC_LED 对应 LED3(PC5)，这里闪 3 下确认接线正确。
 	   正常运行时 CDC_LED 不参与指示，只有关机充电时才会轮到它 */
 	{
 		uint8_t n;

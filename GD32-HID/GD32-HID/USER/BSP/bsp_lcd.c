@@ -14,7 +14,7 @@
 #endif
 
 /* 每次片选最多发送 128 个像素（256 字节），及时释放总线供 Flash 使用。
- * GD32F103CB 只有 20 KB RAM，不分配整屏 RGB565 缓冲区，直接分块输出。
+ * 不分配整屏 RGB565 缓冲区，直接分块输出，避免占用大块 RAM。
  * 屏幕初始化参数沿用参考驱动 LCD/LCD.c。
  */
 #define LCD_CHUNK_PIXELS 128U
@@ -67,17 +67,17 @@ static void send_command(uint8_t value)
     SPI0_LCDRelease();
 }
 
-/* 按屏幕背光极性控制背光引脚（PA10）。
+/* 按屏幕背光极性控制背光引脚（PB6）。
  * on   - 1=点亮背光，0=熄灭；实际电平由LCD_BLK_ACTIVE_HIGH决定
  * 返回 - 无 */
 void LCD_BackLight(uint8_t on)
 {
 #if LCD_BLK_ACTIVE_HIGH
-    if (on) GPIO_BOP(GPIOA) = LCD_BLK_Pin;
-    else GPIO_BC(GPIOA) = LCD_BLK_Pin;
+    if (on) GPIO_BOP(LCD_BLK_GPIO_Port) = LCD_BLK_Pin;
+    else GPIO_BC(LCD_BLK_GPIO_Port) = LCD_BLK_Pin;
 #else
-    if (on) GPIO_BC(GPIOA) = LCD_BLK_Pin;
-    else GPIO_BOP(GPIOA) = LCD_BLK_Pin;
+    if (on) GPIO_BC(LCD_BLK_GPIO_Port) = LCD_BLK_Pin;
+    else GPIO_BOP(LCD_BLK_GPIO_Port) = LCD_BLK_Pin;
 #endif
 }
 
@@ -122,11 +122,15 @@ void LCD_Init(void)
     uint8_t n;
 
     SPI0_BusInit();
-    /* 只配置 LCD 的 DC、RES 和 BLK；不初始化原 OLED 的 I2C0 引脚。 */
+    /* 只配置 LCD 的 DC、RES、BLK 与字库片选 FCS；不初始化原 OLED 的 I2C0 引脚。 */
     GPIO_BOP(GPIOB) = LCD_DC_Pin | LCD_RES_Pin;
     LCD_BackLight(0);
     gpio_init(GPIOB, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, LCD_DC_Pin | LCD_RES_Pin);
-    gpio_init(GPIOA, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, LCD_BLK_Pin);
+    gpio_init(LCD_BLK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, LCD_BLK_Pin);
+    /* 软件字模不需要屏内字库：FCS 保持高电平（未选中）。 */
+    rcu_periph_clock_enable(RCU_GPIOD);
+    GPIO_BOP(LCD_FCS_GPIO_Port) = LCD_FCS_Pin;
+    gpio_init(LCD_FCS_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, LCD_FCS_Pin);
     /* 硬件复位：保持低电平 20 ms，拉高后等待 120 ms。 */
     GPIO_BC(GPIOB) = LCD_RES_Pin;
     LCD_DELAY(20);

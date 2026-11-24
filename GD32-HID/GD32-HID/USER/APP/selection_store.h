@@ -3,8 +3,8 @@
 #define SELECTION_STORE_H
 #include <stdint.h>
 
-#define SELECTION_STORE_FLASH_BASE 0x0801F000UL
-#define SELECTION_STORE_PAGE_SIZE 1024U
+#define SELECTION_STORE_FLASH_BASE 0x0803C000UL
+#define SELECTION_STORE_PAGE_SIZE 2048U
 #define SELECTION_STORE_NAME_SIZE 32U
 
 typedef struct {
@@ -24,7 +24,7 @@ uint8_t selection_store_save(const program_selection_t *in);
 /* 返回1表示日志或本次存储操作异常，须显式保存新配置才能恢复。 */
 uint8_t selection_store_fault(void);
 
-/* 存储适配层只访问0x0801F000～0x0801F7FF，不读写相邻次数日志。 */
+/* 存储适配层只访问0x0803C000～0x0803CFFF，不读写相邻次数日志。 */
 uint32_t selection_store_read_word(uint32_t address);
 uint8_t selection_store_program_word(uint32_t address, uint32_t value);
 uint8_t selection_store_erase_page(uint32_t address);

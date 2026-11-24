@@ -7,19 +7,22 @@
 /* HS20S010B / ST7789V2 液晶屏移植接口。
  * LCD 使用硬件 SPI0 重映射引脚 PB3(SCK)、PB5(MOSI)，仅发送数据。
  * 外部 Flash 使用 PA4/PA5/PA6/PA7，由 bsp_spi0_bus 统一切换与保护总线。
- * 应用和 Bootloader 共用本驱动；Bootloader 定义 LCD_BAREMETAL，采用裸机延时，
- * 不编译直接字符显示函数。本驱动不操作 PA9。
+ * 应用和 Bootloader 共用本驱动；Bootloader 定义 LCD_BAREMETAL，采用裸机延时。
+ * GD32F103RCT6 新板：RES/DC/CS/BLK 全部在 GPIOB，字库片选 FCS 在 PD2。
  */
-/* LCD 控制引脚：SCL/SDA/RES/DC/CS 位于 GPIOB，BLK 位于 GPIOA。 */
 #define USE_LCD 1
 #define LCD_SCL_Pin GPIO_PIN_3 /* PB3：SPI0 时钟 */
 #define LCD_SDA_Pin GPIO_PIN_5 /* PB5：SPI0 数据输出 */
-#define LCD_RES_Pin GPIO_PIN_15 /* PB15：硬件复位，低电平有效 */
-#define LCD_DC_Pin GPIO_PIN_9 /* PB9：0 为命令，1 为数据 */
-#define LCD_CS_Pin GPIO_PIN_8 /* PB8：片选，低电平有效 */
-#define LCD_BLK_Pin GPIO_PIN_10 /* PA10：背光控制 */
-#define LCD_BLK_GPIO_Port GPIOA
+#define LCD_RES_Pin GPIO_PIN_9 /* PB9：硬件复位，低电平有效 */
+#define LCD_DC_Pin GPIO_PIN_8 /* PB8：0 为命令，1 为数据 */
+#define LCD_CS_Pin GPIO_PIN_7 /* PB7：片选，低电平有效 */
+#define LCD_BLK_Pin GPIO_PIN_6 /* PB6：背光控制 */
+#define LCD_BLK_GPIO_Port GPIOB
 #define LCD_BLK_ACTIVE_HIGH 1 /* 1：高电平点亮背光；0：低电平点亮 */
+/* 屏内字库芯片片选：本固件用软件字模，保持高电平（未选中）。 */
+#define LCD_FCS_Pin GPIO_PIN_2
+#define LCD_FCS_GPIO_Port GPIOD
+#define LCD_FSO_Pin GPIO_PIN_4 /* PB4：字库数据输出，本固件不读取 */
 
 /* 显示方向：0 为竖屏，1 为横屏，2/3 分别为竖屏/横屏旋转 180 度。
  * 可在工程预定义 LCD_DIRECTION；应用默认竖屏240x320，Bootloader默认横屏320x240。

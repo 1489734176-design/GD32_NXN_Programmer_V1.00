@@ -54,6 +54,8 @@ void rcu_config (void)
 //		rcu_periph_clock_enable(RCU_PMU);
 		rcu_periph_clock_enable(RCU_GPIOA);
 		rcu_periph_clock_enable(RCU_GPIOB);
+		rcu_periph_clock_enable(RCU_GPIOC);
+		rcu_periph_clock_enable(RCU_GPIOD);
 	
 		systick_clksource_set(SYSTICK_CLKSOURCE_HCLK);
 		SysTick->CTRL|=SysTick_CTRL_TICKINT_Msk;   											//开启SYSTICK中断

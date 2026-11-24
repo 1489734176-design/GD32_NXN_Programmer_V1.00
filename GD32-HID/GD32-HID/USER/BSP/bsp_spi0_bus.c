@@ -2,15 +2,15 @@
 #include "bsp_spi0_bus.h"
 
 /* SPI0 共享总线移植：Flash 使用 PA4/PA5/PA6/PA7，
- * LCD 使用 PB8/PB3/PB5，采用单线只发送模式，无需占用 PB4(MISO)。
- * PB4 为电源保持引脚，PA15 为目标供电引脚，均不配置为 SPI 引脚；
- * 本文件也不操作 PA8/PA9/PA10。
+ * LCD 使用 PB7/PB3/PB5，采用单线只发送模式，无需占用 PB4(MISO)。
+ * PB4 为屏内字库数据脚（LCD_FSO），PD2 为字库片选（LCD_FCS）；
+ * 本文件只操作 LCD 片选 PB7 和 SPI0 映射引脚。
  * USB 中断回调也会访问 Flash，仅用任务互斥锁无法保护共享外设，
  * 因此每次事务保存并屏蔽中断，结束后恢复；调用方必须分块且不得延时。
  */
 #define FLASH_CS GPIO_PIN_4 /* PA4：Flash 片选，低电平有效 */
 #define FLASH_OUTPUTS (GPIO_PIN_5 | GPIO_PIN_7) /* PA5 时钟、PA7 数据输出 */
-#define LCD_CS GPIO_PIN_8 /* PB8：LCD 片选，低电平有效 */
+#define LCD_CS GPIO_PIN_7 /* PB7：LCD 片选，低电平有效 */
 #define LCD_OUTPUTS (GPIO_PIN_3 | GPIO_PIN_5) /* PB3 时钟、PB5 数据输出 */
 #define SPI_POLL_LIMIT 10000U /* 最大轮询次数，防止外设异常时永久等待 */
 

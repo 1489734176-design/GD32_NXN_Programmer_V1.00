@@ -81,7 +81,7 @@ This information includes:
 
 /// Indicate that JTAG communication mode is available at the Debug Port.
 /// This information is returned by the command \ref DAP_Info as part of <b>Capabilities</b>.
-#define DAP_JTAG                0               ///< PA8/PA9/PA10 are USB_EN/CDC_LED/LCD_BLK.
+#define DAP_JTAG                0               ///< 新板目标端只引出 SWD，不提供 JTAG。
 
 /// Configure maximum number of JTAG devices on the scan chain connected to the Debug Access Port.
 /// This setting impacts the RAM requirements of the Debug Unit. Valid range is 1 .. 255.
@@ -173,48 +173,26 @@ __STATIC_INLINE uint8_t DAP_GetSerNumString (char *str) {
 
 /* Private defines -----------------------------------------------------------*/
 
-//#define V1  // 禁用V1引脚, 使用与硬件一致的non-V1: SWCLK=PB13 SWDIO=PB15 nRESET=PB12
-
-#ifdef V1
+/* GD32F103RCT6 新板：目标通道 A 只保留 SWD 三线。
+   SWCLK=PA15、SWDIO=PC10、nRESET=PC12；目标端没有 JTAG 连线，
+   TDI/TDO/nTRST 仅为保持 CMSIS-DAP 编译兼容，指向未使用的 PC13/PC15。 */
 #define JTAG_TCK_Pin GPIO_PIN_15
-#define JTAG_TCK_GPIO_Port GPIOB
+#define JTAG_TCK_GPIO_Port GPIOA
 
-#define JTAG_TMS_Pin GPIO_PIN_13
-#define JTAG_TMS_GPIO_Port GPIOB
+#define JTAG_TMS_Pin GPIO_PIN_10
+#define JTAG_TMS_GPIO_Port GPIOC
 
-#define JTAG_nRESET_Pin GPIO_PIN_8
-#define JTAG_nRESET_GPIO_Port GPIOA
+#define JTAG_nRESET_Pin GPIO_PIN_12
+#define JTAG_nRESET_GPIO_Port GPIOC
 
-#define JTAG_TDI_Pin GPIO_PIN_0
-#define JTAG_TDI_GPIO_Port GPIOB
+#define JTAG_TDI_Pin GPIO_PIN_13
+#define JTAG_TDI_GPIO_Port GPIOC
 
-#define JTAG_TDO_Pin GPIO_PIN_1
-#define JTAG_TDO_GPIO_Port GPIOB
+#define JTAG_TDO_Pin GPIO_PIN_15
+#define JTAG_TDO_GPIO_Port GPIOC
 
-#define JTAG_nTRST_Pin GPIO_PIN_2
-#define JTAG_nTRST_GPIO_Port GPIOB
-
-#else
-#define JTAG_TCK_Pin 							GPIO_PIN_13
-#define JTAG_TCK_GPIO_Port 				GPIOB
-
-/* SWDIO 从 PB15 改到 PB14：板上 PB14/PB15 短接在同一条 TGT_SWDIO 网络上，
-   割掉 PB15 那一侧后，PB14 独占该网络，PB15 释放出来做别的用 */
-#define JTAG_TMS_Pin 							GPIO_PIN_14
-#define JTAG_TMS_GPIO_Port 				GPIOB
-
-#define JTAG_nRESET_Pin 					GPIO_PIN_12
-#define JTAG_nRESET_GPIO_Port 		GPIOB
-
-#define JTAG_TDI_Pin 							GPIO_PIN_9
-#define JTAG_TDI_GPIO_Port 				GPIOA
-
-#define JTAG_TDO_Pin 							GPIO_PIN_8
-#define JTAG_TDO_GPIO_Port 				GPIOA
-
-#define JTAG_nTRST_Pin 						GPIO_PIN_10
-#define JTAG_nTRST_GPIO_Port 			GPIOA
-#endif
+#define JTAG_nTRST_Pin GPIO_PIN_13
+#define JTAG_nTRST_GPIO_Port GPIOC
 
 // Connected LED                PIN13 of GPIOC
 
@@ -273,15 +251,12 @@ __STATIC_INLINE void PORT_JTAG_SETUP (void) {
 	
 	GPIO_BOP(JTAG_TCK_GPIO_Port) = (uint32_t)JTAG_TCK_Pin;
 	GPIO_BOP(JTAG_TMS_GPIO_Port) = (uint32_t)JTAG_TMS_Pin;
-	/* PA9(TDI) 已改作 CDC_LED 输出，JTAG 模式不再驱动 TDI */
-	/* PA10 belongs to LCD_BLK; debug setup must not touch it. */
 	GPIO_BOP(JTAG_nRESET_GPIO_Port) = (uint32_t)JTAG_nRESET_Pin;
-	
+
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
-	/* PA9(TDI) 已改作 CDC_LED，不再配置为输出 */
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
-	/* PA8(TDO) 已改作 USB_EN 输出，不再作为 TDO 输入配置 */
+	/* 新板目标端没有 JTAG 连线；TDI/TDO/nTRST 不配置，保持高阻。 */
 
 }
 
@@ -299,11 +274,7 @@ __STATIC_INLINE void PORT_SWD_SETUP (void) {
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_OUT_PP, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_OUT_OD, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
-	
-	/* PA9(TDI) 已改作 CDC_LED 输出，若在此设成浮空输入，swd_init() 会把 LED 关掉 */
-	/* PA8(TDO) 不再配置：已改作 USB_EN 输出。若在此设为浮空输入，
-	   每次 swd_init() 都会把 USB_EN 拉飞，USB 会掉线 */
-	/* Keep PA10 configured by the LCD backlight driver. */
+	/* 只配置目标 SWD 三线；其余板级引脚由各自 BSP 管理。 */
 
 }
 
@@ -315,8 +286,6 @@ __STATIC_INLINE void PORT_OFF (void) {
 
 	gpio_init(JTAG_TCK_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TCK_Pin);
 	gpio_init(JTAG_TMS_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_TMS_Pin);
-	/* PA9(TDI) 已改作 CDC_LED，PORT_OFF 不再动它 */
-	/* Keep PA10 configured by the LCD backlight driver. */
 	gpio_init(JTAG_nRESET_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, JTAG_nRESET_Pin);
 
 	
