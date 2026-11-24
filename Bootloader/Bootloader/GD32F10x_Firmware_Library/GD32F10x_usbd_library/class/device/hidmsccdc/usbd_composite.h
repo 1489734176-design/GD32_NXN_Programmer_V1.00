@@ -1,0 +1,40 @@
+#ifndef __USBD_COMPOSITE_H_
+#define __USBD_COMPOSITE_H_
+
+#include "usb_ch9_std.h"
+#include "custom_hid_core.h"
+#include "usbd_msc_core.h"
+#include "cdc_acm_core.h"
+
+
+typedef struct
+{
+    usb_desc_config         				 config;
+		usb_desc_iad										 hid_iad;
+		usb_desc_itf            				 hid_itf;
+    usb_desc_hid            				 hid_vendor;
+    usb_desc_ep             				 hid_epout;
+    usb_desc_ep             				 hid_epin;
+		usb_desc_iad										 msc_iad;
+		usb_desc_itf            				 msc_itf;
+    usb_desc_ep             				 msc_epin;
+    usb_desc_ep             				 msc_epout;
+		usb_desc_iad										 cdc_iad;
+		usb_desc_itf                     cmd_itf;
+    usb_desc_header_func             cdc_header;
+    usb_desc_call_managment_func     cdc_call_managment;
+    usb_desc_acm_func                cdc_acm;
+    usb_desc_union_func              cdc_union;
+    usb_desc_ep                      cdc_cmd_endpoint;
+    usb_desc_itf                     cdc_data_interface;
+    usb_desc_ep                      cdc_out_endpoint;
+    usb_desc_ep                      cdc_in_endpoint;
+} Composite_desc_config;
+
+extern usb_desc Composite_desc;
+extern usb_class Composite_class;
+
+
+#endif
+
+

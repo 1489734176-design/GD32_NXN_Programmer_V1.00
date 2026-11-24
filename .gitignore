@@ -7,11 +7,25 @@
 *.zip
 
 # ===== 嵌套的独立 git 仓库（各自维护历史，主仓库不跟踪）=====
-Bootloader/Bootloader/
 资料/GD32-HID-标准FLM/GD32-HID/
 资料/_Template/
 资料/_Template-opt/
 资料/_Template-opt -0230/
+
+# ===== Bootloader：源码/工程纳入主仓库，忽略编译中间产物（保留 axf/hex/bin）=====
+Bootloader/Bootloader/**/*.o
+Bootloader/Bootloader/**/*.crf
+Bootloader/Bootloader/**/*.d
+Bootloader/Bootloader/**/*.dep
+Bootloader/Bootloader/**/*.lnp
+Bootloader/Bootloader/**/*.lst
+Bootloader/Bootloader/**/*.map
+Bootloader/Bootloader/**/*.htm
+Bootloader/Bootloader/**/*.Bak
+Bootloader/Bootloader/.git.bak/
+Bootloader/Bootloader/DAPlink/MDK-ARM/JLinkLog.txt
+Bootloader/Bootloader/DAPlink/MDK-ARM/dis_boot.txt
+Bootloader/Bootloader/git.png
 
 # ===== 本地工具与临时数据 =====
 .workbuddy-ai/
