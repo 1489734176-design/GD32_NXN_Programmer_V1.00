@@ -20,6 +20,8 @@ static custombulk_handler cb_handler;
 static volatile uint16_t file_request_length;
 static volatile uint8_t file_request_pending, file_cleanup_pending;
 static volatile uint8_t file_request_busy;
+/* Incremented on every USB endpoint event; used to detect a host that stopped reading. */
+static volatile uint32_t custombulk_events;
 
 static uint8_t staged_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
@@ -128,6 +130,7 @@ static uint8_t custombulk_req_process(usb_dev *udev, usb_req *req)
 
 static void custombulk_data_in(usb_dev *udev, uint8_t ep_num)
 {
+    custombulk_events++;
     cb_handler.transfer_active = 0; /* 应答结束后才允许启动下一次目标烧录。 */
     /* IN transfer complete - response sent */
     if (prepare_response_pending) {
@@ -142,11 +145,14 @@ static void custombulk_data_out(usb_dev *udev, uint8_t ep_num)
 {
     uint16_t len;
 
+    custombulk_events++;
     /* Get received length */
     len = udev->transc_out[ep_num].xfer_count;
-
-    /* 仅暂存指令，禁止USB中断直接操作文件系统；烧录期间普通文件指令立即回忙。 */
-    if(len && g_programming_active && cb_handler.rx_buf[0] != CMD_GET_STATUS)
+    /* During programming the main task is inside a long critical section and
+     * cannot answer any queued command. Reply BUSY from the interrupt for ALL
+     * commands, including GET_STATUS; otherwise the host times out, leaves the
+     * IN response unread and the OUT endpoint is never re-armed again. */
+    if(len && g_programming_active)
     {
         send_response(udev, STATUS_BUSY, NULL, 0);
         return;
@@ -219,6 +225,54 @@ uint8_t custombulk_is_busy(void)
     return cb_handler.file_opened || cb_handler.transfer_active || file_request_pending ||
            file_cleanup_pending || staged_algorithm[0] || prepare_request_pending ||
            prepare_response_pending || prepare_complete_pending || quota_request_pending;
+}
+
+/* Number of USB endpoint events. The main task compares this counter to detect
+ * a host that stopped consuming responses. */
+uint32_t custombulk_event_count(void)
+{
+    return custombulk_events;
+}
+
+/* Drop a wedged host session and re-arm the OUT endpoint so the device can
+ * receive commands again. Only called from the main task. */
+void custombulk_recover_session(usb_dev *udev)
+{
+    if(cb_fd.obj.fs) f_close(&cb_fd);
+    cb_handler.file_opened = 0;
+    cb_handler.transfer_active = 0;
+    file_request_pending = 0;
+    file_cleanup_pending = 0;
+    usbd_ep_recev(udev, CUSTOMBULK_OUT_EP, cb_handler.rx_buf, CUSTOMBULK_OUT_PACKET);
+    oled.Refresh_flag = 1;
+}
+
+/* Recover a session the host has abandoned. idle_ms is the time since the last
+ * USB endpoint event. An unread IN response wedges the bulk pair, so it is
+ * treated as stale sooner than a half-finished file upload. */
+void custombulk_service_stale(usb_dev *udev, uint32_t idle_ms)
+{
+    if(cb_handler.transfer_active && idle_ms > 6000U)
+    {
+        custombulk_recover_session(udev);
+    }
+    else if(cb_handler.file_opened && idle_ms > 15000U)
+    {
+        if(cb_handler.file_opened == 2)
+        {
+            /* An abandoned upload may be a truncated file: never burn it. */
+            staged_algorithm[0] = 0;
+            prepare_algorithm[0] = 0;
+            prepare_program[0] = 0;
+            prepare_request_pending = 0;
+            prepare_response_pending = 0;
+            prepare_complete_pending = 0;
+            quota_request_pending = 0;
+            app_data.bin_name[0] = 0;
+            files_changed_pending = 1;
+        }
+        custombulk_recover_session(udev);
+    }
 }
 
 /* LIST_DIR: [CMD][path] -> [STATUS][entry1\nentry2\n...] */

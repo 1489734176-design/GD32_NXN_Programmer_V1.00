@@ -35,8 +35,10 @@ OF SUCH DAMAGE.
 #include "gd32f10x_it.h"
 #include "usbd_lld_int.h"
 #include "usbd_lld_core.h"
-#include "FreeRTOS.h"					
+#include "FreeRTOS.h"
 #include "task.h"
+#include "bsp_lcd.h"
+#include <stdio.h>
 
 /*!
     \brief      NMI异常处理函数
@@ -54,10 +56,80 @@ void NMI_Handler(void)
     \param[out] 无
     \retval     无
 */
-void HardFault_Handler(void)
+/* 故障现场：把异常压栈的 R0~R3/PC/LR 和 SCB 故障寄存器显示到 LCD，
+ * 然后保持 LED3(PC5) 快闪。frame 由下面的汇编入口按 EXC_RETURN 选择
+ * MSP/PSP 后传入；所有值先拷贝到局部变量，避免后续绘图覆盖故障栈。 */
+void fault_report(uint32_t *frame)
 {
-    /* 发生HardFault异常时进入死循环 */
-    while(1){
+    uint32_t r0, r1, r2, r3, lr, pc, cfsr, hfsr, mmfar, bfar;
+    char line[32];
+    volatile uint32_t i;
+
+    r0 = frame[0]; r1 = frame[1]; r2 = frame[2]; r3 = frame[3];
+    lr = frame[5]; pc = frame[6];
+    cfsr = SCB->CFSR; hfsr = SCB->HFSR;
+    mmfar = SCB->MMFAR; bfar = SCB->BFAR;
+
+    /* 屏幕已经初始化过；这里不能再调 LCD_Init()，它会 vTaskDelay。 */
+    LCD_Clear(LCD_BLACK);
+    LCD_ShowString(8, 8,   "*** FAULT ***", LCD_RED, LCD_BLACK, 2);
+    sprintf(line, "PC %08lX", (unsigned long)pc);
+    LCD_ShowString(8, 36, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "LR %08lX", (unsigned long)lr);
+    LCD_ShowString(8, 56, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "CFSR %08lX", (unsigned long)cfsr);
+    LCD_ShowString(8, 80, line, LCD_YELLOW, LCD_BLACK, 2);
+    sprintf(line, "HFSR %08lX", (unsigned long)hfsr);
+    LCD_ShowString(8, 100, line, LCD_YELLOW, LCD_BLACK, 2);
+    sprintf(line, "R0 %08lX", (unsigned long)r0);
+    LCD_ShowString(8, 124, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "R1 %08lX", (unsigned long)r1);
+    LCD_ShowString(8, 144, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "R2 %08lX", (unsigned long)r2);
+    LCD_ShowString(8, 164, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "R3 %08lX", (unsigned long)r3);
+    LCD_ShowString(8, 184, line, LCD_WHITE, LCD_BLACK, 2);
+    sprintf(line, "MMF %08lX", (unsigned long)mmfar);
+    LCD_ShowString(8, 208, line, LCD_GRAY, LCD_BLACK, 2);
+    sprintf(line, "BFA %08lX", (unsigned long)bfar);
+    LCD_ShowString(8, 228, line, LCD_GRAY, LCD_BLACK, 2);
+
+    rcu_periph_clock_enable(RCU_GPIOC);
+    gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_5);
+    while(1)
+    {
+        GPIO_BOP(GPIOC) = GPIO_PIN_5;
+        for(i = 0; i < 200000U; i++) { }
+        GPIO_BC(GPIOC) = GPIO_PIN_5;
+        for(i = 0; i < 200000U; i++) { }
+    }
+}
+
+/* 汇编入口：按 EXC_RETURN 的 bit2 选择异常压栈的 MSP/PSP，再跳到 C 处理函数。
+ * 不能直接在 C 入口里读 LR，因为 BL 调用会覆盖它。 */
+__asm void HardFault_Handler(void)
+{
+    IMPORT fault_report
+    TST     LR, #4
+    ITE     EQ
+    MRSEQ   R0, MSP
+    MRSNE   R0, PSP
+    B       fault_report
+}
+
+/* MemManage/BusFault/UsageFault 默认未使能，异常都会升级到 HardFault；
+ * 打开时至少保留 LED3 快闪指示，避免静默死循环。 */
+static void fault_indicator(void)
+{
+    volatile uint32_t i;
+    rcu_periph_clock_enable(RCU_GPIOC);
+    gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_5);
+    while(1)
+    {
+        GPIO_BOP(GPIOC) = GPIO_PIN_5;
+        for(i = 0; i < 200000U; i++) { }
+        GPIO_BC(GPIOC) = GPIO_PIN_5;
+        for(i = 0; i < 200000U; i++) { }
     }
 }
 
@@ -69,9 +141,7 @@ void HardFault_Handler(void)
 */
 void MemManage_Handler(void)
 {
-    /* 发生MemManage异常时进入死循环 */
-    while(1){
-    }
+    fault_indicator();
 }
 
 /*!
@@ -82,9 +152,7 @@ void MemManage_Handler(void)
 */
 void BusFault_Handler(void)
 {
-    /* 发生BusFault异常时进入死循环 */
-    while(1){
-    }
+    fault_indicator();
 }
 
 /*!
@@ -95,9 +163,7 @@ void BusFault_Handler(void)
 */
 void UsageFault_Handler(void)
 {
-    /* 发生UsageFault异常时进入死循环 */
-    while(1){
-    }
+    fault_indicator();
 }
 
 /*!

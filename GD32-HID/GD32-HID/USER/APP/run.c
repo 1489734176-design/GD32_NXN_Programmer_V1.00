@@ -1168,17 +1168,41 @@ quota_rejected:
 			ret = f_read(&fd, DATA_BUFFER, 2048, &ulReadNum);
 			if(ret == FR_OK && ulReadNum != 0)
 			{
-				err_flag = 1;
-				/* 检测是否为带OPT支持的扩展格式 */
-				if(fw_size == ((program_target_t *)DATA_BUFFER)->algo_size + PROG_TARGET_EXT_HDR_SIZE)
+				uint32_t algo_size = ((program_target_t *)DATA_BUFFER)->algo_size;
+				uint32_t hdr_size;
+				/* 先按文件长度判断标准14字段或扩展17字段格式 */
+				if(fw_size == algo_size + PROG_TARGET_EXT_HDR_SIZE)
 				{
 					is_ext_algo = 1;
+					hdr_size = PROG_TARGET_EXT_HDR_SIZE;
+				}
+				else if(fw_size == algo_size + (PROG_TARGET_EXT_HDR_SIZE - 12U))
+				{
+					is_ext_algo = 0;
+					hdr_size = PROG_TARGET_EXT_HDR_SIZE - 12U;
+				}
+				else
+				{
+					f_close(&fd);
+					show_download_status("ALGO FORMAT ERR");
+					goto download_return;
+				}
+				/* 只读取了2048字节，算法块必须放得下，否则目标端会执行未初始化数据 */
+				if(algo_size > 2048U - hdr_size)
+				{
+					f_close(&fd);
+					show_download_status("ALGO SIZE ERR");
+					goto download_return;
+				}
+				err_flag = 1;
+				if(is_ext_algo)
+				{
 					/* 先保存OPT字段，再移动algo_blob以对齐program_target_t */
 					opt_prog_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_program;
 					opt_base_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_addr;
 					opt_byte_size = ((program_target_ext_t *)DATA_BUFFER)->opt_size;
 					/* algo_blob从偏移68移到56，使program_target_t强制转换成立 */
-					memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, ((program_target_t *)DATA_BUFFER)->algo_size);
+					memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, algo_size);
 				}
 			}
 			f_close(&fd);
@@ -1884,6 +1908,16 @@ void run_task(void *pvParameters)
             custombulk_file_service(&usb_hid); /* 所有文件系统访问集中到主任务。 */
             custombulk_quota_service(&usb_hid);
 			custombulk_prepare_service(&usb_hid);
+			/* A host that stopped reading an IN response leaves transfer_active
+			 * set forever and wedges the bulk pair (auto probing then stops).
+			 * Recover only when USB has been quiet for a while. */
+			{
+				static uint32_t usb_evt_seen, usb_evt_ms;
+				uint32_t usb_evt = custombulk_event_count();
+				uint32_t usb_now = auto_now_ms();
+				if(usb_evt != usb_evt_seen) { usb_evt_seen = usb_evt; usb_evt_ms = usb_now; }
+				if(!g_programming_active) custombulk_service_stale(&usb_hid, (uint32_t)(usb_now - usb_evt_ms));
+			}
             /* 文件读取已结束：下面只消费状态及拷贝名称，不在临界区读文件/刷新LCD。
              * 保存并恢复原PRIMASK，确保高优先级USB复位也无法提交半个旧会话。 */
             prepare_irq_mask = __get_PRIMASK();

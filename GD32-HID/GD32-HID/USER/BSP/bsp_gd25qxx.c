@@ -292,11 +292,16 @@ void GD25QXX_Erase_Sector(uint32_t Dst_Addr)
     GD25QXX_Wait_Busy();   				    //等待擦除完成
 }  
 
-/* 轮询状态寄存器1的BUSY位，直到芯片空闲；无超时保护。
- * 返回 - 无 */
-void GD25QXX_Wait_Busy(void)   
-{   
-	while((GD25QXX_ReadSR(1)&0x01)==0x01);   // 等待BUSY位清空
+/* 轮询状态寄存器1的BUSY位，直到芯片空闲；带超时，避免SPI/Flash异常时主任务永久卡死。
+ * 返回 - 1=空闲，0=超时 */
+uint8_t GD25QXX_Wait_Busy(void)
+{
+	uint32_t timeout = 200000U;
+	while((GD25QXX_ReadSR(1)&0x01U)==0x01U)
+	{
+		if(--timeout == 0U) return 0U;
+	}
+	return 1U;
 }  
 
 /* 发送掉电命令使Flash进入低功耗，之后须用GD25QXX_WAKEUP唤醒。

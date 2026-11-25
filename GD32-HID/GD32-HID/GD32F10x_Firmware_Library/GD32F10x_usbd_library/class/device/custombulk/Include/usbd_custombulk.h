@@ -66,6 +66,10 @@ void custombulk_file_service(usb_dev *udev);
 /* 总线复位/类卸载只标记延后清理，不在中断执行FatFs。 */
 void custombulk_reset(void);
 uint8_t custombulk_is_busy(void);
+/* Stale USB session recovery (main task only). */
+uint32_t custombulk_event_count(void);
+void custombulk_recover_session(usb_dev *udev);
+void custombulk_service_stale(usb_dev *udev, uint32_t idle_ms);
 
 /* Process deferred prepare requests from the application task. */
 /* 在主任务中完成文件检查和导入确认，避免USB中断中执行耗时文件操作。 */

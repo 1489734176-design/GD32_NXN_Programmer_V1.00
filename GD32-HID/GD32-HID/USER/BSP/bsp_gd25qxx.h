@@ -107,7 +107,7 @@ void GD25QXX_Erase_Chip(void);
 void GD25QXX_Erase_Sector(uint32_t Dst_Addr);
 /* 轮询状态寄存器1的BUSY位直到空闲，无超时保护。
  * 返回 - 无 */
-void GD25QXX_Wait_Busy(void);
+uint8_t GD25QXX_Wait_Busy(void);
 /* 进入掉电低功耗模式，之后须用GD25QXX_WAKEUP唤醒。
  * 返回 - 无 */
 void GD25QXX_PowerDown(void);
