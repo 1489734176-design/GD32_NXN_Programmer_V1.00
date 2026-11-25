@@ -79,7 +79,8 @@ void custombulk_quota_service(usb_dev *udev);
 /* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
-                                         uint8_t *opt_required);
+                                         uint8_t *opt_required,
+                                         uint8_t *channel_b);
 
 /* 成功准备的主固件SUM32，保持到下一成功prepare、reset或取消；值0也合法。 */
 uint32_t custombulk_prepared_checksum(void);

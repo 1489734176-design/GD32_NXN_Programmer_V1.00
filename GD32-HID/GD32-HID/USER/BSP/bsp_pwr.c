@@ -38,6 +38,19 @@ void pwr_init(void)
 
 /* 读取电池/充电状态，两个检测脚均为低电平有效。
  * 返回 - 0=未接充电器，1=正在充电（BAT_CHARG为低），2=已充满（BAT_FULL为低） */
+/* Target power: A = PC11, B = PC7, both active low. */
+void target_power(uint8_t ch, uint8_t on)
+{
+    if(ch == 0U)
+    {
+        if(on) TARGET_PWR_ON; else TARGET_PWR_OFF;
+    }
+    else
+    {
+        if(on) TGT_B_VCC_ON; else TGT_B_VCC_OFF;
+    }
+}
+
 uint8_t bat_status_get(void)
 {
 	if(!gpio_input_bit_get(BAT_CHARG_GPIO_Port, BAT_CHARG_Pin))

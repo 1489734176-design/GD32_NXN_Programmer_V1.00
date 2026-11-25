@@ -55,6 +55,8 @@ extern uint32_t g_diag_step;            // 失败发生在哪个子步骤
 /* 在目标上执行Flash算法系统调用。
  * sysCallParam=算法描述表，entry=算法函数入口，arg1~arg4=对应R0~R3的入参。返回1=算法返回0 */
 uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
+uint8_t swd_flash_syscall_start(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
+uint8_t swd_flash_syscall_wait(uint32_t *r0);
 /* 毫秒级忙等延时：ms=延时长度（毫秒） */
 void delaymS(uint32_t ms);
 /* 控制nRESET：asserted=1拉低（保持复位），0释放并补发软复位 */

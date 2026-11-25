@@ -41,7 +41,7 @@ typedef struct {
     uint8_t valid;
     uint16_t x, y, width, fill, color;
 } ui_progress_status_t;
-static ui_progress_status_t ui_progress_status;
+static ui_progress_status_t ui_progress_status[2];
 /* 全屏清黑，并使所有字段缓存与进度条状态失效，下次绘制全部重画。
  * 返回 - 无 */
 void OLED_Clear(void)
@@ -49,7 +49,7 @@ void OLED_Clear(void)
     uint8_t i;
     for(i = 0; i < 16; i++) ui_fields[i].valid = 0;
     progress_valid = 0;
-    ui_progress_status.valid = 0;
+    ui_progress_status[0].valid = ui_progress_status[1].valid = 0;
     ui_page = 255;
     LCD_Clear(LCD_BLACK);
 }
@@ -290,9 +290,10 @@ void UI_Progress(uint16_t y, uint8_t percent)
 /* 叠字进度仅缓存可见文字。变长/变短、GBK换字及填充移动都合成同一脏区，
  * 先恢复该区的正确双色背景，再在相同裁剪区内重新写入相交字模。 */
 void UI_ProgressStatus(uint16_t x, uint16_t y, uint16_t width,
-                       uint8_t percent, uint8_t state, const char *status)
+                       uint8_t percent, uint8_t state, const char *status,
+                       uint8_t row)
 {
-    ui_progress_status_t *cache = &ui_progress_status;
+    ui_progress_status_t *cache = &ui_progress_status[row ? 1U : 0U];
     char text[LCD_WIDTH / 8 + 1];
     uint16_t fill, color, first, last, before, after, col, n, bytes, old_n;
     const uint8_t *bitmap;

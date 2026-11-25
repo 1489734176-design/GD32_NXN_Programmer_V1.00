@@ -923,7 +923,53 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
 	}
 
 	return 1;
+}
+/* Start a flash algorithm syscall without waiting for completion. */
+uint8_t swd_flash_syscall_start(const program_syscall_t *sysCallParam, uint32_t entry,
+                                uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
+{
+    DEBUG_STATE state = {{0}, 0};
+    state.r[0] = arg1;
+    state.r[1] = arg2;
+    state.r[2] = arg3;
+    state.r[3] = arg4;
+    state.r[9] = sysCallParam->static_base;
+    state.r[13] = sysCallParam->stack_pointer;
+    state.r[14] = sysCallParam->breakpoint;
+    state.r[15] = entry;
+    state.xpsr = 0x01000000;
+    if(!swd_write_debug_state(&state))
+    {
+        swd_diag_capture();
+        g_last_syscall_r0 = 0xDEE1;
+        return 0;
+    }
+    return 1;
 }
+
+/* Wait for the syscall breakpoint and read R0 (0 = success). */
+uint8_t swd_flash_syscall_wait(uint32_t *r0)
+{
+    uint32_t value = 0;
+    if(!swd_wait_until_halted())
+    {
+        g_last_syscall_r0 = 0xDEE2;
+        return 0;
+    }
+    if(!swd_read_core_register(0, &value))
+    {
+        g_last_syscall_r0 = 0xDEE3;
+        return 0;
+    }
+    if(value != 0)
+    {
+        g_last_syscall_r0 = value;
+        return 0;
+    }
+    if(r0) *r0 = value;
+    return 1;
+}
+
 
 /* 发送SWD复位序列：先输出至少50个时钟的高电平，让目标端SWD状态机复位。
  * 返回 - 固定返回1 */

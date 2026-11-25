@@ -110,6 +110,8 @@ extern "C" {
 /* 烧录通道 B：本期只定义，初始化时安全停车，不参与烧录流程 */
 #define TGT_B_VCC_EN_Pin GPIO_PIN_7
 #define TGT_B_VCC_EN_GPIO_Port GPIOC
+#define TGT_B_VCC_ON  gpio_bit_reset(TGT_B_VCC_EN_GPIO_Port, TGT_B_VCC_EN_Pin)
+#define TGT_B_VCC_OFF gpio_bit_set(TGT_B_VCC_EN_GPIO_Port, TGT_B_VCC_EN_Pin)
 #define TGT_B_SWCLK_Pin GPIO_PIN_15
 #define TGT_B_SWCLK_GPIO_Port GPIOB
 #define TGT_B_SWDIO_Pin GPIO_PIN_6

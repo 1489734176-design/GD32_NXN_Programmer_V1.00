@@ -27,6 +27,7 @@ static uint8_t staged_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_program[CB_MAX_NAME + 1];
 static uint8_t prepare_opt_required;
+static uint8_t prepare_channel_b;
 /* 主BIN按字节累加SUM32；已准备的值供LCD提交时读取。 */
 static uint8_t prepare_has_checksum;
 static uint32_t prepare_expected_checksum;
@@ -682,7 +683,7 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
 static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint16_t name_offset, name_len;
-    if (len < 3 || (buf[1] & (uint8_t)~3U) != 0) {
+    if (len < 3 || (buf[1] & (uint8_t)~7U) != 0) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
@@ -703,6 +704,7 @@ static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
     memcpy(prepare_program, &buf[name_offset], name_len);
     prepare_program[name_len] = '\0';
     prepare_opt_required = buf[1] & 1U;
+    prepare_channel_b = (buf[1] & 4U) ? 1U : 0U;
     prepare_has_checksum = (buf[1] & 2U) ? 1U : 0U;
     prepare_expected_checksum = prepare_has_checksum ?
         (uint32_t)buf[2] | ((uint32_t)buf[3] << 8) |
@@ -799,7 +801,8 @@ prepare_error:
 /* 消费已确认的上位机导入请求，向界面提供算法名、固件名和OPT开关。 */
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
-                                         uint8_t *opt_required)
+                                         uint8_t *opt_required,
+                                         uint8_t *channel_b)
 {
     if (!prepare_complete_pending)
         return 0;
@@ -808,6 +811,8 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
     memcpy(algorithm_name, prepare_algorithm, sizeof(prepare_algorithm));
     memcpy(program_name, prepare_program, sizeof(prepare_program));
     *opt_required = prepare_opt_required;
+    *channel_b = prepare_channel_b;
+    prepare_channel_b = 0;
     staged_algorithm[0] = '\0';
     prepare_algorithm[0] = '\0';
     prepare_program[0] = '\0';

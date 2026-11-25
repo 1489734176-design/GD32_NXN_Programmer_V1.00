@@ -55,6 +55,24 @@
 
 
          DAP_Data_t DAP_Data;           // DAP Data
+
+/* 目标 SWD 通道运行时分时选择。A 为默认；PORT_OFF() 先把上一路释放为高阻，
+ * 新一路由调用方的 DAP_SETUP()/swd_init() 再配置，避免提前驱动目标。 */
+static const dap_pin_set_t dap_pin_sets[2] = {
+    {GPIOA, GPIO_PIN_15, GPIOC, GPIO_PIN_10, GPIOC, GPIO_PIN_12},
+    {GPIOB, GPIO_PIN_15, GPIOC, GPIO_PIN_6,  GPIOC, GPIO_PIN_8 }
+};
+dap_pin_set_t dap_pins = {GPIOA, GPIO_PIN_15, GPIOC, GPIO_PIN_10, GPIOC, GPIO_PIN_12};
+uint8_t       dap_channel = 0U;
+
+void DAP_SelectChannel(uint8_t ch)
+{
+    if(ch > 1U || ch == dap_channel) return;
+    PORT_OFF();                 /* 释放上一路的 SWDIO/SWCLK/nRESET */
+    dap_pins = dap_pin_sets[ch];
+    dap_channel = ch;
+    PORT_SWD_SETUP(); /* configure the newly selected channel pins */
+}
 /* 在线仿真专用部分：宏为0时不编译；离线SWD/OPT及WinUSB传输继续保留。 */
 #if DAP_ONLINE_ENABLE
 volatile uint8_t    DAP_TransferAbort;  // Transfer Abort Flag

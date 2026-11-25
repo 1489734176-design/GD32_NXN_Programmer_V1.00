@@ -21,6 +21,9 @@ error_t target_flash_uninit(program_target_t *algo);
  * size - 待写入字节数
  * 返回 - ERROR_SUCCESS / ERROR_ALGO_DATA_SEQ / ERROR_WRITE */
 error_t target_flash_program_page(program_target_t *algo, uint32_t addr, const uint8_t *buf, uint32_t size);
+uint32_t target_flash_program_prepare(program_target_t *algo, uint32_t addr, const uint8_t *buf, uint32_t size);
+uint8_t target_flash_program_start(program_target_t *algo, uint32_t addr);
+uint8_t target_flash_program_wait(program_target_t *algo, uint32_t *r0);
 /* 擦除目标Flash的一个扇区。
  * algo - Flash算法描述（erase_sector入口）
  * addr - 要擦除的扇区地址

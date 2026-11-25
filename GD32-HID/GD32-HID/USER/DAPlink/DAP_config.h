@@ -173,17 +173,32 @@ __STATIC_INLINE uint8_t DAP_GetSerNumString (char *str) {
 
 /* Private defines -----------------------------------------------------------*/
 
-/* GD32F103RCT6 新板：目标通道 A 只保留 SWD 三线。
-   SWCLK=PA15、SWDIO=PC10、nRESET=PC12；目标端没有 JTAG 连线，
+/* GD32F103RCT6 新板：目标 SWD 通道 A/B 运行时可切换。
+   A：SWCLK=PA15、SWDIO=PC10、nRESET=PC12；
+   B：SWCLK=PB15、SWDIO=PC6、nRESET=PC8。
+   默认 A；B 只在双通道流程中显式 DAP_SelectChannel(1)。
    TDI/TDO/nTRST 仅为保持 CMSIS-DAP 编译兼容，指向未使用的 PC13/PC15。 */
-#define JTAG_TCK_Pin GPIO_PIN_15
-#define JTAG_TCK_GPIO_Port GPIOA
+typedef struct {
+    uint32_t clk_port;
+    uint32_t clk_pin;
+    uint32_t io_port;
+    uint32_t io_pin;
+    uint32_t rst_port;
+    uint32_t rst_pin;
+} dap_pin_set_t;
 
-#define JTAG_TMS_Pin GPIO_PIN_10
-#define JTAG_TMS_GPIO_Port GPIOC
+extern dap_pin_set_t dap_pins;
+extern uint8_t       dap_channel;
+void DAP_SelectChannel(uint8_t ch);
 
-#define JTAG_nRESET_Pin GPIO_PIN_12
-#define JTAG_nRESET_GPIO_Port GPIOC
+#define JTAG_TCK_Pin          (dap_pins.clk_pin)
+#define JTAG_TCK_GPIO_Port    (dap_pins.clk_port)
+
+#define JTAG_TMS_Pin          (dap_pins.io_pin)
+#define JTAG_TMS_GPIO_Port    (dap_pins.io_port)
+
+#define JTAG_nRESET_Pin       (dap_pins.rst_pin)
+#define JTAG_nRESET_GPIO_Port (dap_pins.rst_port)
 
 #define JTAG_TDI_Pin GPIO_PIN_13
 #define JTAG_TDI_GPIO_Port GPIOC

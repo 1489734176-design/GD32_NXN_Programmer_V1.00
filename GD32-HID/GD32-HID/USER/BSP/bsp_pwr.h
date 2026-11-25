@@ -9,6 +9,8 @@
 /* 初始化电源相关引脚：充电/充满检测、USB供电使能、目标板供电控制。
  * 返回 - 无 */
 void pwr_init(void);
+/* Target power: ch=0 = A (PC11), ch=1 = B (PC7); on=1 on, 0 off. */
+void target_power(uint8_t ch, uint8_t on);
 /* 读取电池/充电状态，两个检测脚均为低电平有效。
  * 返回 - 0=未接充电器，1=正在充电，2=已充满 */
 uint8_t bat_status_get(void);

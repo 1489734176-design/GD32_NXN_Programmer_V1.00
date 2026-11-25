@@ -121,6 +121,27 @@ error_t target_flash_program_page(program_target_t *algo, uint32_t addr, const u
  * algo - Flash算法描述，需提供erase_sector入口与系统调用表
  * addr - 要擦除的扇区地址（任意落在该扇区内的地址）
  * 返回 - ERROR_SUCCESS=成功，ERROR_ERASE_SECTOR=算法返回非0 */
+/* Dual-channel interleaved programming helpers. */
+uint32_t target_flash_program_prepare(program_target_t *algo, uint32_t addr, const uint8_t *buf, uint32_t size)
+{
+    uint32_t write_size = size > algo->program_buffer_size ? algo->program_buffer_size : size;
+    (void)addr;
+    if(!swd_write_memory(algo->program_buffer, (uint8_t *)buf, write_size)) return 0;
+    return write_size;
+}
+
+uint8_t target_flash_program_start(program_target_t *algo, uint32_t addr)
+{
+    return swd_flash_syscall_start(&algo->sys_call_s, algo->program_page, addr,
+                                   algo->program_buffer_size, algo->program_buffer, 0);
+}
+
+uint8_t target_flash_program_wait(program_target_t *algo, uint32_t *r0)
+{
+    (void)algo;
+    return swd_flash_syscall_wait(r0);
+}
+
 error_t target_flash_erase_sector(program_target_t *algo, uint32_t addr)
 {
     if (0 == swd_flash_syscall_exec(&algo->sys_call_s, algo->erase_sector, addr, 0, 0, 0))

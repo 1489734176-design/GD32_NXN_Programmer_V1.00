@@ -141,7 +141,8 @@ enum {
  * 文字在填充内黑色、填充外黄色，同内容零写屏；颜色/填充变化同步重画叠字。
  * OLED_Clear使缓存失效；x/y/width为原生像素，status允许NULL。 */
 void UI_ProgressStatus(uint16_t x, uint16_t y, uint16_t width,
-                       uint8_t percent, uint8_t state, const char *status);
+                       uint8_t percent, uint8_t state, const char *status,
+                       uint8_t row);
 /* 兼容旧接口：在128×64虚拟坐标系中画点，放大两倍显示。
  * row  - 虚拟行坐标0~63
  * col  - 虚拟列坐标0~127

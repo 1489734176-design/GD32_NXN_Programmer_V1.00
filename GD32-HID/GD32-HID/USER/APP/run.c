@@ -77,6 +77,8 @@ static uint8_t  g_auto_en      = 1;             /* 0=手动模式，1=自动模�
 static uint8_t  g_auto_st      = AUTO_ST_WAIT;
 static uint8_t  g_absent_seen  = 0;             /* 连续检测不到芯片的次数 */
 static uint8_t  g_present_seen = 0;             /* 连续检测到芯片的次数 */
+static uint8_t  g_auto_mask = 0;              /* last probed mask: bit0=A, bit1=B */
+static uint8_t  g_burn_mask = 1;              /* channels to burn in this cycle */
 static uint8_t  g_burn_done    = 0;             /* mode4：本颗芯片已处理过 */
 static uint8_t  g_burn_ok      = 0;             /* 上一次烧录的结果 */
 static uint32_t g_auto_t0      = 0;             /* 进入当前状态时的系统节拍 */
@@ -88,6 +90,7 @@ static void auto_standby_tick(void);
 static void auto_draw(void);
 /* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。 */
 static void auto_start_burn(void);
+static uint8_t auto_probe_mask(void);
 /* 检查算法和固件是否都已选择；缺少任一文件时禁止自动开始。 */
 static uint8_t auto_has_files(void);
 /* 将FreeRTOS系统节拍转换为毫秒，用于自动检测和结果停留计时。 */
@@ -96,6 +99,10 @@ static uint32_t auto_now_ms(void);
 /* 最后一次写入OLED状态行的文字；保留它，使mode4返回后待机页
    仍能重复显示失败原因 */
 static char g_last_status[64] = {0};
+/* B channel UI state. */
+static uint8_t g_channel_b_enable = 0;
+static uint8_t g_ui_percent_b, g_ui_state_b;
+static char g_last_status_b[64] = {0};
 
 /* 当前成功导入的主固件SUM32；有效标记独立保存，校验值00000000也有效。 */
 static uint32_t g_program_checksum;
@@ -372,8 +379,9 @@ static void draw_main(void)
         UI_TextColor(8, 188, "\xB1\xBE\xB4\xCE\xC9\xD5\xC2\xBC\x3A", 16, 1, LCD_BLUE); /* 本次烧录: */
         UI_TextColor(8, 208, "\xD2\xD1\xD3\xC3\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 已用次数: */
         UI_TextColor(8, 228, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\x3A", 16, 1, LCD_BLUE); /* 剩余次数: */
-        UI_TextColor(8, 268, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
-        UI_TextColor(8, 288, "\xD6\xB4\xD0\xD0\xBD\xF8\xB6\xC8\x3A", 16, 1, LCD_BLUE); /* 执行进度: */
+        UI_TextColor(8, 248, "\xBF\xAA\xCA\xBC\xC9\xD5\xC2\xBC", 16, 1, LCD_BLUE); /* 开始烧录 */
+        UI_TextColor(8, 268, "\xCD\xA8\xB5\xC0\x41\x3A", 16, 1, LCD_BLUE);
+        UI_TextColor(8, 288, "\xCD\xA8\xB5\xC0\x42\x3A", 16, 1, LCD_BLUE);
         UI_TextColor(80, 68, "3.3V", 16, 1, LCD_YELLOW);
         g_ui_ready = 1;
         show_top(1);
@@ -386,15 +394,21 @@ static void draw_main(void)
     show_counts();
     UI_FieldColor(10, 0, 48, 8, 16, !g_auto_en && app_data.head == 3 ? ">" : "", 16, 1, LCD_YELLOW);
     UI_FieldColor(7, 0, 148, 8, 16, !g_auto_en && app_data.head == 1 ? ">" : "", 16, 1, LCD_YELLOW);
-    UI_FieldColor(8, 0, 268, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
+    UI_FieldColor(8, 0, 248, 8, 16, g_auto_en || app_data.head == 2 ? ">" : "", 16, 1, LCD_YELLOW);
     show_top(0);
-    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status, 0);
+    if(g_channel_b_enable)
+        UI_ProgressStatus(80, 288, 152, g_ui_percent_b, g_ui_state_b, g_last_status_b, 1);
+    else
+        UI_ProgressStatus(80, 288, 152, 0, UI_PROGRESS_IDLE, "\xCE\xB4\xC6\xF4\xD3\xC3", 1);
 }
 
 static void reset_feedback(void)
 {
     g_ui_state = UI_PROGRESS_IDLE;
     g_ui_percent = 0;
+    g_ui_percent_b = 0; g_ui_state_b = UI_PROGRESS_IDLE;
+    strcpy(g_last_status_b, g_channel_b_enable ? "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC" : "\xCE\xB4\xC6\xF4\xD3\xC3");
     strcpy(g_last_status, !app_data.bin_name[0] ? "\xC7\xEB\xD1\xA1\xD4\xF1\xB9\xCC\xBC\xFE" :
                          (g_auto_en ? "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC" : "\xB5\xC8\xB4\xFD\xB2\xD9\xD7\xF7"));
 }
@@ -486,9 +500,13 @@ invalid_file:
  * 返回           - 无 */
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
-                                   uint8_t opt_required)
+                                   uint8_t opt_required,
+                                   uint8_t channel_b)
 {
     app_data.opt_enable = opt_required ? 1 : 0;
+    g_channel_b_enable = channel_b ? 1U : 0U;
+    g_ui_percent_b = 0; g_ui_state_b = UI_PROGRESS_IDLE;
+    strcpy(g_last_status_b, g_channel_b_enable ? "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC" : "\xCE\xB4\xC6\xF4\xD3\xC3");
     strncpy((char *)app_data.firmware_name, (const char *)algorithm_name,
             sizeof(app_data.firmware_name) - 1);
     app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = '\0';
@@ -890,7 +908,11 @@ void mode2(void)
                 {
                     g_burn_done = 0;
                     if(g_auto_en) auto_start_burn();
-                    else app_data.mode = 4;
+                    else
+                    {
+                        g_burn_mask = auto_probe_mask();
+                        if(g_burn_mask) app_data.mode = 4;
+                    }
                     key_val.mesg = 0; return;
                 }
             default: break;
@@ -911,7 +933,7 @@ static void show_download_progress(uint8_t percent)
 {
     uint8_t next = (uint8_t)(15U + 70U * (percent > 100 ? 100 : percent) / 100U);
     if(next > g_ui_percent) g_ui_percent = next;
-    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status, 0);
 }
 
 /* 保存反馈文字并叠加在底部进度条内，自动和手动模式共用。
@@ -933,7 +955,7 @@ static void show_download_status(const char *status)
         else if(strstr(status, "\xD0\xA3\xD1\xE9\x4F\x50\x54") || strstr(status, "\xB6\xC1\xC8\xA1\x4F\x50\x54") || strstr(status, "\xBC\xEC\xB2\xE9\x4F\x50\x54")) next = 95;
         if(next > g_ui_percent) g_ui_percent = next;
     }
-    UI_ProgressStatus(80, 288, 152, g_ui_percent, g_ui_state, g_last_status);
+    UI_ProgressStatus(80, 268, 152, g_ui_percent, g_ui_state, g_last_status, 0);
     show_counts();
 }
 
@@ -994,27 +1016,21 @@ static uint8_t auto_has_files(void)
 /* 短暂上电并尝试SWD连接以检测芯片；上电瞬间立即探测，
  * 以抢在目标程序关闭调试口之前连接。
  * 返回 - 1=SWD有芯片应答，0=座子为空 */
-static uint8_t auto_probe(void)
+static uint8_t auto_probe_mask(void)
 {
-	uint8_t ok = 0;
-	int i;
-
-	swd_off();
-	TARGET_PWR_ON;
-	/* 时序与烧录流程一致：上电瞬间就开始探测，
-	   因为目标程序可能在几毫秒内关闭SWD */
-	for(i = 0; i < 50; i++)
-	{
-		if(swd_init_debug())
-		{
-			ok = 1;
-			break;
-		}
-		delaymS(1);
-	}
-	swd_off();
-	TARGET_PWR_OFF;
-	return ok;
+    uint8_t mask = 0; int i;
+    DAP_SelectChannel(0);
+    swd_off(); target_power(0, 1);
+    for(i = 0; i < 50; i++) { if(swd_init_debug()) { mask |= 1U; break; } delaymS(1); }
+    swd_off(); target_power(0, 0);
+    if(g_channel_b_enable)
+    {
+        DAP_SelectChannel(1);
+        swd_off(); target_power(1, 1);
+        for(i = 0; i < 50; i++) { if(swd_init_debug()) { mask |= 2U; break; } delaymS(1); }
+        swd_off(); target_power(1, 0);
+    }
+    return mask;
 }
 
 /* 进入一次自动烧录：清除旧结果，转到mode4统一进行次数检查和烧录。
@@ -1025,6 +1041,8 @@ static void auto_start_burn(void)
 	g_burn_ok = 0;
 	g_present_seen = 0;
 	g_absent_seen = 0;
+	g_burn_mask = g_auto_mask;
+	if(!g_burn_mask) return;
 	g_auto_st = AUTO_ST_BURN;
 	app_data.mode = 4; /* 仅切内部执行状态，主界面保持原位。 */
 	oled.Refresh_flag = 1;
@@ -1051,12 +1069,18 @@ static void auto_standby_tick(void)
 			if(now - g_auto_tprobe < AUTO_PROBE_MS)
 				return;
 			g_auto_tprobe = now;
-			if(auto_probe())
 			{
-				if(++g_present_seen >= AUTO_PRESENT_CNT)
-					auto_start_burn();
+				uint8_t m = auto_probe_mask();
+				if(m)
+				{
+					if(m == g_auto_mask)
+					{
+						if(++g_present_seen >= AUTO_PRESENT_CNT) auto_start_burn();
+					}
+					else { g_auto_mask = m; g_present_seen = 1; }
+				}
+				else { g_auto_mask = 0; g_present_seen = 0; }
 			}
-			else g_present_seen = 0;
 			break;
 
 		case AUTO_ST_BURN:
@@ -1083,7 +1107,7 @@ static void auto_standby_tick(void)
 			if(now - g_auto_tprobe < AUTO_PROBE_MS)
 				return;
 			g_auto_tprobe = now;
-			if(!auto_probe())
+			if((auto_probe_mask() & g_burn_mask) == 0)
 			{
 				if(++g_absent_seen >= AUTO_ABSENT_CNT)
 				{
@@ -1595,6 +1619,264 @@ download_return:
 	}
 }
 
+/* Dual-channel burn: setup/erase per channel, then page-interleaved programming.
+ * A and B have independent SWD pins; the target flash operations overlap while
+ * the CPU writes the next channel's SRAM. Returns with app_data.mode=2. */
+static void dual_status(uint8_t ch, uint8_t state, uint8_t pct, const char *text)
+{
+    char *dst = ch ? g_last_status_b : g_last_status;
+    strncpy(dst, text, 63); dst[63] = 0;
+    if(ch) { g_ui_state_b = state; g_ui_percent_b = pct; }
+    else   { g_ui_state  = state; g_ui_percent  = pct; }
+    UI_ProgressStatus(80, ch ? 288U : 268U, 152, pct, state, dst, ch);
+}
+
+static void dual_progress(uint8_t ch, uint8_t pct)
+{
+    uint8_t mapped = (uint8_t)(15U + 70U * (pct > 100U ? 100U : pct) / 100U);
+    if(ch) { if(mapped > g_ui_percent_b) g_ui_percent_b = mapped; }
+    else   { if(mapped > g_ui_percent)   g_ui_percent   = mapped; }
+    UI_ProgressStatus(80, ch ? 288U : 268U, 152,
+                      ch ? g_ui_percent_b : g_ui_percent,
+                      ch ? g_ui_state_b : g_ui_state,
+                      ch ? g_last_status_b : g_last_status, ch);
+}
+
+static void dual_fail_all(const char *text)
+{
+    dual_status(0, UI_PROGRESS_FAILED, 100, text);
+    if(g_channel_b_enable) dual_status(1, UI_PROGRESS_FAILED, 100, text);
+    g_burn_ok = 0; g_burn_done = 1; app_data.mode = 2;
+    if(g_auto_en) { g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms(); }
+    key_val.mesg = 0; oled.Refresh_flag = 1; draw_main();
+    buzzer_beep(0, 2);
+}
+
+static void mode4_dual(uint8_t mask)
+{
+    program_target_t *algo = (program_target_t *)DATA_BUFFER;
+    uint8_t present[2], ok[2], started[2];
+    uint8_t is_ext = 0, ch;
+    uint8_t channels = 0;
+    uint32_t opt_prog = 0, opt_addr = 0, opt_size = 0;
+    uint32_t fw_size, bin_size = 0, i, j, co, chunk, addr;
+    UINT n = 0, got = 0;
+    FIL fd;
+    char path[80], opt_path[80];
+    const char *dot;
+
+    present[0] = (mask & 1U) ? 1U : 0U;
+    present[1] = (mask & 2U) ? 1U : 0U;
+    ok[0] = ok[1] = 1U;
+    started[0] = started[1] = 0U;
+    for(ch = 0; ch < 2U; ch++) if(present[ch]) channels++;
+
+    if(!channels) { dual_fail_all("\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC"); return; }
+    if(g_selection_dirty || g_selection_save_failed) { dual_fail_all("\xD1\xA1\xD4\xF1\xB1\xA3\xB4\xE6\xCA\xA7\xB0\xDC"); return; }
+    if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK || burn_quota_fault())
+    { dual_fail_all("\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3"); return; }
+    if(burn_quota_enabled() && burn_quota_remaining() < channels)
+    { dual_fail_all("\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3"); return; }
+
+    /* Load and validate the shared algorithm. */
+    sprintf(path, "0:/download/firmware/%s", (const char *)app_data.firmware_name);
+    if(f_open(&fd, (const TCHAR *)path, FA_READ) != FR_OK)
+    { dual_fail_all("\xCB\xE3\xB7\xA8\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC"); return; }
+    fw_size = f_size(&fd);
+    if(f_read(&fd, DATA_BUFFER, 2048, &got) != FR_OK || got == 0)
+    { f_close(&fd); dual_fail_all("\xCB\xE3\xB7\xA8\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); return; }
+    if(fw_size == algo->algo_size + PROG_TARGET_EXT_HDR_SIZE)
+    { is_ext = 1U; }
+    else if(fw_size == algo->algo_size + (PROG_TARGET_EXT_HDR_SIZE - 12U))
+    { is_ext = 0U; }
+    else
+    { f_close(&fd); dual_fail_all("\xCB\xE3\xB7\xA8\xD2\xEC\xB3\xA3"); return; }
+    if(algo->algo_size > 2048U - (is_ext ? PROG_TARGET_EXT_HDR_SIZE : (PROG_TARGET_EXT_HDR_SIZE - 12U)))
+    { f_close(&fd); dual_fail_all("\xCB\xE3\xB7\xA8\xD2\xEC\xB3\xA3"); return; }
+    if(is_ext)
+    {
+        opt_prog = ((program_target_ext_t *)DATA_BUFFER)->opt_program;
+        opt_addr = ((program_target_ext_t *)DATA_BUFFER)->opt_addr;
+        opt_size = ((program_target_ext_t *)DATA_BUFFER)->opt_size;
+        memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, algo->algo_size);
+    }
+    f_close(&fd);
+
+    /* Open the shared firmware image once. */
+    sprintf(path, "0:/download/bin/%s", (const char *)app_data.bin_name);
+    if(f_open(&fd, (const TCHAR *)path, FA_READ) != FR_OK)
+    { dual_fail_all("\xB9\xCC\xBC\xFE\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC"); return; }
+    bin_size = f_size(&fd);
+
+    /* Connect / init / erase each present channel (sequential). */
+    for(ch = 0; ch < 2U; ch++)
+    {
+        if(!present[ch]) continue;
+        DAP_SelectChannel(ch);
+        swd_off();
+        target_power(ch, 0); delaymS(200);
+        target_power(ch, 1);
+        dual_status(ch, UI_PROGRESS_RUNNING, 0, "\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC");
+        if(target_connect_halt() != 1U)
+        { ok[ch] = 0U; target_power(ch, 0); continue; }
+        if(target_flash_init(algo, algo->flash_addr) != ERROR_SUCCESS)
+        { ok[ch] = 0U; swd_off(); target_power(ch, 0); continue; }
+        dual_status(ch, UI_PROGRESS_RUNNING, 10, "\xD5\xFD\xD4\xDA\xB2\xC1\xB3\xFD\xD0\xBE\xC6\xAC");
+        if(target_flash_erase_chip(algo) != ERROR_SUCCESS)
+        { ok[ch] = 0U; target_flash_uninit(algo); swd_off(); target_power(ch, 0); continue; }
+        /* The RDP unlock takes effect after a power cycle. */
+        swd_off(); target_power(ch, 0); delaymS(100);
+        target_power(ch, 1); delaymS(20);
+        if(target_connect_halt() != 1U ||
+           target_flash_init(algo, algo->flash_addr) != ERROR_SUCCESS)
+        { ok[ch] = 0U; target_power(ch, 0); continue; }
+        dual_status(ch, UI_PROGRESS_RUNNING, 15, "\xD5\xFD\xD4\xDA\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF");
+    }
+    if(!(ok[0] & present[0]) && !(ok[1] & present[1]))
+    { f_close(&fd); dual_fail_all("\xB2\xC1\xB3\xFD\xCA\xA7\xB0\xDC"); return; }
+
+    /* Page-interleaved programming: read once, prepare/start A and B, then wait both. */
+    for(ch = 0; ch < 2U; ch++) if(present[ch] && ok[ch]) dual_status(ch, UI_PROGRESS_RUNNING, 15, "\xD5\xFD\xD4\xDA\xC9\xD5\xC2\xBC\xB9\xCC\xBC\xFE");
+    i = 0;
+    while(i < bin_size)
+    {
+        if(!(ok[0] & present[0]) && !(ok[1] & present[1])) break;
+        if(f_read(&fd, DATA_BUFFER + 2048, 2048, &n) != FR_OK || n == 0U)
+        { ok[0] = ok[1] = 0U; break; }
+        chunk = algo->program_buffer_size;
+        if(chunk == 0U || chunk > (uint32_t)n) chunk = (uint32_t)n;
+        for(co = 0; co < (uint32_t)n; co += chunk)
+        {
+            uint32_t left = (uint32_t)n - co;
+            uint32_t use = left > chunk ? chunk : left;
+            started[0] = started[1] = 0U;
+            addr = algo->flash_addr + i + co;
+            for(ch = 0; ch < 2U; ch++)
+            {
+                if(!present[ch] || !ok[ch]) continue;
+                DAP_SelectChannel(ch);
+                if(target_flash_program_prepare(algo, addr, (const uint8_t *)(DATA_BUFFER + 2048 + co), use) == 0U)
+                { ok[ch] = 0U; continue; }
+                if(target_flash_program_start(algo, addr) == 0U)
+                { ok[ch] = 0U; continue; }
+                started[ch] = 1U;
+            }
+            for(ch = 0; ch < 2U; ch++)
+            {
+                if(!started[ch]) continue;
+                DAP_SelectChannel(ch);
+                if(target_flash_program_wait(algo, 0) == 0U) ok[ch] = 0U;
+            }
+        }
+        i += n;
+        {
+            uint8_t pct = (uint8_t)(i * 100U / bin_size);
+            if(present[0] && ok[0]) dual_progress(0, pct);
+            if(present[1] && ok[1]) dual_progress(1, pct);
+        }
+    }
+    f_close(&fd);
+
+    /* Verify: rewind and compare each page on every still-good channel. */
+    for(ch = 0; ch < 2U; ch++) if(present[ch] && ok[ch]) dual_status(ch, UI_PROGRESS_RUNNING, 85, "\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE");
+    if(f_open(&fd, (const TCHAR *)path, FA_READ) == FR_OK)
+    {
+        j = 0;
+        while(j < bin_size)
+        {
+            if(f_read(&fd, DATA_BUFFER + 2048, 2048, &n) != FR_OK || n == 0U)
+            { ok[0] = ok[1] = 0U; break; }
+            for(ch = 0; ch < 2U; ch++)
+            {
+                if(!present[ch] || !ok[ch]) continue;
+                DAP_SelectChannel(ch);
+                if(target_flash_verify(algo, algo->flash_addr + j,
+                                       (const uint8_t *)(DATA_BUFFER + 2048), n) != ERROR_SUCCESS)
+                    ok[ch] = 0U;
+            }
+            j += n;
+            {
+                uint8_t pct = (uint8_t)(j * 100U / bin_size);
+                if(present[0] && ok[0]) dual_progress(0, pct);
+                if(present[1] && ok[1]) dual_progress(1, pct);
+            }
+        }
+        f_close(&fd);
+    }
+    else { ok[0] = ok[1] = 0U; }
+
+    /* Optional OPT/RDP programming per channel. */
+    if(is_ext && app_data.opt_enable)
+    {
+        for(ch = 0; ch < 2U; ch++) if(present[ch] && ok[ch]) dual_status(ch, UI_PROGRESS_RUNNING, 95, "\xD5\xFD\xD4\xDA\xD0\xB4\xC8\xEB\x4F\x50\x54");
+        dot = strrchr((const char *)app_data.bin_name, '.');
+        if(dot && (dot - (const char *)app_data.bin_name) < 30)
+        {
+            uint32_t prefix = (uint32_t)(dot - (const char *)app_data.bin_name);
+            memcpy(opt_path, app_data.bin_name, prefix);
+            opt_path[prefix] = 0;
+            strcat(opt_path, "_opt.bin");
+        }
+        else strcpy(opt_path, "default_opt.bin");
+        for(ch = 0; ch < 2U; ch++)
+        {
+            if(!present[ch] || !ok[ch]) continue;
+            {
+                char full[96];
+                sprintf(full, "0:/download/bin/%s", opt_path);
+                if(f_open(&fd, (const TCHAR *)full, FA_READ) != FR_OK)
+                { ok[ch] = 0U; continue; }
+                memset(DATA_BUFFER + 2048, 0xFF, 128);
+                if(f_read(&fd, DATA_BUFFER + 2048, 128, &n) != FR_OK) ok[ch] = 0U;
+                f_close(&fd);
+                if(!ok[ch]) continue;
+            }
+            {
+                program_target_ext_t ext;
+                ext.sys_call_s = algo->sys_call_s;
+                ext.program_buffer = algo->program_buffer;
+                ext.opt_program = opt_prog;
+                ext.opt_addr = opt_addr;
+                ext.opt_size = opt_size;
+                DAP_SelectChannel(ch);
+                if(target_opt_program_ext(&ext, (const uint8_t *)(DATA_BUFFER + 2048)) != ERROR_SUCCESS)
+                    ok[ch] = 0U;
+            }
+        }
+    }
+
+    /* Reset/run and power off each channel. */
+    for(ch = 0; ch < 2U; ch++)
+    {
+        if(!present[ch]) continue;
+        DAP_SelectChannel(ch);
+        swd_set_target_state_hw(RESET_RUN);
+        swd_off();
+        target_power(ch, 0);
+    }
+
+    /* Shared quota: each successful channel consumes one count. */
+    for(ch = 0; ch < 2U; ch++)
+    {
+        if(!present[ch] || !ok[ch]) continue;
+        if(burn_quota_begin() != BURN_QUOTA_OK || burn_quota_finish(1U) != BURN_QUOTA_OK)
+            ok[ch] = 0U;
+    }
+    show_counts();
+
+    g_burn_ok = 1U;
+    for(ch = 0; ch < 2U; ch++)
+    {
+        if(!present[ch]) { dual_status(ch, UI_PROGRESS_IDLE, 0, "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC"); continue; }
+        if(ok[ch]) { dual_status(ch, UI_PROGRESS_SUCCESS, 100, "\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6"); }
+        else { dual_status(ch, UI_PROGRESS_FAILED, 100, "\xC9\xD5\xC2\xBC\xCA\xA7\xB0\xDC"); g_burn_ok = 0U; }
+    }
+    g_burn_done = 1U; app_data.mode = 2;
+    if(g_auto_en) { g_auto_st = AUTO_ST_RESULT; g_auto_t0 = auto_now_ms(); }
+    key_val.mesg = 0; oled.Refresh_flag = 1; draw_main();
+    buzzer_beep(0, g_burn_ok ? 1U : 2U);
+}
+
 /* 目录仅缓存当前页最多十二个名称；短项16px、长项36px，间隔4px。
  * 首次枚举计数并定位旧选择，再按高度找到所在页；跨页重放相同分页规则。
  * 所有目录访问仍在主任务内，浏览不读取文件正文，也不更改有效选择。 */
@@ -1849,6 +2131,7 @@ void run_task(void *pvParameters)
 		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 		uint8_t prepare_program[CB_MAX_NAME + 1];
 		uint8_t prepare_opt;
+		uint8_t prepare_channel_b;
         uint32_t prepare_irq_mask; /* 短临界区保护导入确认与界面提交，禁止复位插入二者之间。 */
 
 		pwr_init();
@@ -1925,11 +2208,11 @@ void run_task(void *pvParameters)
             if(custombulk_take_files_changed()) invalidate_program_checksum();
 			if(custombulk_take_prepare_complete(prepare_algorithm,
 			                                    prepare_program,
-			                                    &prepare_opt))
+			                                    &prepare_opt, &prepare_channel_b))
 			{
 				apply_prepare_download(prepare_algorithm,
 				                       prepare_program,
-				                       prepare_opt);
+				                       prepare_opt, prepare_channel_b);
 			}
             __set_PRIMASK(prepare_irq_mask);
             save_program_selection(); /* 已恢复中断且USB空闲时才持久化，先于自动烧录。 */
@@ -1943,7 +2226,7 @@ void run_task(void *pvParameters)
                     /* 待处理文件包优先完成；只在真正烧录时拦截USB，结果页解除占用。 */
                     if(!g_burn_done && custombulk_is_busy()) break;
                     g_programming_active = g_burn_done ? 0 : 1;
-                    mode4();
+                    if(g_channel_b_enable) mode4_dual(g_burn_mask); else mode4();
                     g_programming_active = 0;
                     break;
                 default: app_data.mode = 2; oled.Refresh_flag = 1; break;

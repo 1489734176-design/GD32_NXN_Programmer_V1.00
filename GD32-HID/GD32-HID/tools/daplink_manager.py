@@ -257,10 +257,12 @@ class DAPLinkDevice:
             raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
 
     # 0x0C准备指令：bit0表示OPT，bit1表示随后携带主BIN的SUM32（小端32位）。
-    def prepare_download(self, program_name, opt_required, checksum=None):
+    def prepare_download(self, program_name, opt_required, checksum=None, channel_b=False):
         if not program_name or len(program_name.encode('ascii')) > 31:
             raise ValueError("Program filename must be 1-31 ASCII characters")
         flags = 1 if opt_required else 0
+        if channel_b:
+            flags |= 4
         checksum_data = b''
         if checksum is not None:
             # 校验值0也是有效值，不能用真假判断；只接受无符号32位整数。
@@ -544,12 +546,13 @@ class ImportWorker(QThread):
     log = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, device, program_path, algorithm_name, opt_path=None, quota_setting=None):
+    def __init__(self, device, program_path, algorithm_name, opt_path=None, quota_setting=None, channel_b=False):
         super().__init__()
         self.device = device
         self.program_path = program_path
         self.algorithm_name = algorithm_name
         self.opt_path = opt_path
+        self.channel_b = bool(channel_b)
         self.checksum = None  # 只在设备确认主BIN的SUM32后保留值，供GUI显示。
         # 主界面传入本次导入的次数快照，后台线程不读取控件；None兼容旧的独立调用。
         self.quota_setting = tuple(quota_setting) if quota_setting is not None else None
@@ -612,7 +615,7 @@ class ImportWorker(QThread):
                     raise RuntimeError("烧录次数重新加载失败：" + str(exc)) from exc
                 remaining_text = f"{self.quota_result['remaining']:03d}次" if self.quota_result['enabled'] else "不限"
                 self.log.emit("该固件烧录次数已重新加载：" + remaining_text)
-            self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum)
+            self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum, channel_b=self.channel_b)
             self.log.emit(f"Checksum(SUM32): {self.checksum:08X}")  # 已由设备确认，按8位大写十六进制显示。
             self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
@@ -794,6 +797,10 @@ class DAPLinkManager(QMainWindow):
         self.chk_opt.setEnabled(False)
         self.chk_opt.setMinimumHeight(self.control_height)
         chip_bar.addWidget(self.chk_opt, 0, 3)
+        self.chk_channel_b = QCheckBox("启用通道B")
+        self.chk_channel_b.setMinimumHeight(self.control_height)
+        self.chk_channel_b.setToolTip("勾选后 A/B 两路同时焊录")
+        chip_bar.addWidget(self.chk_channel_b, 0, 4)
         chip_opt_layout.addLayout(chip_bar)
 
         # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
@@ -1690,7 +1697,7 @@ class DAPLinkManager(QMainWindow):
         self.statusBar().showMessage("正在导入...")
         self._set_import_state(True)
 
-        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting)
+        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting, channel_b=self.chk_channel_b.isChecked())
         self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
         self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
         self.worker.finished.connect(self._import_done)
