@@ -32,8 +32,7 @@ uint32_t g_diag_step = 0xFFFF;
 #define REGWnR (1 << 16)
 
 #define MAX_SWD_RETRY 10            // SWD传输返回WAIT时的最大重试次数
-#define MAX_TIMEOUT 200000U         // 目标端系统调用超时轮询次数（约数秒~十几秒；大芯片擦除也够用，且不会永久卡死）
-#define MAX_HALT_WAIT_MS 200        // 等待目标内核暂停的最长时间（毫秒）
+#define MAX_TIMEOUT 1000000         // 目标端系统调用的超时轮询次数
 
 /* DAP缓存状态：记住当前SELECT和CSW的值，相同则跳过重复写入 */
 typedef struct
@@ -818,23 +817,24 @@ static uint8_t swd_write_core_register(uint32_t n, uint32_t val)
  * 返回 - 1=已暂停，0=超时未暂停 */
 static uint8_t swd_wait_until_halted(void)
 {
-	// 等待目标停机；链路连续读失败或超时都返回失败，避免主任务长时间卡死
+	// 等待目标停机
 	uint32_t val, i, timeout = MAX_TIMEOUT;
-	uint32_t errors = 0;
 
 	for (i = 0; i < timeout; i++)
 	{
+		#if 1
 		if (!swd_read_word(DBG_HCSR, &val))
 		{
-			if (++errors >= 16U)
-				return 0;
+			#if 0
+			return 0;
+			#endif
 		}
-		else
+
+		 else if (val & S_HALT)
 		{
-			errors = 0;
-			if (val & S_HALT)
-				return 1;
+			return 1;
 		}
+			#endif
 	}
 
 	return 0;
@@ -906,7 +906,7 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
 	if (!swd_wait_until_halted())
 	{
 		g_last_syscall_r0 = 0xDEE2;
-		return 0;
+	//	return 0;
 	}
 #endif
 	if (!swd_read_core_register(0, &state.r[0]))
@@ -1286,25 +1286,13 @@ uint8_t swd_set_target_state_hw(TARGET_RESET_STATE state)
 		}
 
 		// 等待内核暂停
+		do
 		{
-			uint32_t halt_wait = MAX_HALT_WAIT_MS;
-			do
+			if (!swd_read_word(DBG_HCSR, &val))
 			{
-				if (!swd_read_word(DBG_HCSR, &val))
-				{
-					return 0;
-				}
-				if (val & S_HALT)
-				{
-					break;
-				}
-				if (--halt_wait == 0U)
-				{
-					return 0;
-				}
-				delaymS(1);
-			} while (1);
-		}
+				return 0;
+			}
+		} while ((val & S_HALT) == 0);
 
 		break;
 
@@ -1364,25 +1352,13 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
 		}
 
 		// 等待内核暂停
+		do
 		{
-			uint32_t halt_wait = MAX_HALT_WAIT_MS;
-			do
+			if (!swd_read_word(DBG_HCSR, &val))
 			{
-				if (!swd_read_word(DBG_HCSR, &val))
-				{
-					return 0;
-				}
-				if (val & S_HALT)
-				{
-					break;
-				}
-				if (--halt_wait == 0U)
-				{
-					return 0;
-				}
-				delaymS(1);
-			} while (1);
-		}
+				return 0;
+			}
+		} while ((val & S_HALT) == 0);
 
 		// 使能复位时暂停（VC_CORERESET）
 		if (!swd_write_word(DBG_EMCR, VC_CORERESET))
@@ -1403,25 +1379,13 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
 
 		delaymS(20);
 
+		do
 		{
-			uint32_t halt_wait = MAX_HALT_WAIT_MS;
-			do
+			if (!swd_read_word(DBG_HCSR, &val))
 			{
-				if (!swd_read_word(DBG_HCSR, &val))
-				{
-					return 0;
-				}
-				if (val & S_HALT)
-				{
-					break;
-				}
-				if (--halt_wait == 0U)
-				{
-					return 0;
-				}
-				delaymS(1);
-			} while (1);
-		}
+				return 0;
+			}
+		} while ((val & S_HALT) == 0);
 
 		// 关闭复位时暂停
 		if (!swd_write_word(DBG_EMCR, 0))
@@ -1483,25 +1447,13 @@ uint8_t swd_set_target_state_sw(TARGET_RESET_STATE state)
 		}
 
 		// 等待内核暂停
+		do
 		{
-			uint32_t halt_wait = MAX_HALT_WAIT_MS;
-			do
+			if (!swd_read_word(DBG_HCSR, &val))
 			{
-				if (!swd_read_word(DBG_HCSR, &val))
-				{
-					return 0;
-				}
-				if (val & S_HALT)
-				{
-					break;
-				}
-				if (--halt_wait == 0U)
-				{
-					return 0;
-				}
-				delaymS(1);
-			} while (1);
-		}
+				return 0;
+			}
+		} while ((val & S_HALT) == 0);
 
 		break;
 
