@@ -130,10 +130,10 @@ uint32_t target_flash_program_prepare(program_target_t *algo, uint32_t addr, con
     return write_size;
 }
 
-uint8_t target_flash_program_start(program_target_t *algo, uint32_t addr)
+uint8_t target_flash_program_start(program_target_t *algo, uint32_t addr, uint32_t size)
 {
     return swd_flash_syscall_start(&algo->sys_call_s, algo->program_page, addr,
-                                   algo->program_buffer_size, algo->program_buffer, 0);
+                                   size, algo->program_buffer, 0);
 }
 
 uint8_t target_flash_program_wait(program_target_t *algo, uint32_t *r0)

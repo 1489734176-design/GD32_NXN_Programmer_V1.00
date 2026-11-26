@@ -48,7 +48,8 @@ typedef struct
 	uint32_t xpsr;      // 程序状态寄存器
 } DEBUG_STATE;
 
-static DAP_STATE dap_state;
+static DAP_STATE dap_states[2] = {{0xffffffffU, 0xffffffffU}, {0xffffffffU, 0xffffffffU}};
+#define dap_state (dap_states[dap_channel])
 
 static uint8_t swd_read_core_register(uint32_t n, uint32_t *val);
 static uint8_t swd_write_core_register(uint32_t n, uint32_t val);
@@ -83,6 +84,9 @@ static void int2array(uint8_t *res, uint32_t data, uint8_t len)
  * req  - 请求字节（AP/DP选择、读写方向、寄存器地址）
  * data - 输入输出，写入时为待发数据，读取时为读回数据；可为NULL表示只发不收
  * 返回 - DAP传输应答码：0x01=OK，0x02=WAIT，0x04=FAULT，0x07=NO_ACK */
+static uint8_t last_ack[2];
+uint8_t swd_last_ack(void) { return last_ack[dap_channel]; }
+
 static uint8_t swd_transfer_retry(uint32_t req, uint32_t *data)
 {
 	uint8_t i, ack;
@@ -91,12 +95,10 @@ static uint8_t swd_transfer_retry(uint32_t req, uint32_t *data)
 	{
 		ack = SWD_Transfer(req, data);
 
-		if (ack != DAP_TRANSFER_WAIT)
-		{
-			return ack;
-		}
+		if (ack != DAP_TRANSFER_WAIT) break;
 	}
 
+	last_ack[dap_channel] = ack;
 	return ack;
 }
 
@@ -164,7 +166,6 @@ uint8_t swd_write_dp(uint8_t adr, uint32_t val)
 			return 1;
 		}
 
-		dap_state.select = val;
 		break;
 
 	default:
@@ -174,6 +175,7 @@ uint8_t swd_write_dp(uint8_t adr, uint32_t val)
 	req = SWD_REG_DP | SWD_REG_W | SWD_REG_ADR(adr);
 	int2array(data, val, 4);
 	ack = swd_transfer_retry(req, (uint32_t *)data);
+	if (adr == DP_SELECT) dap_state.select = (ack == 0x01) ? val : 0xffffffffU;
 
 	return (ack == 0x01);
 }
@@ -239,7 +241,7 @@ uint8_t swd_write_ap(uint32_t adr, uint32_t val)
 			return 1;
 		}
 
-		dap_state.csw = val;
+		dap_state.csw = 0xffffffffU; /* Unknown until the posted write completes. */
 		break;
 
 	default:
@@ -256,6 +258,7 @@ uint8_t swd_write_ap(uint32_t adr, uint32_t val)
 
 	req = SWD_REG_DP | SWD_REG_R | SWD_REG_ADR(DP_RDBUFF);
 	ack = swd_transfer_retry(req, NULL);
+	if (ack == 0x01 && adr == AP_CSW) dap_state.csw = val;
 
 	return (ack == 0x01);
 }
@@ -923,7 +926,7 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
 	}
 
 	return 1;
-}
+}
 /* Start a flash algorithm syscall without waiting for completion. */
 uint8_t swd_flash_syscall_start(const program_syscall_t *sysCallParam, uint32_t entry,
                                 uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
@@ -945,6 +948,30 @@ uint8_t swd_flash_syscall_start(const program_syscall_t *sysCallParam, uint32_t 
         return 0;
     }
     return 1;
+}
+
+/* Retry only idempotent RAM staging on the same halted core, never a flash command. */
+uint8_t swd_can_retry_ram_write(uint8_t ack)
+{
+    uint32_t h;
+    if(ack != DAP_TRANSFER_WAIT && ack != DAP_TRANSFER_FAULT) return 0U;
+    if(ack == DAP_TRANSFER_FAULT &&
+       !swd_write_dp(DP_ABORT, STKCMPCLR | STKERRCLR | WDERRCLR | ORUNERRCLR)) return 0U;
+    dap_state.select = dap_state.csw = 0xffffffffU;
+    return swd_read_word(DHCSR, &h) && (h & (C_DEBUGEN | S_HALT | S_RESET_ST)) == (C_DEBUGEN | S_HALT);
+}
+
+/* One sample only: another powered socket can use SWD between samples. */
+swd_page_state_t swd_page_poll(uint32_t *r0)
+{
+    uint32_t status;
+    if(swd_read_word(DHCSR, &status))
+    {
+        if(!(status & C_DEBUGEN)) return PAGE_LINK_ERROR;
+        if(!(status & S_HALT)) return PAGE_RUNNING;
+        if(swd_read_core_register(0, r0)) return PAGE_HALTED;
+    }
+    return swd_last_ack() == DAP_TRANSFER_WAIT ? PAGE_SWD_WAIT : PAGE_LINK_ERROR;
 }
 
 /* Wait for the syscall breakpoint and read R0 (0 = success). */

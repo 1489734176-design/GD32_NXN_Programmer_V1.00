@@ -57,6 +57,10 @@ extern uint32_t g_diag_step;            // 失败发生在哪个子步骤
 uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
 uint8_t swd_flash_syscall_start(const program_syscall_t *sysCallParam, uint32_t entry, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
 uint8_t swd_flash_syscall_wait(uint32_t *r0);
+typedef enum { PAGE_RUNNING, PAGE_LINK_ERROR, PAGE_HALTED, PAGE_SWD_WAIT } swd_page_state_t;
+swd_page_state_t swd_page_poll(uint32_t *r0);
+uint8_t swd_last_ack(void);
+uint8_t swd_can_retry_ram_write(uint8_t ack);
 /* 毫秒级忙等延时：ms=延时长度（毫秒） */
 void delaymS(uint32_t ms);
 /* 控制nRESET：asserted=1拉低（保持复位），0释放并补发软复位 */

@@ -70,29 +70,28 @@ void fault_report(uint32_t *frame)
     cfsr = SCB->CFSR; hfsr = SCB->HFSR;
     mmfar = SCB->MMFAR; bfar = SCB->BFAR;
 
-    /* 屏幕已经初始化过；这里不能再调 LCD_Init()，它会 vTaskDelay。 */
     LCD_Clear(LCD_BLACK);
-    LCD_ShowString(8, 8,   "*** FAULT ***", LCD_RED, LCD_BLACK, 2);
+    LCD_ShowString(8, 8,   "*** FAULT ***", LCD_RED, LCD_BLACK, 1);
     sprintf(line, "PC %08lX", (unsigned long)pc);
-    LCD_ShowString(8, 36, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 24, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "LR %08lX", (unsigned long)lr);
-    LCD_ShowString(8, 56, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 40, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "CFSR %08lX", (unsigned long)cfsr);
-    LCD_ShowString(8, 80, line, LCD_YELLOW, LCD_BLACK, 2);
+    LCD_ShowString(8, 56, line, LCD_YELLOW, LCD_BLACK, 1);
     sprintf(line, "HFSR %08lX", (unsigned long)hfsr);
-    LCD_ShowString(8, 100, line, LCD_YELLOW, LCD_BLACK, 2);
+    LCD_ShowString(8, 72, line, LCD_YELLOW, LCD_BLACK, 1);
     sprintf(line, "R0 %08lX", (unsigned long)r0);
-    LCD_ShowString(8, 124, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 88, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "R1 %08lX", (unsigned long)r1);
-    LCD_ShowString(8, 144, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 104, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "R2 %08lX", (unsigned long)r2);
-    LCD_ShowString(8, 164, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 120, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "R3 %08lX", (unsigned long)r3);
-    LCD_ShowString(8, 184, line, LCD_WHITE, LCD_BLACK, 2);
+    LCD_ShowString(8, 136, line, LCD_WHITE, LCD_BLACK, 1);
     sprintf(line, "MMF %08lX", (unsigned long)mmfar);
-    LCD_ShowString(8, 208, line, LCD_GRAY, LCD_BLACK, 2);
+    LCD_ShowString(8, 152, line, LCD_GRAY, LCD_BLACK, 1);
     sprintf(line, "BFA %08lX", (unsigned long)bfar);
-    LCD_ShowString(8, 228, line, LCD_GRAY, LCD_BLACK, 2);
+    LCD_ShowString(8, 168, line, LCD_GRAY, LCD_BLACK, 1);
 
     rcu_periph_clock_enable(RCU_GPIOC);
     gpio_init(GPIOC, GPIO_MODE_OUT_PP, GPIO_OSPEED_50MHZ, GPIO_PIN_5);

@@ -3,6 +3,11 @@
 #ifndef __BSP_BUZZER_H__
 #define __BSP_BUZZER_H__
 
+/* 1=enable buzzer, 0=disable (current default: off). */
+#ifndef BUZZER_ENABLE
+#define BUZZER_ENABLE 0
+#endif
+
 #include "gd32f10x.h"
 
 /* 初始化两路蜂鸣器控制脚为推挽输出并保持静音。

@@ -125,7 +125,7 @@
 #define configTOTAL_HEAP_SIZE										((size_t)(8*1024))     //系统所有总的堆大小
 #else
 /* USB DAP + timer daemon stacks/TCBs are absent; retain offline heap headroom. */
-#define configTOTAL_HEAP_SIZE ((size_t)(6*1024))
+#define configTOTAL_HEAP_SIZE ((size_t)(16*1024))
 #endif
 
 /***************************************************************************************************************/
