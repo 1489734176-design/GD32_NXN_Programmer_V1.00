@@ -67,8 +67,8 @@ from PyQt5.QtWidgets import (
     QLineEdit, QComboBox, QScrollArea, QGroupBox, QRadioButton,
     QButtonGroup, QCheckBox, QGridLayout, QListView, QLayout, QSizePolicy, QSpinBox
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt5.QtGui import QIcon, QFont, QColor
+from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, QSize
+from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap
 
 from opt_config import OptConfig
 from image_tool import (
@@ -119,31 +119,48 @@ class DAPLinkDevice:
         self.dev = None
         self.ep_out = None
         self.ep_in = None
-        self._command_lock = threading.Lock()
+        self._command_lock = threading.RLock()
+        self.identity = None
 
     def connect(self):
-        # Release any previous resources first
-        self.disconnect()
-
-        self.dev = usb.core.find(idVendor=VID, idProduct=PID)
-        if self.dev is None:
-            raise RuntimeError("Device not found. Check USB connection.")
-
-        # Detach kernel drivers on all interfaces
-        for i in range(4):
+        with self._command_lock:
+            self.disconnect()
             try:
-                if self.dev.is_kernel_driver_active(i):
-                    self.dev.detach_kernel_driver(i)
-            except (usb.core.USBError, NotImplementedError):
-                pass
+                self._open()
+                self.check_status()
+                if self.identity is None:
+                    self.identity = self._identity(self.dev)
+            except Exception:
+                self.disconnect()
+                raise
 
-        # Try to set configuration (may already be set)
+    @staticmethod
+    def _identity(dev):
         try:
-            self.dev.set_configuration()
-        except usb.core.USBError:
-            pass  # Already configured
+            serial = dev.serial_number
+        except (ValueError, usb.core.USBError, NotImplementedError):
+            serial = None
+        if serial:
+            return ('serial', serial)
+        if dev.port_numbers:
+            return ('port', dev.bus, tuple(dev.port_numbers))
+        return None
 
-        cfg = self.dev.get_active_configuration()
+    def _open(self):
+        match = (lambda d: self._identity(d) == self.identity) if self.identity else None
+        self.dev = usb.core.find(idVendor=VID, idProduct=PID, custom_match=match)
+        if self.dev is None:
+            raise ConnectionError("未找到烧录器，请检查供电和 USB 连接。")
+        try:
+            if self.dev.is_kernel_driver_active(CUSTOMBULK_INTERFACE):
+                self.dev.detach_kernel_driver(CUSTOMBULK_INTERFACE)
+        except (usb.core.USBError, NotImplementedError):
+            pass
+        try:
+            cfg = self.dev.get_active_configuration()
+        except usb.core.USBError:
+            self.dev.set_configuration()
+            cfg = self.dev.get_active_configuration()
         intf = cfg[(CUSTOMBULK_INTERFACE, 0)]
 
         self.ep_out = usb.util.find_descriptor(
@@ -156,14 +173,31 @@ class DAPLinkDevice:
             raise RuntimeError("Endpoints not found on Interface 1. Check WinUSB driver.")
 
     def is_connected(self):
-        return self.dev is not None and self.ep_out is not None
+        return self.dev is not None and self.ep_out is not None and self.ep_in is not None
 
     def disconnect(self):
-        if self.dev:
-            usb.util.dispose_resources(self.dev)
-            self.dev = None
-            self.ep_out = None
-            self.ep_in = None
+        with self._command_lock:
+            dev = self.dev
+            self.dev = self.ep_out = self.ep_in = None
+            if dev is not None:
+                try:
+                    usb.util.dispose_resources(dev)
+                except usb.core.USBError:
+                    pass  # Re-enumeration can already have invalidated the handle.
+
+    def check_status(self):
+        resp = self._send_cmd(bytes([CMD_GET_STATUS]), timeout=700)
+        if resp != bytes([STATUS_BUSY]) and not (len(resp) == 10 and resp[0] == STATUS_OK):
+            raise ConnectionError("设备状态响应无效")
+
+    def ensure_connection(self):
+        if self.is_connected():
+            try:
+                self.check_status()
+                return
+            except OSError:
+                pass
+        self.connect()
 
     @staticmethod
     def _fix_path(path):
@@ -175,17 +209,22 @@ class DAPLinkDevice:
         return '0:' + path.lstrip('/')
 
     # 锁住单条USB发送/接收，确保同一指令与其响应配对。
-    def _send_cmd(self, cmd_data):
+    def _send_cmd(self, cmd_data, timeout=TIMEOUT):
         with self._command_lock:
-            self.ep_out.write(cmd_data, timeout=TIMEOUT)
+            if not self.is_connected():
+                raise ConnectionError("设备未连接")
             if cmd_data and cmd_data[0] == CMD_PREPARE_DOWNLOAD:
                 response_timeout = PREPARE_TIMEOUT
             elif cmd_data and cmd_data[0] in (CMD_IMAGE_COMMIT, CMD_IMAGE_ABORT):
                 response_timeout = IMAGE_TIMEOUT
             else:
-                response_timeout = TIMEOUT
-            data = self.ep_in.read(PACKET_SIZE, timeout=response_timeout)  # 只延长0x0C准备响应，普通USB指令仍等待5秒。
-            return bytes(data)
+                response_timeout = timeout
+            try:
+                self.ep_out.write(cmd_data, timeout=timeout)
+                return bytes(self.ep_in.read(PACKET_SIZE, timeout=response_timeout))
+            except usb.core.USBError:
+                self.disconnect()  # A lost acknowledgement must not replay a write.
+                raise
 
     def list_dir(self, path="/"):
         resp = self._send_cmd(bytes([CMD_LIST_DIR]) + self._fix_path(path).encode('utf-8'))
@@ -446,29 +485,41 @@ class DAPLinkDevice:
 
 # ─── Worker Threads ─────────────────────────────────────────────────────────────
 
-class ConnectWorker(QThread):
-    finished = pyqtSignal(bool, str)
+class ConnectionWorker(QThread):
     def __init__(self, device):
         super().__init__()
         self.device = device
-    # 后台连接设备，将成功或错误通知主界面。
+        self.probed_handle = device.dev
+        self.probe = device.is_connected()
+        self.error = ''
+
     def run(self):
         try:
-            self.device.connect()
-            self.finished.emit(True, "Connected")
-        except Exception as e:
-            self.finished.emit(False, str(e))
+            if self.probe:
+                self.device.check_status()
+            else:
+                self.device.connect()
+        except Exception as exc:
+            self.error = str(exc) or type(exc).__name__
 
 
 class ListDirWorker(QThread):
     finished = pyqtSignal(list, str)  # entries, error
-    def __init__(self, device, path):
+    summary = pyqtSignal(object, str)
+
+    def __init__(self, device, path, refresh_image=False):
         super().__init__()
         self.device = device
         self.path = path
-    # 后台读取设备目录，返回文件列表或错误。
+        self.refresh_image = refresh_image
+
     def run(self):
         try:
+            if self.refresh_image:
+                try:
+                    self.summary.emit(self.device.image_info(), '')
+                except (RuntimeError, OSError) as exc:
+                    self.summary.emit(None, str(exc))
             entries = self.device.list_dir(self.path)
             self.finished.emit(entries, "")
         except Exception as e:
@@ -518,28 +569,6 @@ class ActionWorker(QThread):
             self.finished.emit(False, str(e))
 
 
-class QuotaWorker(QThread):
-    finished = pyqtSignal(object, str)
-
-    def __init__(self, device, setting=None):
-        super().__init__()
-        self.device = device
-        self.setting = setting
-
-    # 后台保存或读取烧录次数，将设备回传额度交给主界面。
-    def run(self):
-        try:
-            if self.setting is None:
-                result = self.device.get_burn_quota()
-            else:
-                # 先只读检查协议版本，防止旧固件执行SET后才发现仍是全局次数。
-                self.device.get_burn_quota()
-                result = self.device.set_burn_quota(*self.setting)
-            self.finished.emit(result, "")
-        except Exception as exc:
-            self.finished.emit(None, str(exc))
-
-
 class ImportWorker(QThread):
     """上传程序与可选OPT，重新加载本次次数设置后提交离线烧录准备。"""
     progress = pyqtSignal(str, int, int)  # step_name, current, total
@@ -566,7 +595,8 @@ class ImportWorker(QThread):
         self.quota_error = ""
         session_started = False
         try:
-            # 在创建目录、暂存算法或覆盖文件之前，先确认设备支持独立固件次数。
+            # Reopening is safe here, never after a file or quota write has started.
+            self.device.ensure_connection()
             self.device.get_burn_quota()
             try:
                 self.device.mkdir("0:/download/bin/")
@@ -633,6 +663,11 @@ class ImportWorker(QThread):
 
 # ─── Main Window ───────────────────────────────────────────────────────────────
 
+class ScrollSafeCombo(QComboBox):
+    def wheelEvent(self, event):
+        event.ignore()  # 留给外层滚动区；滚轮不提交配置变更。
+
+
 class DAPLinkManager(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -645,11 +680,16 @@ class DAPLinkManager(QMainWindow):
         self.current_chip = None
         self.current_model = ''
         self.import_in_progress = False
-        self.quota_in_progress = False
-        self.quota_worker = None
+        self._watch_connection = False
+        self._connection_job = None
+        self._usb_busy = False
+        self._upload_queue = []
         self._opt_widgets = {}
+        self._connection_timer = QTimer(self)
+        self._connection_timer.setInterval(2000)
+        self._connection_timer.timeout.connect(self._poll_connection)
 
-        self.setWindowTitle("CMSIS-DAPLINK 脱机编程器 · 文件管理")
+        self.setWindowTitle("南芯能半导体 · CMSIS-DAPLINK 脱机编程器")
         self.setFont(QFont("Microsoft YaHei", 10))
         self.control_height = max(36, self.fontMetrics().height() + 16)
         self.setMinimumSize(900, 600)
@@ -714,43 +754,42 @@ class DAPLinkManager(QMainWindow):
         layout.setSpacing(6)
 
         # ── Title Banner ──
-        self.banner = QLabel("⚡  CMSIS-DAPLINK 脱机编程器")
+        self.banner = QFrame()
         self.banner.setObjectName("banner")
-        self.banner.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        self.banner.setFixedHeight(46)
-        layout.addWidget(self.banner)
-
-        # ── Connection Status ──
-        self.status_frame = QFrame()
-        self.status_frame.setFrameShape(QFrame.StyledPanel)
-        self.status_frame.setProperty("panel", True)
-        status_layout = QVBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(10, 6, 10, 6)
-        status_layout.setSpacing(2)
-        # Row 1: status icon + text
+        banner_layout = QHBoxLayout(self.banner)
+        banner_layout.setContentsMargins(14, 4, 14, 4)
+        brand = QLabel()
+        brand.setAccessibleName("南芯能半导体")
+        brand.setToolTip("南芯能半导体")
+        wordmark = QPixmap(os.path.join(os.path.dirname(__file__), 'nxn_brand.png'))
+        self.setWindowIcon(QIcon(wordmark.copy(0, 0, wordmark.height(), wordmark.height())))
+        dpr = self.devicePixelRatioF()
+        wordmark = wordmark.scaledToHeight(round(44 * dpr), Qt.SmoothTransformation)
+        wordmark.setDevicePixelRatio(dpr)
+        brand.setPixmap(wordmark)
+        banner_layout.addWidget(brand)
+        product = QLabel("CMSIS-DAPLINK 脱机编程器")
+        product.setObjectName("productTitle")
+        banner_layout.addWidget(product)
+        banner_layout.addStretch()
+        status_layout = QVBoxLayout()
+        status_layout.setSpacing(1)
         row1 = QHBoxLayout()
+        row1.addStretch()
         self.lbl_status_icon = QLabel("●")
         self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
         self.lbl_status_text = QLabel("未连接")
         self.lbl_status_text.setFont(QFont("Microsoft YaHei", 10))
         row1.addWidget(self.lbl_status_icon)
         row1.addWidget(self.lbl_status_text)
-        row1.addStretch()
         status_layout.addLayout(row1)
-        # 第二行显示路径与最近成功导入主BIN的校验值，共用一行以适应小窗口和OPT布局。
-        row2 = QHBoxLayout()
-        self.lbl_path = QLabel("路径: /")
-        self.lbl_path.setFont(QFont("Consolas", 9))
-        self.lbl_path.setStyleSheet("color: #555;")
-        self.lbl_path.setWordWrap(True)
-        row2.addWidget(self.lbl_path, 1)
-        self.lbl_checksum = QLabel("Checksum(SUM32): --------")  # 横线表示尚无成功导入，避免误认成有效的零校验值。
+        self.lbl_checksum = QLabel("Checksum(SUM32): --------")
         self.lbl_checksum.setFont(QFont("Consolas", 10))
         self.lbl_checksum.setAlignment(Qt.AlignVCenter | Qt.AlignRight)
         self.lbl_checksum.setToolTip("最近成功导入主BIN的全部字节相加，取低32位；HEX填洞计入，OPT和算法不计。")
-        row2.addWidget(self.lbl_checksum)
-        status_layout.addLayout(row2)
-        layout.addWidget(self.status_frame)
+        status_layout.addWidget(self.lbl_checksum)
+        banner_layout.addLayout(status_layout)
+        layout.addWidget(self.banner)
 
         # ── Chip & OPT Selection Bar ──
         self.chip_opt_frame = QFrame()
@@ -767,7 +806,7 @@ class DAPLinkManager(QMainWindow):
         chip_bar.setVerticalSpacing(10)
         chip_bar.setColumnStretch(1, 1)
         chip_bar.addWidget(QLabel("芯片型号："), 0, 0)
-        self.cmb_chip = QComboBox()
+        self.cmb_chip = ScrollSafeCombo()
         self.cmb_chip.setView(QListView())
         self.cmb_chip.setMinimumWidth(220)
         self.cmb_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -797,10 +836,10 @@ class DAPLinkManager(QMainWindow):
         self.chk_opt.setEnabled(False)
         self.chk_opt.setMinimumHeight(self.control_height)
         chip_bar.addWidget(self.chk_opt, 0, 3)
-        self.chk_channel_b = QCheckBox("启用通道B")
-        self.chk_channel_b.setMinimumHeight(self.control_height)
-        self.chk_channel_b.setToolTip("勾选后 A/B 两路同时焊录")
-        chip_bar.addWidget(self.chk_channel_b, 0, 4)
+        self.chk_channel_b = QCheckBox("启用通道 B（双通道烧录）")
+        self.chk_channel_b.setToolTip("不勾选时仅使用通道 A；勾选后两路可独立烧录。")
+        chip_bar.addWidget(QLabel("烧录通道："), 2, 0)
+        chip_bar.addWidget(self.chk_channel_b, 2, 1, 1, 3)
         chip_opt_layout.addLayout(chip_bar)
 
         # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
@@ -808,15 +847,22 @@ class DAPLinkManager(QMainWindow):
         self.opt_scroll.setObjectName("optScroll")
         self.opt_scroll.setWidgetResizable(True)
         self.opt_scroll.setMinimumHeight(48)  # 小窗口及上传进度条出现时允许滚动查看OPT，保持配额控件完整尺寸。
-        self.opt_scroll.setMaximumHeight(350)
         self.opt_scroll.setVisible(True)
         self.opt_content = QWidget()
         self.opt_scroll.setWidget(self.opt_content)
         chip_opt_layout.addWidget(self.opt_scroll)
 
-        layout.addWidget(self.chip_opt_frame)
+        self.workspace = QSplitter(Qt.Vertical)
+        self.workspace.setChildrenCollapsible(False)
+        self.workspace.addWidget(self.chip_opt_frame)
+        layout.addWidget(self.workspace, 1)
+        lower = QWidget()
+        lower_layout = QVBoxLayout(lower)
+        lower_layout.setContentsMargins(0, 0, 0, 0)
+        settings = QHBoxLayout()
+        lower_layout.addLayout(settings)
+        self.workspace.addWidget(lower)
 
-        # 每次导入都会按此处当前设置重新加载次数；仍保留单独保存/读取按钮。
         self.quota_frame = QGroupBox("固件烧录次数")
         quota_layout = QGridLayout(self.quota_frame)
         quota_layout.setContentsMargins(12, 2, 12, 4)
@@ -828,23 +874,12 @@ class DAPLinkManager(QMainWindow):
         self.spin_quota.setSuffix(" 次")
         self.spin_quota.setToolTip(f"次数范围：0–{BURN_QUOTA_MAX} 次；0 次表示额度已用尽，取消勾选为不限。")
         self.spin_quota.setMinimumWidth(100)
-        self.btn_quota_save = QPushButton("保存当前固件")
-        self.btn_quota_read = QPushButton("读取当前剩余")
-        self.lbl_quota = QLabel("当前固件剩余：请连接设备后读取")
-        self.lbl_quota.setWordWrap(True)
         self.chk_quota.toggled.connect(lambda _: self._update_toolbar_state())
-        self.btn_quota_save.clicked.connect(lambda: self._start_quota(True))
-        self.btn_quota_read.clicked.connect(lambda: self._start_quota(False))
-        for control in (self.chk_quota, self.spin_quota, self.btn_quota_save, self.btn_quota_read):
-            control.setMinimumHeight(self.control_height)
         quota_layout.addWidget(self.chk_quota, 0, 0)
         quota_layout.addWidget(self.spin_quota, 0, 1)
-        quota_layout.addWidget(self.btn_quota_save, 0, 2)
-        quota_layout.addWidget(self.btn_quota_read, 0, 3)
-        quota_layout.addWidget(self.lbl_quota, 0, 4)
-        quota_layout.setColumnStretch(4, 1)
-        self.quota_frame.setToolTip("每个主固件文件独立保存次数。每次导入程序（包括同名重新导入）都会按当前设置重新加载该文件的次数，并清零已用次数；设100次即恢复100次。取消勾选后该文件为不限，其他文件不受影响。单独保存/读取针对设备当前选择的固件；手动切换文件会恢复该文件自己的剩余次数。仅确认烧录成功后扣一次，失败或成功前断电均不扣，成功次数掉电保存。")
-        layout.addWidget(self.quota_frame)
+        quota_layout.setColumnStretch(2, 1)
+        self.quota_frame.setToolTip("次数随程序一并导入；重新导入同名固件会重新设置次数，未勾选表示不限。")
+        settings.addWidget(self.quota_frame, 1)
 
         # ── Image task summary + dialog entry ──
         self.image_frame = QGroupBox("镜像任务")
@@ -858,7 +893,7 @@ class DAPLinkManager(QMainWindow):
         image_layout.addWidget(self.lbl_image_summary)
         image_layout.addStretch()
         image_layout.addWidget(self.btn_image_task)
-        layout.addWidget(self.image_frame)
+        settings.addWidget(self.image_frame, 1)
 
         # ── Splitter: Local + Remote ──
         splitter = QSplitter(Qt.Horizontal)
@@ -926,11 +961,11 @@ class DAPLinkManager(QMainWindow):
         self.remote_path_input.returnPressed.connect(self._on_go_path)
         nav_layout.addWidget(self.remote_path_input, 1)
         btn_go = QPushButton("转到")
-        btn_go.setFixedWidth(48)
+        btn_go.setMinimumWidth(48)
         btn_go.clicked.connect(self._on_go_path)
         nav_layout.addWidget(btn_go)
         btn_up = QPushButton("上级")
-        btn_up.setFixedWidth(48)
+        btn_up.setMinimumWidth(48)
         btn_up.clicked.connect(self._on_remote_up)
         nav_layout.addWidget(btn_up)
         btn_root = QPushButton("/")
@@ -940,8 +975,14 @@ class DAPLinkManager(QMainWindow):
         remote_layout.addLayout(nav_layout)
 
         splitter.addWidget(remote_frame)
+        splitter.setChildrenCollapsible(False)
         splitter.setSizes([450, 450])
-        layout.addWidget(splitter)
+        lower_layout.addWidget(splitter, 1)
+        self._expanded_sizes = [320, 240]
+        self.btn_opt_toggle.setChecked(False)
+        self._toggle_opt_panel()
+        self.workspace.handle(1).setToolTip("上下拖动，调整配置区与文件区高度")
+        splitter.handle(1).setToolTip("左右拖动，调整本地与设备文件区宽度")
 
         # ── Progress Bar ──
         self.progress = QProgressBar()
@@ -956,16 +997,12 @@ class DAPLinkManager(QMainWindow):
         self.setStyleSheet("""
             QWidget { font-family: 'Microsoft YaHei'; font-size: 10pt; }
             QMainWindow { background: #eef2f7; }
-            QLabel#banner {
-                color: #ffffff;
-                font-family: 'Microsoft YaHei';
-                font-size: 17px;
-                font-weight: bold;
-                padding-left: 16px;
-                border-radius: 8px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #2b5876, stop:1 #4e9fd1);
-            }
+            QFrame#banner { background: #ffffff; border: 1px solid #dde4ec; border-radius: 8px; }
+            QLabel#productTitle { color: #24364b; font-size: 12pt; font-weight: bold; }
+            QSplitter::handle { background: #d5dfe9; border-radius: 3px; }
+            QSplitter::handle:vertical { height: 7px; margin: 1px 0; }
+            QSplitter::handle:horizontal { width: 7px; margin: 0 1px; }
+            QSplitter::handle:hover, QSplitter::handle:pressed { background: #4784b5; }
             QToolBar {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #ffffff, stop:1 #e9eef4);
@@ -1065,24 +1102,22 @@ class DAPLinkManager(QMainWindow):
         """)
 
     def _update_toolbar_state(self):
-        connected = self.device.is_connected()
-        idle = not self.import_in_progress and not self.quota_in_progress
-        self.btn_connect.setEnabled(not connected and idle)
-        self.btn_disconnect.setEnabled(connected and idle)
-        self.btn_upload.setEnabled(connected and idle)
-        self.btn_download.setEnabled(connected and idle)
-        self.btn_mkdir.setEnabled(connected and idle)
-        self.btn_delete.setEnabled(connected and idle)
-        self.btn_refresh.setEnabled(connected and idle)
-        self.btn_import.setEnabled(connected and idle)
+        idle = not self.import_in_progress and not self._usb_busy
+        ready = self._can_use_usb()
+        self.btn_connect.setEnabled(not self._watch_connection and self._connection_job is None and idle)
+        self.btn_disconnect.setEnabled(self._watch_connection and idle)
+        for action in (self.btn_upload, self.btn_download, self.btn_mkdir, self.btn_delete,
+                       self.btn_refresh, self.btn_import, self.btn_image_task):
+            action.setEnabled(ready)
+        self.remote_tree.setEnabled(ready)
+        self.remote_path_input.setEnabled(ready)
         self.cmb_chip.setEnabled(idle)
         self.btn_opt_toggle.setEnabled(idle and self.current_chip is not None)
         self.chk_opt.setEnabled(idle and self.current_chip is not None)
-        self.chk_quota.setEnabled(connected and idle)
-        self.spin_quota.setEnabled(connected and idle and self.chk_quota.isChecked())
-        self.btn_quota_save.setEnabled(connected and idle)
-        self.btn_quota_read.setEnabled(connected and idle)
-        self.btn_image_task.setEnabled(connected and idle)
+        self.chk_channel_b.setEnabled(idle)
+        self.opt_content.setEnabled(idle)
+        self.chk_quota.setEnabled(idle)
+        self.spin_quota.setEnabled(idle and self.chk_quota.isChecked())
 
     def _set_import_state(self, active):
         self.import_in_progress = active
@@ -1092,76 +1127,84 @@ class DAPLinkManager(QMainWindow):
         self.remote_path_input.setEnabled(not active)
         self._update_toolbar_state()
 
-    # 启动后台保存/读取次数，暂时锁住其他USB操作，避免响应或文件传输互相干扰。
-    def _start_quota(self, save=False):
-        if not self.device.is_connected() or self.import_in_progress or self.quota_in_progress:
-            return
-        if self.worker is not None and self.worker.isRunning():
-            self.statusBar().showMessage("请等待当前设备操作完成，再设置或读取次数。")
-            return
-        self.quota_in_progress = True
-        self.remote_tree.setEnabled(False)
-        self.remote_path_input.setEnabled(False)
+    def _start_worker(self, worker, callback):
+        self._usb_busy = True
+        self.worker = worker
+        self._worker_callback = callback
+        worker.finished.connect(self._worker_done, Qt.QueuedConnection)
         self._update_toolbar_state()
-        setting = (self.chk_quota.isChecked(), self.spin_quota.value()) if save else None
-        self.statusBar().showMessage("正在保存烧录次数..." if save else "正在读取剩余次数...")
-        self.quota_worker = QuotaWorker(self.device, setting)
-        self.quota_worker.finished.connect(lambda result, error: self._quota_done(result, error, save))
-        self.quota_worker.start()
+        worker.start()
 
-    # 单独保存/读取与程序导入共用此显示函数；以设备确认的次数为准，三位数字前面补0。
-    def _display_burn_quota(self, result):
-        self.chk_quota.setChecked(result['enabled'])
-        if result['enabled']:
-            self.spin_quota.setValue(result['remaining'])
-        if result['fault']:
-            self.lbl_quota.setText("当前固件次数记录异常：请重新设置并保存")
-        else:
-            text = f"{result['remaining']:03d}次" if result['enabled'] else "不限"
-            self.lbl_quota.setText("当前固件剩余：" + text)
-
-    # 恢复单独保存/读取操作的控件状态；次数显示与导入完成回调保持一致。
-    def _quota_done(self, result, error, saved):
-        self.quota_in_progress = False
-        self.remote_tree.setEnabled(True)
-        self.remote_path_input.setEnabled(True)
-        if error:
-            self.lbl_quota.setText("当前固件剩余：读取或保存失败")
-            self.statusBar().showMessage(error)
-        else:
-            self._display_burn_quota(result)
-            self.statusBar().showMessage("烧录次数已保存到设备，断电后保留。" if saved else "已读取设备剩余次数。")
+    def _worker_done(self, *result):
+        worker = self.worker
+        worker.wait()  # The result signal is emitted just before run() returns.
+        self._usb_busy = False
         self._update_toolbar_state()
+        self._worker_callback(*result)
+        if self.worker is worker:
+            self.worker = None
+        worker.deleteLater()
+
+    def _poll_connection(self):
+        if (not self._watch_connection or self._connection_job is not None or self._usb_busy
+                or self.import_in_progress or QApplication.activeModalWidget() is not None):
+            return
+        self._connection_job = ConnectionWorker(self.device)
+        self._connection_job.finished.connect(self._connection_done)
+        self._update_toolbar_state()
+        self._connection_job.start()
+
+    def _can_use_usb(self):
+        return (self._watch_connection and self.device.is_connected()
+                and (self._connection_job is None or self._connection_job.probe)
+                and not self._usb_busy and not self.import_in_progress)
 
     def _on_connect(self):
-        self.statusBar().showMessage("正在连接...")
-        self.btn_connect.setEnabled(False)
-        self.worker = ConnectWorker(self.device)
-        self.worker.finished.connect(self._connect_done)
-        self.worker.start()
+        self._watch_connection = True
+        self._connection_timer.start()
+        self.statusBar().showMessage("正在连接烧录器…")
+        self._poll_connection()
 
-    def _connect_done(self, ok, msg):
-        if ok:
-            self.lbl_status_icon.setStyleSheet("color: #2ecc71; font-size: 16px;")
+    def _connection_done(self):
+        job = self._connection_job
+        self._connection_job = None
+        job.deleteLater()
+        if not self._watch_connection:
+            self.device.disconnect()
+            self.device.identity = None
+        elif job.error:
+            # A click can start an operation after its idle probe has been sent.
+            if job.probe and ((self.device.is_connected() and self.device.dev is not job.probed_handle)
+                              or self._usb_busy or self.import_in_progress or QApplication.activeModalWidget() is not None):
+                self._update_toolbar_state()
+                return
+            self.device.disconnect()
+            self._show_offline("等待烧录器重新连接…")
+            self.lbl_status_text.setToolTip(job.error)
+        elif not job.probe:
+            self.lbl_status_icon.setStyleSheet("color: #21814d; font-size: 16px;")
             self.lbl_status_text.setText("已连接")
-            self.statusBar().showMessage("设备已连接；可设置或读取烧录次数")
-            self.lbl_quota.setText("当前固件剩余：请点击“读取当前剩余”")
-            self._navigate_remote("/")
-            self._refresh_image_summary()
-        else:
-            self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
-            self.lbl_status_text.setText("未连接")
-            self.statusBar().showMessage(f"连接失败: {msg}")
+            self.lbl_status_text.setToolTip("断电后会自动重新连接")
+            self.statusBar().showMessage("烧录器已连接")
+            self._navigate_remote("/", refresh_image=True)
         self._update_toolbar_state()
 
-    def _on_disconnect(self):
-        self.device.disconnect()
-        self.lbl_status_icon.setStyleSheet("color: #e74c3c; font-size: 16px;")
-        self.lbl_status_text.setText("未连接")
+    def _show_offline(self, text):
+        self.lbl_status_icon.setStyleSheet("color: #a36616; font-size: 16px;")
+        self.lbl_status_text.setText(text)
+        self.lbl_status_text.setToolTip("")
         self.remote_tree.clear()
-        self.statusBar().showMessage("已断开")
-        self.lbl_quota.setText("当前固件剩余：设备未连接")
         self.lbl_image_summary.setText("镜像号：--")
+        self.lbl_checksum.setText("Checksum(SUM32): --------")
+        self.statusBar().showMessage(text)
+
+    def _on_disconnect(self):
+        self._watch_connection = False
+        self._connection_timer.stop()
+        if self._connection_job is None:
+            self.device.disconnect()
+            self.device.identity = None
+        self._show_offline("已断开")
         self._update_toolbar_state()
 
     # ── Image tasks ──
@@ -1172,17 +1215,12 @@ class DAPLinkManager(QMainWindow):
             return
         dialog = ImageTaskDialog(self.device, self.opt_config, self)
         dialog.exec_()
-        self._refresh_image_summary()
+        self._navigate_remote(self.current_remote_path, refresh_image=True)
 
-    def _refresh_image_summary(self):
-        if not self.device.is_connected():
-            self.lbl_image_summary.setText("镜像号：--")
-            return
-        try:
-            info = self.device.image_info()
-        except Exception as exc:
+    def _display_image_summary(self, info, error):
+        if error:
             self.lbl_image_summary.setText("镜像号：不可用")
-            self.lbl_image_summary.setToolTip(str(exc))
+            self.lbl_image_summary.setToolTip(error)
             return
         current = info.get("current", IMAGE_ID_NONE)
         if info.get("flags", 0) & 1 and current < IMAGE_SLOTS:
@@ -1193,16 +1231,15 @@ class DAPLinkManager(QMainWindow):
 
     # ── Remote Navigation ──
 
-    def _navigate_remote(self, path):
-        if self.quota_in_progress or not self.device.is_connected():
+    def _navigate_remote(self, path, refresh_image=False):
+        if not self._can_use_usb():
             return
         self.current_remote_path = path
-        self.lbl_path.setText(f"路径: {path}")
         self.remote_path_input.setText(path)
         self.statusBar().showMessage(f"正在列出 {path} ...")
-        self.worker = ListDirWorker(self.device, path)
-        self.worker.finished.connect(self._list_done)
-        self.worker.start()
+        worker = ListDirWorker(self.device, path, refresh_image=refresh_image)
+        worker.summary.connect(self._display_image_summary)
+        self._start_worker(worker, self._list_done)
 
     def _list_done(self, entries, error):
         self.remote_tree.clear()
@@ -1300,15 +1337,12 @@ class DAPLinkManager(QMainWindow):
     # ── Upload / Download ──
 
     def _on_upload(self):
-        if not self.device.is_connected():
+        if not self._can_use_usb():
             return
-        files, _ = QFileDialog.getOpenFileNames(self, "Select Files to Upload")
-        if not files:
-            return
-        for local_path in files:
-            filename = os.path.basename(local_path)
-            remote_path = self.current_remote_path.rstrip('/') + '/' + filename
-            self._start_transfer('push', local_path, remote_path)
+        files, _ = QFileDialog.getOpenFileNames(self, "选择要上传的文件")
+        if files:
+            self._upload_queue = [(p, self.current_remote_path.rstrip('/') + '/' + os.path.basename(p)) for p in files]
+            self._start_transfer('push', *self._upload_queue.pop(0))
 
     def _on_download(self):
         if not self.device.is_connected():
@@ -1335,10 +1369,9 @@ class DAPLinkManager(QMainWindow):
         direction = "上传" if mode == 'push' else "下载"
         self.statusBar().showMessage(f"正在{direction} {name} ...")
 
-        self.worker = TransferWorker(self.device, mode, src, dst)
-        self.worker.progress.connect(self._transfer_progress)
-        self.worker.finished.connect(self._transfer_done)
-        self.worker.start()
+        worker = TransferWorker(self.device, mode, src, dst)
+        worker.progress.connect(self._transfer_progress)
+        self._start_worker(worker, self._transfer_done)
 
     def _transfer_progress(self, current, total):
         if total > 0:
@@ -1349,8 +1382,11 @@ class DAPLinkManager(QMainWindow):
     def _transfer_done(self, nbytes, error):
         self.progress.setVisible(False)
         if error:
+            self._upload_queue.clear()
             self.statusBar().showMessage(f"传输失败: {error}")
             QMessageBox.warning(self, "错误", f"传输失败:\n{error}")
+        elif self._upload_queue:
+            self._start_transfer('push', *self._upload_queue.pop(0))
         else:
             self.statusBar().showMessage(f"传输完成: {self._format_size(nbytes)}")
             self._navigate_remote(self.current_remote_path)
@@ -1363,9 +1399,7 @@ class DAPLinkManager(QMainWindow):
         name, ok = QInputDialog.getText(self, "新建文件夹", "文件夹名称:")
         if ok and name:
             path = self.current_remote_path.rstrip('/') + '/' + name
-            self.worker = ActionWorker(self.device, 'mkdir', path)
-            self.worker.finished.connect(self._action_done)
-            self.worker.start()
+            self._start_worker(ActionWorker(self.device, 'mkdir', path), self._action_done)
 
     def _on_delete(self):
         if not self.device.is_connected():
@@ -1380,9 +1414,7 @@ class DAPLinkManager(QMainWindow):
                                      QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             path = self.current_remote_path.rstrip('/') + '/' + name
-            self.worker = ActionWorker(self.device, 'rm', path)
-            self.worker.finished.connect(self._action_done)
-            self.worker.start()
+            self._start_worker(ActionWorker(self.device, 'rm', path), self._action_done)
 
     def _on_remote_context_menu(self, pos):
         item = self.remote_tree.itemAt(pos)
@@ -1413,7 +1445,14 @@ class DAPLinkManager(QMainWindow):
 
     def _toggle_opt_panel(self):
         visible = self.btn_opt_toggle.isChecked()
+        if not visible and self.workspace.isVisible() and not self.opt_scroll.isHidden():
+            self._expanded_sizes = self.workspace.sizes()
         self.opt_scroll.setVisible(visible)
+        if visible:
+            self.chip_opt_frame.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            self.workspace.setSizes(self._expanded_sizes)
+        else:
+            self.chip_opt_frame.setMaximumHeight(self.chip_opt_frame.sizeHint().height())
         self.btn_opt_toggle.setText("OPT 配置 ▲" if visible else "OPT 配置 ▼")
 
     @staticmethod
@@ -1436,6 +1475,8 @@ class DAPLinkManager(QMainWindow):
         if not model_name:
             self.current_chip = None
             self.chk_opt.setChecked(False)
+            self.btn_opt_toggle.setChecked(False)
+            self._toggle_opt_panel()
             self._clear_opt_ui()
             self._update_toolbar_state()
             return
@@ -1478,7 +1519,8 @@ class DAPLinkManager(QMainWindow):
             "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
         preview_layout.addWidget(self.lbl_opt_preview)
         self.lbl_rdp_state = QLabel("", preview_grp)
-        self.lbl_rdp_state.setFixedWidth(76)
+        self.lbl_rdp_state.setMinimumWidth(self.fontMetrics().horizontalAdvance("读保护已开启") + 16)
+        self.lbl_rdp_state.setToolTip("当前 OPT 配置预览，不是芯片回读结果。")
         self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
         self.lbl_rdp_state.setMinimumHeight(self.control_height)
         preview_layout.addWidget(self.lbl_rdp_state)
@@ -1498,8 +1540,11 @@ class DAPLinkManager(QMainWindow):
             grp_layout.setVerticalSpacing(10)
             grp_layout.setColumnStretch(1, 1)
 
+            radio_rows = []
             for row, field in enumerate(w.get('fields', [])):
                 widget = self._build_field_widget(field, grp)
+                if hasattr(widget, '_btn_group'):
+                    radio_rows.append(widget._btn_group.buttons())
                 widget.setMinimumHeight(self.control_height)
                 label = QLabel(field['name'], grp)
                 label.setFixedWidth(label_width)
@@ -1510,6 +1555,12 @@ class DAPLinkManager(QMainWindow):
                 # Connect change signals for live preview
                 self._connect_opt_signal(widget)
 
+            # Match the widest first choice in the group, not the text in each row.
+            if radio_rows:
+                for column in zip(*radio_rows):
+                    width = max(button.sizeHint().width() for button in column)
+                    for button in column:
+                        button.setFixedWidth(width)
             layout.addWidget(grp)
 
         layout.addStretch()
@@ -1537,12 +1588,12 @@ class DAPLinkManager(QMainWindow):
             if hasattr(self, 'lbl_rdp_state'):
                 rdp = (buf[0] | (buf[1] << 8)) if len(buf) >= 2 else 0xFFFF
                 if rdp == 0x5AA5:
-                    self.lbl_rdp_state.setText("未加密")
+                    self.lbl_rdp_state.setText("读保护关闭")
                     self.lbl_rdp_state.setStyleSheet(
                         "color:#b03a2e; font-weight:bold; border:1px solid #e6b0aa;"
                         "border-radius:3px; background:#fdedec;")
                 elif rdp == 0x807F:
-                    self.lbl_rdp_state.setText("已加密")
+                    self.lbl_rdp_state.setText("读保护开启")
                     self.lbl_rdp_state.setStyleSheet(
                         "color:#1e8449; font-weight:bold; border:1px solid #a9dfbf;"
                         "border-radius:3px; background:#eafaf1;")
@@ -1559,7 +1610,7 @@ class DAPLinkManager(QMainWindow):
         default = field.get('default')
 
         if field.get('byte'):
-            combo = QComboBox(parent)
+            combo = ScrollSafeCombo(parent)
             combo.setView(QListView())
             combo.setFixedHeight(self.control_height)
             default_idx = 0
@@ -1633,10 +1684,7 @@ class DAPLinkManager(QMainWindow):
     # ── Import Program ──
 
     def _on_import_program(self):
-        if self.quota_in_progress:
-            return
-        if not self.device.is_connected():
-            QMessageBox.warning(self, "Warning", "请先连接设备。")
+        if not self._can_use_usb():
             return
         if not self.current_model:
             QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
@@ -1697,11 +1745,10 @@ class DAPLinkManager(QMainWindow):
         self.statusBar().showMessage("正在导入...")
         self._set_import_state(True)
 
-        self.worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting, channel_b=self.chk_channel_b.isChecked())
-        self.worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
-        self.worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
-        self.worker.finished.connect(self._import_done)
-        self.worker.start()
+        worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting, channel_b=self.chk_channel_b.isChecked())
+        worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
+        worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
+        self._start_worker(worker, self._import_done)
 
     def _build_opt_bytes(self):
         """按当前 UI 值构造 OPT 二进制（长度 = 配置里定义的 word 范围）。"""
@@ -1761,12 +1808,7 @@ class DAPLinkManager(QMainWindow):
 
     def _import_done(self, ok, msg):
         self.progress.setVisible(False)
-        # 次数在最终prepare之前写入；即使prepare失败，也如实显示已经成功写入的次数。
         quota_result = getattr(self.worker, 'quota_result', None)
-        if quota_result is not None:
-            self._display_burn_quota(quota_result)
-        elif getattr(self.worker, 'quota_error', ""):
-            self.lbl_quota.setText("导入固件次数：重新加载失败")  # 次数未确认成功，不能显示输入值已生效。
         if ok:
             # 兼容既有完成回调；只有新导入线程保留的已验证校验值才显示。
             checksum = getattr(self.worker, 'checksum', None)
@@ -1777,7 +1819,7 @@ class DAPLinkManager(QMainWindow):
             QMessageBox.information(self, "导入完成",
                                     "程序与算法已导入，设备已进入烧录界面。\n"
                                     "自动模式检测到芯片后开始烧录；手动模式按中键开始。\n"
-                                    "上位机仍保持连接，可继续设置次数和传输文件。")
+                                    "本次次数设置已随程序导入。")
         else:
             self.lbl_checksum.setText("Checksum(SUM32): --------")  # 导入失败不得保留此前成功值。
             self.statusBar().showMessage(f"导入失败: {msg}")
@@ -1787,10 +1829,14 @@ class DAPLinkManager(QMainWindow):
     # ── Close ──
 
     def closeEvent(self, event):
-        if self.quota_in_progress or self.import_in_progress:
+        if self._usb_busy or self.import_in_progress:
             self.statusBar().showMessage("请等待设备操作完成后关闭窗口。")
             event.ignore()
             return
+        self._connection_timer.stop()
+        self._watch_connection = False
+        if self._connection_job is not None:
+            self._connection_job.wait()
         self.device.disconnect()
         event.accept()
 

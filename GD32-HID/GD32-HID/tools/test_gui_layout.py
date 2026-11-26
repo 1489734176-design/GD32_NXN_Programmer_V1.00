@@ -6,6 +6,7 @@ Repeat with QT_SCALE_FACTOR=1.25 or 1.5 to check scaled layouts.
 """
 import argparse
 from pathlib import Path
+from unittest.mock import patch
 
 # Qt 插件路径修复（必须在 import PyQt5 之前）：工程路径含中文时 Qt 的 ANSI 路径解析
 # 会变成 "???"，导致 "no Qt platform plugin could be initialized"。
@@ -24,12 +25,12 @@ def _fix_qt_plugin_path():
 
 _fix_qt_plugin_path()
 
-from PyQt5.QtCore import QPoint, Qt
-from PyQt5.QtGui import QFont, QPalette
+from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
+from PyQt5.QtGui import QFont, QMouseEvent, QPalette, QWheelEvent
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QGroupBox, QLabel, QStyle,
-    QStyleOptionGroupBox,
+    QApplication, QCheckBox, QComboBox, QGroupBox, QLabel, QSplitter,
+    QStyle, QStyleOptionGroupBox, QWidget,
 )
 
 from daplink_manager import DAPLinkManager
@@ -52,6 +53,9 @@ def check_layout(window):
             assert not control.geometry().intersects(other.geometry())
         assert window.chip_opt_frame.rect().contains(control.geometry())
 
+    for control in (*controls, window.chk_opt):
+        assert window.chk_channel_b.y() > control.geometry().bottom()
+    assert window.chk_channel_b.geometry().bottom() < window.opt_scroll.y()
     assert window.chip_opt_frame.rect().contains(window.opt_scroll.geometry())
     assert window.centralWidget().rect().contains(window.chip_opt_frame.geometry())
     groups = window.opt_content.findChildren(QGroupBox)
@@ -64,6 +68,7 @@ def check_layout(window):
         group.initStyleOption(option)
         title_rect = group.style().subControlRect(
             QStyle.CC_GroupBox, option, QStyle.SC_GroupBoxLabel, group)
+        radio_columns = None
         for i in range(group.layout().count()):
             child = group.layout().itemAt(i).widget()
             if child is None:
@@ -75,6 +80,11 @@ def check_layout(window):
                 assert child.width() >= child.fontMetrics().horizontalAdvance(child.text())
             if hasattr(child, '_btn_group'):
                 buttons = child._btn_group.buttons()
+                columns = tuple(sorted(button.mapTo(group, QPoint()).x() for button in buttons))
+                assert len(columns) == 2 and columns[0] < columns[1]
+                if radio_columns is None:
+                    radio_columns = columns
+                assert columns == radio_columns, (group.title(), columns, radio_columns)
                 for j, button in enumerate(buttons):
                     assert button.width() >= button.minimumSizeHint().width()
                     assert child.rect().contains(button.geometry())
@@ -89,6 +99,86 @@ def check_layout(window):
     bottom = last.mapTo(window.opt_scroll.viewport(), last.rect().bottomLeft())
     assert bottom.y() < window.opt_scroll.viewport().height()
     bar.setValue(0)
+
+
+def check_rpo_wheel(window):
+    combo = window._opt_widgets['RPO']
+    bar = window.opt_scroll.verticalScrollBar()
+    native = QApplication.platformName() == 'windows'
+    for focused, index, delta in ((True, 0, -120), (False, 1, 120)):
+        combo.setCurrentIndex(index)
+        (combo if focused else window.cmb_chip).setFocus()
+        window.opt_scroll.ensureWidgetVisible(combo)
+        pos = combo.rect().center()
+        QTest.mouseMove(combo, pos)
+        settle()
+        assert combo.hasFocus() == focused
+        before = bar.value()
+        expected_bytes = window.lbl_opt_preview.text()
+        if native:
+            # sendEvent(widget, wheel) is non-spontaneous: Qt doesn't bubble it to its scroll area.
+            import ctypes
+            from ctypes import wintypes
+            pointer = wintypes.POINT()
+            user32 = ctypes.windll.user32
+            assert user32.GetCursorPos(ctypes.byref(pointer))
+            assert QApplication.widgetAt(combo.mapToGlobal(pos)) is combo
+            xy = ((pointer.y & 0xffff) << 16) | (pointer.x & 0xffff)
+            user32.SendMessageW(wintypes.HWND(int(window.winId())), 0x020A,  # WM_MOUSEWHEEL
+                                wintypes.WPARAM((delta & 0xffff) << 16), wintypes.LPARAM(xy))
+        else:
+            event = QWheelEvent(QPointF(pos), QPointF(combo.mapToGlobal(pos)), QPoint(),
+                                QPoint(0, delta), Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+            QApplication.sendEvent(combo, event)
+            assert not event.isAccepted()
+        settle()
+        assert combo.currentIndex() == index and window.lbl_opt_preview.text() == expected_bytes
+        if native:
+            assert (bar.value() - before) * delta < 0, (before, bar.value(), delta)
+    combo.setCurrentIndex(0)
+
+
+def check_splitters(window):
+    splitters = window.findChildren(QSplitter)
+    assert {s.orientation() for s in splitters} == {Qt.Vertical, Qt.Horizontal}
+    for splitter in splitters:
+        vertical = splitter.orientation() == Qt.Vertical
+        handle = splitter.handle(1)
+        assert handle.cursor().shape() == (Qt.SplitVCursor if vertical else Qt.SplitHCursor)
+        assert handle.isVisible()
+        sizes = splitter.sizes()
+        pos = handle.rect().center()
+        end = handle.mapToGlobal(pos) + (QPoint(0, 24) if vertical else QPoint(24, 0))
+        QTest.mousePress(handle, Qt.LeftButton, pos=pos)
+        move = QMouseEvent(QEvent.MouseMove, QPointF(handle.mapFromGlobal(end)), QPointF(end),
+                           Qt.NoButton, Qt.LeftButton, Qt.NoModifier)
+        QApplication.sendEvent(handle, move)
+        QTest.mouseRelease(handle, Qt.LeftButton, pos=handle.mapFromGlobal(end))
+        settle()
+        first, second = splitter.sizes()
+        assert first > sizes[0] and second < sizes[1], (sizes, splitter.sizes())
+        splitter.setSizes(sizes)
+        settle()
+
+
+def check_brand_and_quota(window):
+    brand, = (label for label in window.banner.findChildren(QLabel)
+              if label.accessibleName() == '南芯能半导体')
+    assert brand.isVisible() and brand.pixmap() is not None and not brand.pixmap().isNull()
+    assert not window.windowIcon().pixmap(32, 32).isNull()
+    assert set(window.quota_frame.findChildren(QWidget, options=Qt.FindDirectChildrenOnly)) == {
+        window.chk_quota, window.spin_quota}
+    assert not window.device.is_connected() and window.chk_quota.isEnabled()
+    assert not window.chk_quota.isChecked() and not window.spin_quota.isEnabled()
+    QTest.mouseClick(window.chk_quota, Qt.LeftButton)
+    assert window.spin_quota.isEnabled()
+    spin = window.spin_quota
+    spin.selectAll()
+    QTest.keyClicks(spin, '123')
+    QTest.keyClick(spin, Qt.Key_Return)
+    assert spin.value() == 123
+    QTest.mouseClick(window.chk_quota, Qt.LeftButton)
+    assert not spin.isEnabled()
 
 
 def check_preview(window):
@@ -147,9 +237,18 @@ def main():
     app.setStyle('Fusion')
     # Reproduce a large system font instead of relying on a friendly default.
     app.setFont(QFont('SimSun', 18))
+    with patch('daplink_manager.usb.core.find', side_effect=AssertionError('unexpected USB access')) as find:
+        run_checks(app, args.screenshots)
+        find.assert_not_called()
+
+
+def run_checks(app, screenshots):
     window = DAPLinkManager()
     window.show()
+    window.activateWindow()
+    settle()
     try:
+        check_brand_and_quota(window)
         models = window.opt_config.get_chip_models()
         for width, height in ((900, 600), (1000, 650), (1280, 800)):
             window.resize(width, height)
@@ -159,20 +258,21 @@ def main():
                 assert window.width() == width and window.height() == height
                 check_layout(window)
                 if width == 1000:
+                    check_rpo_wheel(window)
+                    check_splitters(window)
                     check_preview(window)
                     window._build_opt_ui()
                     settle()
-                    if args.screenshots:
-                        window.grab().save(str(args.screenshots / f'{model}.png'))
+                    if screenshots:
+                        window.grab().save(str(screenshots / f'{model}.png'))
                         window.opt_scroll.verticalScrollBar().setValue(170)
                         settle()
-                        window.grab().save(str(args.screenshots / f'{model}-fields.png'))
+                        window.grab().save(str(screenshots / f'{model}-fields.png'))
                     window.opt_scroll.verticalScrollBar().setValue(0)
-                    combo = next(w for w in window._opt_widgets.values()
-                                 if isinstance(w, QComboBox))
+                    combo = window._opt_widgets['RPO']
                     window.opt_scroll.ensureWidgetVisible(combo)
                     settle()
-                    check_popup(combo, args.screenshots, f'{model}-opt-popup')
+                    check_popup(combo, screenshots, f'{model}-opt-popup')
                 window.btn_opt_toggle.click()
                 settle()
                 assert not window.opt_scroll.isVisible()
@@ -181,7 +281,7 @@ def main():
                 assert window.opt_scroll.isVisible()
         window.cmb_chip.setCurrentIndex(1)
         settle()
-        check_popup(window.cmb_chip, args.screenshots, 'chip-popup')
+        check_popup(window.cmb_chip, screenshots, 'chip-popup')
         window.cmb_chip.setCurrentIndex(0)
         settle()
         assert not window._opt_widgets
@@ -190,9 +290,10 @@ def main():
         print(f'PASS {len(models)} chips x 3 window sizes; aligned controls, titles, rows and scrolling')
         print('PASS OPT defaults, field changes, inverse bytes, expand/collapse and chip switching')
         print('PASS chip/OPT popup colors, mouse selection and keyboard navigation')
+        print('PASS RPO wheel safety, both splitter drags, radio columns, channel row, offline quota and branding')
         print(f'Qt platform: {app.platformName()}, device pixel ratio: {window.devicePixelRatioF()}')
-        if args.screenshots:
-            print(f'Screenshots: {args.screenshots}')
+        if screenshots:
+            print(f'Screenshots: {screenshots}')
     finally:
         window.close()
 
