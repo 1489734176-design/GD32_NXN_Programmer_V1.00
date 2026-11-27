@@ -42,20 +42,21 @@ def settle():
 
 
 def check_layout(window):
-    # 固定算法标签与芯片框对齐，OPT按钮只保留在芯片行。
-    controls = (window.cmb_chip, window.lbl_algorithm, window.btn_opt_toggle)
-    assert {c.height() for c in controls} == {window.control_height}
-    assert window.cmb_chip.size() == window.lbl_algorithm.size()
+    controls = (window.cmb_chip, window.btn_opt_toggle, window.chk_opt)
+    assert window.cmb_chip.height() == window.btn_opt_toggle.height() == window.control_height
     assert window.cmb_chip.y() == window.btn_opt_toggle.y()
-    assert window.cmb_chip.x() == window.lbl_algorithm.x()
     for i, control in enumerate(controls):
         for other in controls[i + 1:]:
             assert not control.geometry().intersects(other.geometry())
         assert window.chip_opt_frame.rect().contains(control.geometry())
 
-    for control in (*controls, window.chk_opt):
+    for control in controls:
         assert window.chk_channel_b.y() > control.geometry().bottom()
-    assert window.chk_channel_b.geometry().bottom() < window.opt_scroll.y()
+    assert window.chk_channel_b.geometry().bottom() < window.chk_quota.y()
+    assert window.chk_quota.geometry().bottom() < window.cmb_image.y()
+    assert window.cmb_image.geometry().center().y() == window.edit_image_desc.geometry().center().y()
+    assert window.cmb_image.geometry().right() < window.edit_image_desc.x()
+    assert window.edit_image_desc.geometry().bottom() < window.opt_scroll.y()
     assert window.chip_opt_frame.rect().contains(window.opt_scroll.geometry())
     assert window.centralWidget().rect().contains(window.chip_opt_frame.geometry())
     groups = window.opt_content.findChildren(QGroupBox)
@@ -162,12 +163,20 @@ def check_splitters(window):
 
 
 def check_brand_and_quota(window):
-    brand, = (label for label in window.banner.findChildren(QLabel)
-              if label.accessibleName() == '南芯能半导体')
-    assert brand.isVisible() and brand.pixmap() is not None and not brand.pixmap().isNull()
+    assert window.windowTitle() == 'NX Writer'
+    labels = [label.text() for label in window.banner.findChildren(QLabel)]
+    assert 'NX Writer' in labels and not any('CMSIS' in text for text in labels)
     assert not window.windowIcon().pixmap(32, 32).isNull()
-    assert set(window.quota_frame.findChildren(QWidget, options=Qt.FindDirectChildrenOnly)) == {
-        window.chk_quota, window.spin_quota}
+    assert [window.cmb_chip.itemText(i) for i in range(1, window.cmb_chip.count())] == ['NX32F001T', 'NX32F002TS']
+    assert all('算法' not in w.text() for w in window.chip_opt_frame.findChildren(QLabel))
+    for control in (window.chk_quota, window.spin_quota, window.cmb_image, window.edit_image_desc):
+        assert window.chip_opt_frame.isAncestorOf(control)
+    assert window.cmb_image.count() == 101 and window.cmb_image.currentData() is None
+    assert not window.edit_image_desc.isEnabled()
+    for slot in (0, 99):
+        window.cmb_image.setCurrentIndex(window.cmb_image.findData(slot))
+        assert window.cmb_image.currentText() == f'{slot:03d}' and window.edit_image_desc.isEnabled()
+    window.cmb_image.setCurrentIndex(0)
     assert not window.device.is_connected() and window.chk_quota.isEnabled()
     assert not window.chk_quota.isChecked() and not window.spin_quota.isEnabled()
     QTest.mouseClick(window.chk_quota, Qt.LeftButton)
@@ -253,7 +262,8 @@ def run_checks(app, screenshots):
         for width, height in ((900, 600), (1000, 650), (1280, 800)):
             window.resize(width, height)
             for model in models:
-                window.cmb_chip.setCurrentText(model)
+                window.cmb_chip.setCurrentIndex(window.cmb_chip.findData(model))
+                assert window.current_model == model and window.current_chip == window.opt_config.get_chip(model)
                 settle()
                 assert window.width() == width and window.height() == height
                 check_layout(window)

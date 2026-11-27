@@ -23,6 +23,8 @@
 #define IMAGE_REC_FLAG_VALID      0x01U
 #define IMAGE_REC_FLAG_OPT        0x02U
 #define IMAGE_REC_FLAG_SUM        0x04U
+#define IMAGE_REC_FLAG_CHANNEL_SET 0x08U  /* no bit on legacy records */
+#define IMAGE_REC_FLAG_CHANNEL_B   0x10U
 #define IMAGE_FW_MAX              102400UL  /* 每槽固件上限 100KB */
 #define IMAGE_STAGE_FILE          "0:/download/stg.dat"
 
@@ -44,7 +46,7 @@ enum {
 typedef struct __attribute__((packed))
 {
     uint8_t  id;              /* 0..99，必须等于数组下标 */
-    uint8_t  flags;           /* bit0=有效, bit1=OPT, bit2=SUM有效 */
+    uint8_t  flags;           /* IMAGE_REC_FLAG_*; legacy records have no channel setting */
     uint32_t checksum;        /* 主固件 SUM32；偏移 2，不可按 uint32_t* 解引用 */
     char     algo[32];        /* 算法 basename，ASCII，NUL 结尾 */
     char     bin[32];         /* 主固件 basename，ASCII，NUL 结尾 */
@@ -93,6 +95,11 @@ uint8_t image_store_find_match(const uint8_t *algo, const uint8_t *bin, uint8_t 
 uint8_t image_store_migrate_from_selection(const program_selection_t *sel);
 /* 设备端切换当前镜像：把活动 bank 复制到另一份并更新 current/seq。返回 1 成功。 */
 uint8_t image_store_set_current(uint8_t id);
+
+/* Replace one record, preserving the other 99, and make it current. */
+uint8_t image_store_upsert(const image_record_t *rec);
+/* Main-task validation before selecting a stored or newly imported image. */
+uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_out);
 
 /* 表信息（无有效表时 seq=0、crc=0）。 */
 uint32_t image_store_seq(void);

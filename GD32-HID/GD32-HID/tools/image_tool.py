@@ -8,14 +8,16 @@ import binascii
 import os
 import struct
 import tempfile
+from dataclasses import dataclass
 
-# ── Wire protocol commands (0x0F-0x15) ──────────────────────────────────────
+# ── Wire protocol commands (0x0F-0x16) ──────────────────────────────────────
 CMD_IMAGE_INFO = 0x0F
 CMD_IMAGE_COMMIT = 0x10
 CMD_IMAGE_ABORT = 0x12
 CMD_QUOTA_PEEK = 0x13
 CMD_GET_FREE = 0x14
 CMD_IMAGE_GET_RECORD = 0x15
+CMD_STAGE_IMAGE = 0x16
 
 IMAGE_TIMEOUT = 60000
 
@@ -137,7 +139,28 @@ def parse_bank(data: bytes):
     return dict(seq=seq, current=current, records=records)
 
 
-def unique_firmware_name(slot: int, data: bytes, base_hint: str = "") -> str:
+@dataclass(frozen=True)
+class ImageTarget:
+    slot: int
+    chip: str
+    desc: str = ""
+
+    def stage_request(self, algorithm: str) -> bytes:
+        if not 0 <= self.slot < IMAGE_SLOTS:
+            raise ValueError("镜像号必须为 000–099")
+        if len(self.desc) > 23 or not all(' ' <= ch <= '~' for ch in self.desc):
+            raise ValueError("烧录说明限 23 个可打印的 ASCII 字符（英文、数字或符号）。")
+        if not (0 < len(algorithm) <= 31 and 0 < len(self.chip) <= 15 and
+                all(s.isascii() and s.isprintable() for s in (algorithm, self.chip))):
+            raise ValueError("芯片配置无效。")
+        fields = b'\0'.join(s.encode('ascii') for s in (algorithm, self.chip, self.desc))
+        packet = bytes([CMD_STAGE_IMAGE, self.slot]) + fields
+        if len(packet) > 64:
+            raise ValueError("烧录说明超出本型号的传输长度。")
+        return packet
+
+
+def unique_firmware_name(slot: int, data: bytes = b"", base_hint: str = "") -> str:
     """物理文件名 = 三位镜像号 + '_' + 真实文件名（清洗/截断）+ '.bin'。
 
     例：001_SPIN0230_DEMO.bin；OPT 为 001_SPIN0230_DEMO_opt.bin（≤31B）。

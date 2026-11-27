@@ -8,7 +8,12 @@ import json
 import os
 
 
-# 芯片与算法固定配套，旧的用户绑定文件不能覆盖此关系。
+# 客户型号只用于显示；配置、USB 协议和算法绑定仍使用原型号。
+CHIP_DISPLAY_NAMES = {
+    'MM32G0001A': 'NX32F001T',
+    'MM32SPIN0230': 'NX32F002TS',
+}
+
 CHIP_ALGORITHMS = {
     'MM32G0001A': 'MM32G001-OPT_ext.bin',
     'MM32SPIN0230': 'MM32SPIN0230-OPT_ext.bin',

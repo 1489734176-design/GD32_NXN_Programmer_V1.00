@@ -36,6 +36,7 @@
 #define CMD_QUOTA_PEEK            0x13U
 #define CMD_GET_FREE              0x14U
 #define CMD_IMAGE_GET_RECORD      0x15U
+#define CMD_STAGE_IMAGE           0x16U
 
 /* Response status codes */
 #define STATUS_OK                   0x00U
@@ -80,7 +81,7 @@ void custombulk_quota_service(usb_dev *udev);
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required,
-                                         uint8_t *channel_b);
+                                         uint8_t *channel_b, uint8_t *image_id);
 
 /* 成功准备的主固件SUM32，保持到下一成功prepare、reset或取消；值0也合法。 */
 uint32_t custombulk_prepared_checksum(void);

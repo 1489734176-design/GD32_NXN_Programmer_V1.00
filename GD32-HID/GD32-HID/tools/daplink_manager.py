@@ -1,7 +1,7 @@
 # 固件次数独立保存到设备；重新导入只加载当前导入文件的次数，不影响其他固件。
 #!/usr/bin/env python3
 """
-CMSIS-DAPLINK File Manager
+NX Writer
 PyQt5 GUI for transferring files to/from GD32 DAPLINK device.
 
 Usage:
@@ -15,6 +15,7 @@ import sys
 import os
 import struct
 import threading
+import tempfile
 import re
 
 # ─── Qt 平台插件路径修复（必须在 import PyQt5 之前执行）───────────────────────
@@ -70,13 +71,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QColor, QPixmap
 
-from opt_config import OptConfig
+from opt_config import OptConfig, CHIP_DISPLAY_NAMES
 from image_tool import (
     CMD_IMAGE_INFO, CMD_IMAGE_COMMIT, CMD_IMAGE_ABORT, CMD_QUOTA_PEEK,
     CMD_GET_FREE, CMD_IMAGE_GET_RECORD, IMAGE_TIMEOUT, IMAGE_RECORD_SIZE,
-    IMAGE_SLOTS, IMAGE_ID_NONE, ImageCommitError, commit_detail_text,
+    IMAGE_SLOTS, IMAGE_FW_MAX, IMAGE_ID_NONE, ImageCommitError, ImageTarget,
+    unique_firmware_name, opt_name_for,
 )
-from image_dialog import ImageTaskDialog
 
 # ─── USB Protocol Constants ────────────────────────────────────────────────────
 
@@ -293,15 +294,23 @@ class DAPLinkDevice:
             raise ValueError("Algorithm filename must be 1-31 ASCII characters")
         resp = self._send_cmd(bytes([CMD_STAGE_ALGORITHM]) + algorithm_name.encode('ascii'))
         if not resp or resp[0] != STATUS_OK:
-            raise RuntimeError(f"Algorithm selection rejected: {algorithm_name}")
+            raise RuntimeError("烧录器未接受当前芯片配置，请检查设备状态。")
 
-    # 0x0C准备指令：bit0表示OPT，bit1表示随后携带主BIN的SUM32（小端32位）。
-    def prepare_download(self, program_name, opt_required, checksum=None, channel_b=False):
+    def stage_image(self, target, algorithm_name):
+        resp = self._send_cmd(target.stage_request(algorithm_name))
+        if resp == bytes([STATUS_BUSY]):
+            raise RuntimeError("设备正忙，暂不能导入镜像。")
+        if resp != bytes([STATUS_OK]):
+            raise RuntimeError("设备未接受指定镜像号。请确认烧录器固件已更新。")
+
+    def prepare_download(self, program_name, opt_required, checksum=None, channel_b=False, image=False):
         if not program_name or len(program_name.encode('ascii')) > 31:
             raise ValueError("Program filename must be 1-31 ASCII characters")
         flags = 1 if opt_required else 0
         if channel_b:
             flags |= 4
+        if image:
+            flags |= 8  # 必须提交之前暂存的单槽镜像，不能退化为普通导入。
         checksum_data = b''
         if checksum is not None:
             # 校验值0也是有效值，不能用真假判断；只接受无符号32位整数。
@@ -505,21 +514,13 @@ class ConnectionWorker(QThread):
 
 class ListDirWorker(QThread):
     finished = pyqtSignal(list, str)  # entries, error
-    summary = pyqtSignal(object, str)
-
-    def __init__(self, device, path, refresh_image=False):
+    def __init__(self, device, path):
         super().__init__()
         self.device = device
         self.path = path
-        self.refresh_image = refresh_image
 
     def run(self):
         try:
-            if self.refresh_image:
-                try:
-                    self.summary.emit(self.device.image_info(), '')
-                except (RuntimeError, OSError) as exc:
-                    self.summary.emit(None, str(exc))
             entries = self.device.list_dir(self.path)
             self.finished.emit(entries, "")
         except Exception as e:
@@ -575,8 +576,10 @@ class ImportWorker(QThread):
     log = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, device, program_path, algorithm_name, opt_path=None, quota_setting=None, channel_b=False):
+    def __init__(self, device, program_path, algorithm_name, opt_path=None, quota_setting=None, channel_b=False,
+                 image_target=None):
         super().__init__()
+        self.image_target = image_target
         self.device = device
         self.program_path = program_path
         self.algorithm_name = algorithm_name
@@ -596,17 +599,25 @@ class ImportWorker(QThread):
         session_started = False
         try:
             # Reopening is safe here, never after a file or quota write has started.
+            prog_name = os.path.basename(self.program_path)
+            if self.image_target is not None:
+                if not 0 < os.path.getsize(self.program_path) <= IMAGE_FW_MAX:
+                    raise ValueError(f"镜像固件不能为空，且不能超过 {IMAGE_FW_MAX // 1024} KB。")
+                prog_name = unique_firmware_name(self.image_target.slot, base_hint=prog_name)
             self.device.ensure_connection()
             self.device.get_burn_quota()
+            if self.image_target is not None:
+                # 旧固件拒绝 0x16 时不写文件、不改次数，也不发会清空原选择的取消指令。
+                self._stage()
+                session_started = True
             try:
                 self.device.mkdir("0:/download/bin/")
             except Exception:
                 pass
 
-            # 先暂存算法名锁住整个导入过程，防止固件与OPT两次上传间隙自动开始。
-            session_started = True  # 暂存返回失败或超时也可能已改变设备，仍需取消会话。
-            self.device.stage_algorithm(self.algorithm_name)
-            prog_name = os.path.basename(self.program_path)
+            if self.image_target is None:
+                session_started = True
+                self._stage()
             # 只累加最终上传主BIN的全部字节；HEX填洞已在转换时写入BIN，OPT/算法和尾页填充不计。
             # 上传前确定期望值；若本地文件或传输内容变化，由设备prepare校验拒绝提交。
             expected_checksum = 0
@@ -621,9 +632,9 @@ class ImportWorker(QThread):
             if written != os.path.getsize(self.program_path):
                 raise RuntimeError(f"Program upload incomplete: {written} bytes")
 
-            opt_required = bool(self.opt_path and os.path.exists(self.opt_path))
+            opt_required = self.opt_path is not None
             if opt_required:
-                opt_name = os.path.basename(self.opt_path)
+                opt_name = opt_name_for(prog_name) if self.image_target is not None else os.path.basename(self.opt_path)
                 self.log.emit("Uploading OPT: " + opt_name)
                 written = self.device.push(
                     self.opt_path,
@@ -632,8 +643,8 @@ class ImportWorker(QThread):
                 if written != os.path.getsize(self.opt_path):
                     raise RuntimeError(f"OPT upload incomplete: {written} bytes")
 
-            self.log.emit("正在确认烧录准备")  # 全部文件上传成功后再更新次数和确认导入。
-            self.device.stage_algorithm(self.algorithm_name)
+            self.log.emit("正在确认烧录准备")
+            self._stage()
             if self.quota_setting is not None:
                 # 暂存算法仍锁住自动烧录；必须先成功写入次数，再发0x0C最终提交指令。
                 # 用最终上传的主BIN文件名指定次数，暂存期间设备当前选择已清空。
@@ -645,7 +656,9 @@ class ImportWorker(QThread):
                     raise RuntimeError("烧录次数重新加载失败：" + str(exc)) from exc
                 remaining_text = f"{self.quota_result['remaining']:03d}次" if self.quota_result['enabled'] else "不限"
                 self.log.emit("该固件烧录次数已重新加载：" + remaining_text)
-            self.checksum = self.device.prepare_download(prog_name, opt_required, checksum=expected_checksum, channel_b=self.channel_b)
+            self.checksum = self.device.prepare_download(
+                prog_name, opt_required, checksum=expected_checksum,
+                channel_b=self.channel_b, image=self.image_target is not None)
             self.log.emit(f"Checksum(SUM32): {self.checksum:08X}")  # 已由设备确认，按8位大写十六进制显示。
             self.finished.emit(True, "Device ready for offline programming")
         except Exception as e:
@@ -656,6 +669,12 @@ class ImportWorker(QThread):
                 except Exception:
                     pass
             self.finished.emit(False, str(e))
+
+    def _stage(self):
+        if self.image_target is None:
+            self.device.stage_algorithm(self.algorithm_name)
+        else:
+            self.device.stage_image(self.image_target, self.algorithm_name)
 
     def _cb(self, cur, total):
         self.progress.emit("", cur, total)
@@ -689,7 +708,7 @@ class DAPLinkManager(QMainWindow):
         self._connection_timer.setInterval(2000)
         self._connection_timer.timeout.connect(self._poll_connection)
 
-        self.setWindowTitle("南芯能半导体 · CMSIS-DAPLINK 脱机编程器")
+        self.setWindowTitle("NX Writer")
         self.setFont(QFont("Microsoft YaHei", 10))
         self.control_height = max(36, self.fontMetrics().height() + 16)
         self.setMinimumSize(900, 600)
@@ -758,17 +777,16 @@ class DAPLinkManager(QMainWindow):
         self.banner.setObjectName("banner")
         banner_layout = QHBoxLayout(self.banner)
         banner_layout.setContentsMargins(14, 4, 14, 4)
-        brand = QLabel()
-        brand.setAccessibleName("南芯能半导体")
-        brand.setToolTip("南芯能半导体")
         wordmark = QPixmap(os.path.join(os.path.dirname(__file__), 'nxn_brand.png'))
-        self.setWindowIcon(QIcon(wordmark.copy(0, 0, wordmark.height(), wordmark.height())))
+        logo = wordmark.copy(0, 0, wordmark.height(), wordmark.height())
+        self.setWindowIcon(QIcon(logo))
         dpr = self.devicePixelRatioF()
-        wordmark = wordmark.scaledToHeight(round(44 * dpr), Qt.SmoothTransformation)
-        wordmark.setDevicePixelRatio(dpr)
-        brand.setPixmap(wordmark)
+        logo = logo.scaledToHeight(round(44 * dpr), Qt.SmoothTransformation)
+        logo.setDevicePixelRatio(dpr)
+        brand = QLabel()
+        brand.setPixmap(logo)
         banner_layout.addWidget(brand)
-        product = QLabel("CMSIS-DAPLINK 脱机编程器")
+        product = QLabel(self.windowTitle())
         product.setObjectName("productTitle")
         banner_layout.addWidget(product)
         banner_layout.addStretch()
@@ -800,7 +818,7 @@ class DAPLinkManager(QMainWindow):
         chip_opt_layout.setSpacing(12)
         chip_opt_layout.setSizeConstraint(QLayout.SetMinimumSize)
 
-        # 芯片选择与只读算法共用显示列，算法由芯片型号自动决定。
+        # 芯片显示别名和内部配置键分开，切换型号本身不访问设备。
         chip_bar = QGridLayout()
         chip_bar.setHorizontalSpacing(12)
         chip_bar.setVerticalSpacing(10)
@@ -811,24 +829,17 @@ class DAPLinkManager(QMainWindow):
         self.cmb_chip.setMinimumWidth(220)
         self.cmb_chip.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.cmb_chip.addItem("")  # empty default
-        for m in self.opt_config.get_chip_models():
-            self.cmb_chip.addItem(m)
-        self.cmb_chip.currentTextChanged.connect(self._on_chip_changed)
+        for model in self.opt_config.get_chip_models():
+            self.cmb_chip.addItem(CHIP_DISPLAY_NAMES.get(model, model), model)
+        self.cmb_chip.currentIndexChanged.connect(self._on_chip_changed)
         chip_bar.addWidget(self.cmb_chip, 0, 1)
-        chip_bar.addWidget(QLabel("算法文件："), 1, 0)
-        # 只读标签替代输入框与保存按钮，用户只能查看配套算法文件名。
-        self.lbl_algorithm = QLabel("")
-        self.lbl_algorithm.setMinimumWidth(220)
-        self.lbl_algorithm.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.lbl_algorithm.setToolTip("随芯片型号自动选择，导入成功后同步到烧录器。")
-        chip_bar.addWidget(self.lbl_algorithm, 1, 1)
         self.btn_opt_toggle = QPushButton("OPT 配置 ▲")
         self.btn_opt_toggle.setCheckable(True)
         self.btn_opt_toggle.setChecked(True)
         self.btn_opt_toggle.clicked.connect(self._toggle_opt_panel)
         chip_bar.addWidget(self.btn_opt_toggle, 0, 2)
         button_width = max(120, self.fontMetrics().horizontalAdvance("OPT 配置 ▼") + 32)
-        for control in (self.cmb_chip, self.lbl_algorithm, self.btn_opt_toggle):
+        for control in (self.cmb_chip, self.btn_opt_toggle):
             control.setFixedHeight(self.control_height)
         self.btn_opt_toggle.setFixedWidth(button_width)
         self.chk_opt = QCheckBox("上传 OPT")
@@ -838,8 +849,44 @@ class DAPLinkManager(QMainWindow):
         chip_bar.addWidget(self.chk_opt, 0, 3)
         self.chk_channel_b = QCheckBox("启用通道 B（双通道烧录）")
         self.chk_channel_b.setToolTip("不勾选时仅使用通道 A；勾选后两路可独立烧录。")
-        chip_bar.addWidget(QLabel("烧录通道："), 2, 0)
-        chip_bar.addWidget(self.chk_channel_b, 2, 1, 1, 3)
+        chip_bar.addWidget(QLabel("烧录通道："), 1, 0)
+        chip_bar.addWidget(self.chk_channel_b, 1, 1, 1, 3)
+
+        chip_bar.addWidget(QLabel("烧录次数："), 2, 0)
+        quota_row = QHBoxLayout()
+        quota_row.setSpacing(10)
+        self.chk_quota = QCheckBox("启用次数限制")
+        self.spin_quota = QSpinBox()
+        self.spin_quota.setRange(0, BURN_QUOTA_MAX)
+        self.spin_quota.setValue(100)
+        self.spin_quota.setSuffix(" 次")
+        self.spin_quota.setToolTip("随程序导入；0 次表示额度已用尽，不勾选表示不限。")
+        self.spin_quota.setMinimumWidth(100)
+        self.chk_quota.toggled.connect(self._update_toolbar_state)
+        quota_row.addWidget(self.chk_quota)
+        quota_row.addWidget(self.spin_quota)
+        quota_row.addStretch()
+        chip_bar.addLayout(quota_row, 2, 1, 1, 3)
+
+        chip_bar.addWidget(QLabel("镜像号："), 3, 0)
+        image_row = QHBoxLayout()
+        image_row.setSpacing(10)
+        self.cmb_image = ScrollSafeCombo()
+        self.cmb_image.setView(QListView())
+        self.cmb_image.setAccessibleName("镜像号")
+        self.cmb_image.addItem("不指定（普通导入）", None)
+        for slot in range(IMAGE_SLOTS):
+            self.cmb_image.addItem(f"{slot:03d}", slot)
+        self.cmb_image.setToolTip("指定后，导入程序将覆盖此镜像号并切换到该镜像；其他镜像不变。")
+        self.cmb_image.currentIndexChanged.connect(self._update_toolbar_state)
+        image_row.addWidget(self.cmb_image)
+        image_row.addWidget(QLabel("烧录说明："))
+        self.edit_image_desc = QLineEdit()
+        self.edit_image_desc.setAccessibleName("烧录说明")
+        self.edit_image_desc.setMaxLength(23)
+        self.edit_image_desc.setPlaceholderText("选填，最多 23 个 ASCII 字符（英文、数字或符号）")
+        image_row.addWidget(self.edit_image_desc, 1)
+        chip_bar.addLayout(image_row, 3, 1, 1, 3)
         chip_opt_layout.addLayout(chip_bar)
 
         # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
@@ -856,45 +903,6 @@ class DAPLinkManager(QMainWindow):
         self.workspace.setChildrenCollapsible(False)
         self.workspace.addWidget(self.chip_opt_frame)
         layout.addWidget(self.workspace, 1)
-        lower = QWidget()
-        lower_layout = QVBoxLayout(lower)
-        lower_layout.setContentsMargins(0, 0, 0, 0)
-        settings = QHBoxLayout()
-        lower_layout.addLayout(settings)
-        self.workspace.addWidget(lower)
-
-        self.quota_frame = QGroupBox("固件烧录次数")
-        quota_layout = QGridLayout(self.quota_frame)
-        quota_layout.setContentsMargins(12, 2, 12, 4)
-        quota_layout.setHorizontalSpacing(10)
-        self.chk_quota = QCheckBox("启用次数限制")
-        self.spin_quota = QSpinBox()
-        self.spin_quota.setRange(0, BURN_QUOTA_MAX)
-        self.spin_quota.setValue(100)
-        self.spin_quota.setSuffix(" 次")
-        self.spin_quota.setToolTip(f"次数范围：0–{BURN_QUOTA_MAX} 次；0 次表示额度已用尽，取消勾选为不限。")
-        self.spin_quota.setMinimumWidth(100)
-        self.chk_quota.toggled.connect(lambda _: self._update_toolbar_state())
-        quota_layout.addWidget(self.chk_quota, 0, 0)
-        quota_layout.addWidget(self.spin_quota, 0, 1)
-        quota_layout.setColumnStretch(2, 1)
-        self.quota_frame.setToolTip("次数随程序一并导入；重新导入同名固件会重新设置次数，未勾选表示不限。")
-        settings.addWidget(self.quota_frame, 1)
-
-        # ── Image task summary + dialog entry ──
-        self.image_frame = QGroupBox("镜像任务")
-        image_layout = QHBoxLayout(self.image_frame)
-        image_layout.setContentsMargins(12, 2, 12, 4)
-        self.lbl_image_summary = QLabel("镜像号：--")
-        self.lbl_image_summary.setWordWrap(True)
-        self.btn_image_task = QPushButton("镜像任务…")
-        self.btn_image_task.setToolTip("管理 100 个编号镜像：下载、切换、删除；表格在独立对话框内。")
-        self.btn_image_task.clicked.connect(self._open_image_dialog)
-        image_layout.addWidget(self.lbl_image_summary)
-        image_layout.addStretch()
-        image_layout.addWidget(self.btn_image_task)
-        settings.addWidget(self.image_frame, 1)
-
         # ── Splitter: Local + Remote ──
         splitter = QSplitter(Qt.Horizontal)
 
@@ -977,7 +985,7 @@ class DAPLinkManager(QMainWindow):
         splitter.addWidget(remote_frame)
         splitter.setChildrenCollapsible(False)
         splitter.setSizes([450, 450])
-        lower_layout.addWidget(splitter, 1)
+        self.workspace.addWidget(splitter)
         self._expanded_sizes = [320, 240]
         self.btn_opt_toggle.setChecked(False)
         self._toggle_opt_panel()
@@ -1107,7 +1115,7 @@ class DAPLinkManager(QMainWindow):
         self.btn_connect.setEnabled(not self._watch_connection and self._connection_job is None and idle)
         self.btn_disconnect.setEnabled(self._watch_connection and idle)
         for action in (self.btn_upload, self.btn_download, self.btn_mkdir, self.btn_delete,
-                       self.btn_refresh, self.btn_import, self.btn_image_task):
+                       self.btn_refresh, self.btn_import):
             action.setEnabled(ready)
         self.remote_tree.setEnabled(ready)
         self.remote_path_input.setEnabled(ready)
@@ -1118,6 +1126,11 @@ class DAPLinkManager(QMainWindow):
         self.opt_content.setEnabled(idle)
         self.chk_quota.setEnabled(idle)
         self.spin_quota.setEnabled(idle and self.chk_quota.isChecked())
+        self.cmb_image.setEnabled(idle)
+        slot = self.cmb_image.currentData()
+        self.edit_image_desc.setEnabled(idle and slot is not None)
+        self.btn_import.setToolTip("普通导入，不写镜像槽。" if slot is None else
+                                   f"导入到镜像 {slot:03d}，覆盖该槽的原有内容。")
 
     def _set_import_state(self, active):
         self.import_in_progress = active
@@ -1186,7 +1199,7 @@ class DAPLinkManager(QMainWindow):
             self.lbl_status_text.setText("已连接")
             self.lbl_status_text.setToolTip("断电后会自动重新连接")
             self.statusBar().showMessage("烧录器已连接")
-            self._navigate_remote("/", refresh_image=True)
+            self._navigate_remote("/")
         self._update_toolbar_state()
 
     def _show_offline(self, text):
@@ -1194,7 +1207,6 @@ class DAPLinkManager(QMainWindow):
         self.lbl_status_text.setText(text)
         self.lbl_status_text.setToolTip("")
         self.remote_tree.clear()
-        self.lbl_image_summary.setText("镜像号：--")
         self.lbl_checksum.setText("Checksum(SUM32): --------")
         self.statusBar().showMessage(text)
 
@@ -1207,38 +1219,15 @@ class DAPLinkManager(QMainWindow):
         self._show_offline("已断开")
         self._update_toolbar_state()
 
-    # ── Image tasks ──
-
-    def _open_image_dialog(self):
-        if not self.device.is_connected():
-            QMessageBox.warning(self, "未连接", "请先连接设备")
-            return
-        dialog = ImageTaskDialog(self.device, self.opt_config, self)
-        dialog.exec_()
-        self._navigate_remote(self.current_remote_path, refresh_image=True)
-
-    def _display_image_summary(self, info, error):
-        if error:
-            self.lbl_image_summary.setText("镜像号：不可用")
-            self.lbl_image_summary.setToolTip(error)
-            return
-        current = info.get("current", IMAGE_ID_NONE)
-        if info.get("flags", 0) & 1 and current < IMAGE_SLOTS:
-            self.lbl_image_summary.setText(f"镜像号：{current:03d}")
-        else:
-            self.lbl_image_summary.setText("镜像号：---")
-        self.lbl_image_summary.setToolTip(f"镜像表 seq={info.get('seq', 0)}")
-
     # ── Remote Navigation ──
 
-    def _navigate_remote(self, path, refresh_image=False):
+    def _navigate_remote(self, path):
         if not self._can_use_usb():
             return
         self.current_remote_path = path
         self.remote_path_input.setText(path)
         self.statusBar().showMessage(f"正在列出 {path} ...")
-        worker = ListDirWorker(self.device, path, refresh_image=refresh_image)
-        worker.summary.connect(self._display_image_summary)
+        worker = ListDirWorker(self.device, path)
         self._start_worker(worker, self._list_done)
 
     def _list_done(self, entries, error):
@@ -1467,12 +1456,9 @@ class DAPLinkManager(QMainWindow):
             return False
         return not require_bin or name.lower().endswith('.bin')
 
-    def _on_chip_changed(self, model_name):
-        self.current_model = model_name or ''
-        # 切换芯片只更新显示；已导入程序的设备算法在导入提交成功时同步。
-        self.lbl_algorithm.setText(
-            self.opt_config.get_algorithm(self.current_model) if self.current_model else '')
-        if not model_name:
+    def _on_chip_changed(self, index):
+        self.current_model = self.cmb_chip.itemData(index) or ''
+        if not self.current_model:
             self.current_chip = None
             self.chk_opt.setChecked(False)
             self.btn_opt_toggle.setChecked(False)
@@ -1480,7 +1466,7 @@ class DAPLinkManager(QMainWindow):
             self._clear_opt_ui()
             self._update_toolbar_state()
             return
-        self.current_chip = self.opt_config.get_chip(model_name)
+        self.current_chip = self.opt_config.get_chip(self.current_model)
         self.chk_opt.setChecked(True)
         self._build_opt_ui()
         # auto-expand panel when chip selected
@@ -1690,14 +1676,18 @@ class DAPLinkManager(QMainWindow):
             QMessageBox.warning(self, "Warning", "请先选择芯片型号。")
             return
         algorithm_name = self.opt_config.get_algorithm(self.current_model)
-        if not algorithm_name:
-            QMessageBox.warning(self, "Warning",
-                                f"芯片 {self.current_model} 没有配套算法，请选择受支持的芯片型号。")
-            return
         if not self._valid_name(algorithm_name, require_bin=True):
-            QMessageBox.warning(self, "Warning",
-                                f"配套算法文件名无效: {algorithm_name}")
+            QMessageBox.warning(self, "芯片配置", "所选芯片的配置无效。")
             return
+        slot = self.cmb_image.currentData()
+        image_target = None
+        if slot is not None:
+            image_target = ImageTarget(slot, self.current_model, self.edit_image_desc.text().strip())
+            try:
+                image_target.stage_request(algorithm_name)
+            except ValueError as exc:
+                QMessageBox.warning(self, "镜像设置", str(exc))
+                return
         file_path, _ = QFileDialog.getOpenFileName(
             self, "选择程序文件", "",
             "Binary/Hex Files (*.bin *.hex);;Binary Files (*.bin);;Hex Files (*.hex);;All Files (*)")
@@ -1706,37 +1696,34 @@ class DAPLinkManager(QMainWindow):
 
         self.lbl_checksum.setText("Checksum(SUM32): --------")  # 已选定新文件；HEX转换或文件检查失败也不能沿用旧值。
 
-        # Convert .hex to .bin if needed
-        if file_path.lower().endswith('.hex'):
-            try:
+        scratch = None
+        try:
+            if image_target is not None:
+                scratch = tempfile.TemporaryDirectory(prefix="nx-writer-")
+            if file_path.lower().endswith('.hex'):
                 ih = IntelHex(file_path)
-                dir_name = os.path.dirname(file_path)
-                base_name = os.path.splitext(os.path.basename(file_path))[0]
-                safe_name = re.sub(r'[^\x00-\x7F]', '', base_name).strip(' _-')
-                if not safe_name:
-                    safe_name = 'firmware'
-                bin_path = os.path.join(dir_name, safe_name + '.bin')
+                if image_target is not None and (not len(ih) or ih.maxaddr() - ih.minaddr() + 1 > IMAGE_FW_MAX):
+                    raise ValueError(f"镜像固件不能为空，HEX 展开后不能超过 {IMAGE_FW_MAX // 1024} KB。")
+                stem = os.path.splitext(os.path.basename(file_path))[0]
+                safe = re.sub(r'[^\x00-\x7F]', '', stem).strip(' _-') or 'firmware'
+                bin_path = os.path.join(scratch.name if scratch else os.path.dirname(file_path), safe + '.bin')
                 ih.tobinfile(bin_path)
-                self.statusBar().showMessage(f"HEX -> BIN: {os.path.basename(bin_path)}")
                 file_path = bin_path
-            except Exception as e:
-                QMessageBox.warning(self, "HEX Error", f"HEX 转换失败:\n{e}")
-                return
-
-        # Sanitize filename for FATFS compatibility
-        file_path, renamed = self._safe_filename(file_path)
-        if renamed:
-            self.statusBar().showMessage(f"文件名已过滤: {os.path.basename(file_path)}")
-
-        prog_name = os.path.basename(file_path)
-        if not self._valid_name(prog_name, require_bin=True):
-            QMessageBox.warning(self, "Warning",
-                                f"程序文件名无效(需 1-31 个 ASCII 字符的 .bin): {prog_name}")
+            if image_target is None:
+                file_path, _ = self._safe_filename(file_path)
+                if not self._valid_name(os.path.basename(file_path), require_bin=True):
+                    raise ValueError("程序文件名需为 1–31 个 ASCII 字符的 .bin。")
+                opt_base = file_path
+            else:
+                if not file_path.lower().endswith('.bin') or not 0 < os.path.getsize(file_path) <= IMAGE_FW_MAX:
+                    raise ValueError(f"镜像固件需为非空 BIN 或 HEX，最大 {IMAGE_FW_MAX // 1024} KB。")
+                opt_base = os.path.join(scratch.name, 'options.bin')
+            opt_path = self._generate_opt_bin(opt_base) if self.chk_opt.isChecked() else None
+        except Exception as exc:
+            if scratch is not None:
+                scratch.cleanup()
+            QMessageBox.warning(self, "无法导入程序", str(exc))
             return
-
-        opt_path = None
-        if self.chk_opt.isChecked():
-            opt_path = self._generate_opt_bin(file_path)
 
         # 主线程一次性获取导入设置；后续控件锁定，后台线程仅使用此次数快照。
         quota_setting = (self.chk_quota.isChecked(), self.spin_quota.value())
@@ -1745,7 +1732,10 @@ class DAPLinkManager(QMainWindow):
         self.statusBar().showMessage("正在导入...")
         self._set_import_state(True)
 
-        worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting, channel_b=self.chk_channel_b.isChecked())
+        worker = ImportWorker(self.device, file_path, algorithm_name, opt_path, quota_setting=quota_setting,
+                              channel_b=self.chk_channel_b.isChecked(), image_target=image_target)
+        if scratch is not None:
+            worker.finished.connect(lambda *_: scratch.cleanup())
         worker.progress.connect(lambda step, cur, total: self._transfer_progress(cur, total))
         worker.log.connect(lambda msg: self.statusBar().showMessage(msg))
         self._start_worker(worker, self._import_done)
@@ -1814,10 +1804,11 @@ class DAPLinkManager(QMainWindow):
             checksum = getattr(self.worker, 'checksum', None)
             if checksum is not None:
                 self.lbl_checksum.setText(f"Checksum(SUM32): {checksum:08X}")
-            # 新固件留在烧录页继续USB通信，导入完成后保持连接状态和远端列表。
-            self.statusBar().showMessage("导入完成，烧录次数已重新加载，USB保持连接。" if quota_result is not None else "导入完成，设备已准备烧录，USB保持连接。")
-            QMessageBox.information(self, "导入完成",
-                                    "程序与算法已导入，设备已进入烧录界面。\n"
+            target = getattr(self.worker, 'image_target', None)
+            ready = (f"镜像 {target.slot:03d} 已写入并设为当前镜像。" if target is not None
+                     else "程序已导入，设备已进入烧录界面。")
+            self.statusBar().showMessage(ready + ("烧录次数已重新加载。" if quota_result is not None else ""))
+            QMessageBox.information(self, "导入完成", ready + "\n"
                                     "自动模式检测到芯片后开始烧录；手动模式按中键开始。\n"
                                     "本次次数设置已随程序导入。")
         else:
@@ -1845,7 +1836,7 @@ class DAPLinkManager(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("DAPLINK 脱机编程器")
+    app.setApplicationName("NX Writer")
     app.setStyle("Fusion")
 
     window = DAPLinkManager()

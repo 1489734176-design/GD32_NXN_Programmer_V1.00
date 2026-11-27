@@ -210,37 +210,28 @@ uint8_t image_store_find_match(const uint8_t *algo, const uint8_t *bin, uint8_t 
     return 0;
 }
 
-static void build_empty_record(uint8_t id, image_record_t *r)
-{
-    memset(r, 0, sizeof(*r));
-    r->id = id;
-}
-
-static void build_record(uint8_t id, const image_record_t *rec0, image_record_t *r)
-{
-    if(id == 0U && rec0) *r = *rec0;
-    else build_empty_record(id, r);
-}
-
 /* 把 bank 的第 sector 个 4KB 扇区组到 buf；返回本扇区参与 CRC 的字节数。 */
 static uint16_t build_sector(uint8_t sector, const image_bank_header_t *hdr,
-                             const image_record_t *rec0, uint8_t *buf)
+                             const image_record_t *replace, uint8_t *buf)
 {
     uint32_t base = (uint32_t)sector * IMAGE_SECTOR_SIZE;
     uint32_t rs, re, end;
     uint16_t i, s, e;
     image_record_t rec;
 
-    memset(buf, 0xFF, IMAGE_SECTOR_SIZE);
+    if(g_valid) GD25QXX_Read(buf, g_active_addr + base, IMAGE_SECTOR_SIZE);
+    else memset(buf, 0xFF, IMAGE_SECTOR_SIZE);
     if(base == 0U) memcpy(buf, hdr, IMAGE_BANK_HEADER_SIZE);
 
     for(i = 0; i < IMAGE_SLOTS; i++)
     {
+        if(g_valid && (!replace || replace->id != i)) continue;
         rs = IMAGE_BANK_HEADER_SIZE + (uint32_t)i * IMAGE_RECORD_SIZE;
         re = rs + IMAGE_RECORD_SIZE;
         end = base + IMAGE_SECTOR_SIZE;
         if(re <= base || rs >= end) continue;
-        build_record((uint8_t)i, rec0, &rec);
+        if(replace && replace->id == i) rec = *replace;
+        else { memset(&rec, 0, sizeof(rec)); rec.id = (uint8_t)i; }
         s = (uint16_t)((rs > base) ? (rs - base) : 0U);
         e = (uint16_t)((re < end) ? (re - base) : IMAGE_SECTOR_SIZE);
         memcpy(buf + s, (const uint8_t *)&rec + ((rs > base) ? 0U : (base - rs)), e - s);
@@ -251,8 +242,8 @@ static uint16_t build_sector(uint8_t sector, const image_bank_header_t *hdr,
     return (uint16_t)(IMAGE_BANK_DATA_SIZE - base);
 }
 
-static void write_bank(uint32_t addr, const image_bank_header_t *hdr,
-                       const image_record_t *rec0)
+static uint32_t write_bank(uint32_t addr, const image_bank_header_t *hdr,
+                       const image_record_t *replace)
 {
     uint32_t crc = 0xFFFFFFFFUL, stored;
     uint16_t len;
@@ -260,7 +251,7 @@ static void write_bank(uint32_t addr, const image_bank_header_t *hdr,
 
     for(sec = 0; sec < IMAGE_BANK_SECTORS; sec++)
     {
-        len = build_sector(sec, hdr, rec0, DATA_BUFFER);
+        len = build_sector(sec, hdr, replace, DATA_BUFFER);
         crc = image_crc32_update(crc, DATA_BUFFER, len);
         if(sec == 2U)
         {
@@ -274,25 +265,54 @@ static void write_bank(uint32_t addr, const image_bank_header_t *hdr,
         GD25QXX_Write_NoCheck(DATA_BUFFER, addr + (uint32_t)sec * IMAGE_SECTOR_SIZE,
                               IMAGE_SECTOR_SIZE);
     }
+    return crc ^ 0xFFFFFFFFUL;
+}
+
+/* Sector-sized copy-on-write: a replacement may straddle two sectors. */
+static uint8_t write_selection(uint8_t id, const image_record_t *replace)
+{
+    image_bank_header_t hdr = g_hdr, verify;
+    uint32_t dst, expected, stored;
+    if(g_fault || (!g_valid && !chip_supports_raw())) return 0;
+    /* A bad source bank must not acquire a new, valid checksum during an upsert. */
+    if(g_valid && replace && (!bank_valid(g_active_addr, &verify, &stored) ||
+       stored != g_active_crc || memcmp(&g_hdr, &verify, sizeof(verify))))
+    {
+        g_fault = 1;
+        return 0;
+    }
+    hdr.magic = IMAGE_BANK_MAGIC;
+    hdr.version = IMAGE_BANK_VERSION;
+    hdr.slots = IMAGE_SLOTS;
+    hdr.seq = g_valid ? g_hdr.seq + 1U : 1U;
+    hdr.current = id;
+    hdr.flags = IMAGE_BANK_FLAG_VALID;
+    dst = (g_valid && g_active_addr == IMAGE_BANK_A_ADDR) ? IMAGE_BANK_B_ADDR : IMAGE_BANK_A_ADDR;
+    expected = write_bank(dst, &hdr, replace);
+    if(!bank_valid(dst, &verify, &stored) || memcmp(&hdr, &verify, sizeof(hdr)) || stored != expected)
+    {
+        g_fault = 1;
+        return 0;
+    }
+    g_active_addr = dst;
+    g_active_crc = stored;
+    g_hdr = hdr;
+    g_valid = 1;
+    load_current_record();
+    return (uint8_t)(g_current == id);
+}
+
+uint8_t image_store_upsert(const image_record_t *rec)
+{
+    if(!rec || rec->id >= IMAGE_SLOTS || !record_usable(rec)) return 0;
+    return write_selection(rec->id, rec);
 }
 
 uint8_t image_store_migrate_from_selection(const program_selection_t *sel)
 {
-    image_bank_header_t hdr;
     image_record_t rec;
-
     if(g_valid) return 1;
     if(!sel || !sel->algorithm_name[0] || !sel->program_name[0]) return 0;
-    if(!chip_supports_raw()) { g_fault = 1; return 0; }
-
-    memset(&hdr, 0, sizeof(hdr));
-    hdr.magic = IMAGE_BANK_MAGIC;
-    hdr.version = IMAGE_BANK_VERSION;
-    hdr.slots = IMAGE_SLOTS;
-    hdr.seq = 1U;
-    hdr.current = 0U;
-    hdr.flags = IMAGE_BANK_FLAG_VALID;
-
     memset(&rec, 0, sizeof(rec));
     rec.id = 0U;
     rec.flags = IMAGE_REC_FLAG_VALID;
@@ -308,72 +328,16 @@ uint8_t image_store_migrate_from_selection(const program_selection_t *sel)
     rec.bin[sizeof(rec.bin) - 1U] = 0;
     memcpy(rec.desc, "IMAGE 000", 9U);
 
-    write_bank(IMAGE_BANK_A_ADDR, &hdr, &rec);
-    image_store_init(); /* 回读并校验 */
-    if(g_valid && g_current == 0U) return 1;
-    g_fault = 1;
-    return 0;
+    return image_store_upsert(&rec);
 }
 
 uint8_t image_store_set_current(uint8_t id)
 {
-    image_bank_header_t hdr;
     image_record_t rec;
-    uint32_t src, dst, crc, stored;
-    uint16_t len;
-    uint8_t sec;
-
-    if(!g_valid || (id >= IMAGE_SLOTS && id != IMAGE_ID_NONE)) return 0;
-    if(id == IMAGE_ID_NONE)
-    {
-        if(g_hdr.current == IMAGE_ID_NONE) return 1;
-        memset(&rec, 0, sizeof(rec));
-    }
-    else
-    {
-        if(!image_store_read_record(id, &rec) || !record_usable(&rec)) return 0;
-        if(id == g_current) return 1;
-    }
-
-    src = g_active_addr;
-    dst = (src == IMAGE_BANK_A_ADDR) ? IMAGE_BANK_B_ADDR : IMAGE_BANK_A_ADDR;
-    hdr = g_hdr;
-    hdr.seq = g_hdr.seq + 1U;
-    hdr.current = id;
-    hdr.flags = IMAGE_BANK_FLAG_VALID;
-
-    crc = 0xFFFFFFFFUL;
-    for(sec = 0; sec < IMAGE_BANK_SECTORS; sec++)
-    {
-        GD25QXX_Read(DATA_BUFFER, src + (uint32_t)sec * IMAGE_SECTOR_SIZE, IMAGE_SECTOR_SIZE);
-        if(sec == 0U) memcpy(DATA_BUFFER, &hdr, IMAGE_BANK_HEADER_SIZE);
-        if(sec == 2U) len = (uint16_t)IMAGE_SECTOR2_DATA_LEN;
-        else len = IMAGE_SECTOR_SIZE;
-        crc = image_crc32_update(crc, DATA_BUFFER, len);
-        if(sec == 2U)
-        {
-            stored = crc ^ 0xFFFFFFFFUL;
-            DATA_BUFFER[IMAGE_CRC_IN_SECTOR2 + 0U] = (uint8_t)stored;
-            DATA_BUFFER[IMAGE_CRC_IN_SECTOR2 + 1U] = (uint8_t)(stored >> 8);
-            DATA_BUFFER[IMAGE_CRC_IN_SECTOR2 + 2U] = (uint8_t)(stored >> 16);
-            DATA_BUFFER[IMAGE_CRC_IN_SECTOR2 + 3U] = (uint8_t)(stored >> 24);
-        }
-        GD25QXX_Erase_Sector((dst + (uint32_t)sec * IMAGE_SECTOR_SIZE) / IMAGE_SECTOR_SIZE);
-        GD25QXX_Write_NoCheck(DATA_BUFFER, dst + (uint32_t)sec * IMAGE_SECTOR_SIZE,
-                              IMAGE_SECTOR_SIZE);
-    }
-
-    if(bank_valid(dst, &hdr, &stored))
-    {
-        g_active_addr = dst;
-        g_hdr = hdr;
-        g_active_crc = stored;
-        g_valid = 1;
-        load_current_record();
-        return (uint8_t)(g_current == id);
-    }
-    g_fault = 1;
-    return 0;
+    if(!g_valid) return 0;
+    if(id != IMAGE_ID_NONE && (!image_store_read_record(id, &rec) || !record_usable(&rec))) return 0;
+    if(id == g_hdr.current && id == g_current) return 1;
+    return write_selection(id, NULL);
 }
 
 uint32_t image_store_seq(void) { return g_valid ? g_hdr.seq : 0; }

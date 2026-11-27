@@ -24,6 +24,9 @@ static volatile uint8_t file_request_busy;
 static volatile uint32_t custombulk_events;
 
 static uint8_t staged_algorithm[CB_MAX_NAME + 1];
+/* image_staged is cleared on USB reset; only the main task touches the record bytes. */
+static volatile uint8_t image_staged;
+static image_record_t staged_image;
 static uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 static uint8_t prepare_program[CB_MAX_NAME + 1];
 static uint8_t prepare_opt_required;
@@ -58,6 +61,16 @@ static void custombulk_data_out(usb_dev *udev, uint8_t ep_num);
 
 static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len);
 static void send_response(usb_dev *udev, uint8_t status, uint8_t *data, uint16_t data_len);
+
+static uint8_t valid_quota_name(uint8_t *name, uint16_t len);
+
+/* Numbered imports may only write their own slot-qualified BIN / OPT basename. */
+static uint8_t image_program_name(uint8_t *name, uint16_t len)
+{
+    uint8_t slot = staged_image.id;
+    return (uint8_t)(len > 4U && valid_quota_name(name, len) && name[0] == '0' &&
+                     name[1] == '0' + slot / 10U && name[2] == '0' + slot % 10U && name[3] == '_');
+}
 
 /* strnlen replacement for ARM Compiler V5 */
 static uint16_t safe_strnlen(const char *s, uint16_t max)
@@ -190,6 +203,7 @@ void custombulk_reset(void)
         files_changed_pending = 1; /* 中断导入时清选择，普通完成会话重连保留LCD值。 */
     }
     prepared_checksum = 0;
+    image_staged = 0;
     prepare_expected_checksum = 0; prepare_has_checksum = 0; /* 未完成上传不可继续自动烧录旧选择所指向的残缺文件。 */
     file_cleanup_pending = 1; file_request_pending = 0;
     cb_handler.transfer_active = 0;
@@ -239,6 +253,12 @@ uint32_t custombulk_event_count(void)
  * receive commands again. Only called from the main task. */
 void custombulk_recover_session(usb_dev *udev)
 {
+    /* An unrelated IN acknowledgement must not apply an abandoned image. */
+    if(image_staged) {
+        image_staged = 0; staged_algorithm[0] = 0;
+        prepare_request_pending = prepare_response_pending = prepare_complete_pending = 0;
+        files_changed_pending = 1; app_data.bin_name[0] = 0;
+    }
     if(cb_fd.obj.fs) f_close(&cb_fd);
     cb_handler.file_opened = 0;
     cb_handler.transfer_active = 0;
@@ -262,6 +282,7 @@ void custombulk_service_stale(usb_dev *udev, uint32_t idle_ms)
         if(cb_handler.file_opened == 2)
         {
             /* An abandoned upload may be a truncated file: never burn it. */
+            image_staged = 0;
             staged_algorithm[0] = 0;
             prepare_algorithm[0] = 0;
             prepare_program[0] = 0;
@@ -334,6 +355,10 @@ static void cmd_open_write(usb_dev *udev, uint8_t *buf, uint16_t len)
         return;
     }
     path[path_len] = '\0';
+    if(image_staged && (path_len <= 16U || memcmp(path, "0:/download/bin/", 16U) ||
+       !image_program_name(path + 16U, path_len - 16U) || !file_size || file_size > IMAGE_FW_MAX)) {
+        send_response(udev, STATUS_ERR, NULL, 0); return;
+    }
     if (image_bank_path(path)) { send_response(udev, STATUS_ERR, NULL, 0); return; }
 
 
@@ -412,7 +437,7 @@ static void cmd_close_file(usb_dev *udev)
             f_close(&cb_fd);
         if(writing) {
             /* 未传够声明长度的文件不可prepare，即使随后已能正常读回也必须重新导入。 */
-            staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
+            image_staged = 0; staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
             files_changed_pending = 1; oled.Refresh_flag = 1;
         }
         cb_handler.file_opened = 0;
@@ -427,7 +452,7 @@ static void cmd_close_file(usb_dev *udev)
     quota_write_program[0] = 0;
     if(writing && res != FR_OK) {
         /* CLOSE失败说明上传未可靠落盘；清会话与旧校验值，禁止故障恢复后误提交。 */
-        staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
+        image_staged = 0; staged_algorithm[0] = 0; app_data.bin_name[0] = 0;
         files_changed_pending = 1; oled.Refresh_flag = 1;
     }
     cb_handler.file_opened = 0;
@@ -634,47 +659,72 @@ static uint8_t make_opt_name(const uint8_t *program, uint8_t *opt_name)
     return 1;
 }
 
-/* STAGE_ALGORITHM: [CMD][algorithm file name] -> [STATUS] */
+/* CMD_STAGE_IMAGE: [cmd][slot][algorithm]\0[chip]\0[desc], no trailing NUL.
+ * Older hosts still stage/cancel with CMD_STAGE_ALGORITHM and never select a slot. */
 static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
-    uint16_t name_len = len - 1;
-    /* 空文件名取消未完成导入，失败后不让待机页一直暂停检测。 */
-    if(len == 1)
+    uint8_t *name = buf + 1, *chip = NULL, *desc = NULL, *sep;
+    uint16_t name_len = len - 1U, chip_len = 0, desc_len = 0, i;
+    uint8_t numbered = (uint8_t)(buf[0] == CMD_STAGE_IMAGE);
+    uint32_t mask;
+    if(!numbered && len == 1U)
     {
-        /* 先持久化选择失效；失败或USB复位时保留原导入会话。 */
-        if (!app_selection_invalidate() || file_cleanup_pending) {
-            send_response(udev, STATUS_ERR, NULL, 0);
-            return;
+        if(!app_selection_invalidate() || file_cleanup_pending) {
+            send_response(udev, STATUS_ERR, NULL, 0); return;
         }
-
-        if(cb_handler.file_opened) f_close(&cb_fd); /* 取消写入失败的导入，关闭尚未完成的文件。 */
-        cb_handler.file_opened = 0; staged_algorithm[0] = 0;
+        if(cb_handler.file_opened) f_close(&cb_fd);
+        cb_handler.file_opened = 0; staged_algorithm[0] = 0; image_staged = 0;
         prepare_request_pending = 0; prepare_response_pending = 0; prepare_complete_pending = 0;
         prepare_has_checksum = 0; prepare_expected_checksum = 0; prepared_checksum = 0;
-        files_changed_pending = 1;
-        app_data.bin_name[0] = 0; oled.Refresh_flag = 1; /* 残缺上传必须重新导入/选择后才可烧录。 */
+        files_changed_pending = 1; app_data.bin_name[0] = 0; oled.Refresh_flag = 1;
         send_response(udev, STATUS_OK, NULL, 0); return;
     }
-
-    if (len < 2 || !valid_file_name(&buf[1], name_len) ||
-        prepare_request_pending || prepare_response_pending || prepare_complete_pending) {
-        send_response(udev, STATUS_ERR, NULL, 0);
-        return;
+    if(numbered) {
+        if(len < 6U || len > CUSTOMBULK_OUT_PACKET || buf[1] >= IMAGE_SLOTS || image_store_fault()) goto invalid;
+        name = buf + 2;
+        sep = memchr(name, 0, len - 2U);
+        if(!sep) goto invalid;
+        name_len = (uint16_t)(sep - name);
+        chip = sep + 1;
+        sep = memchr(chip, 0, (size_t)(buf + len - chip));
+        if(!sep) goto invalid;
+        chip_len = (uint16_t)(sep - chip);
+        desc = sep + 1;
+        desc_len = (uint16_t)(buf + len - desc);
+        if(!valid_quota_name(name, name_len) || !chip_len || chip_len >= sizeof(staged_image.chip) ||
+           desc_len >= sizeof(staged_image.desc)) goto invalid;
+        for(i = 0; i < chip_len; i++) if(chip[i] < ' ' || chip[i] > 0x7eU) goto invalid;
+        for(i = 0; i < desc_len; i++) if(desc[i] < ' ' || desc[i] > 0x7eU) goto invalid;
     }
-    /* 先持久化选择失效；失败或USB复位时保留原导入会话。 */
-    if (!app_selection_invalidate() || file_cleanup_pending) {
-        send_response(udev, STATUS_ERR, NULL, 0);
-        return;
+    if(!valid_file_name(name, name_len)) goto invalid;
+    if(prepare_request_pending || prepare_response_pending || prepare_complete_pending ||
+       (numbered && (g_programming_active || cb_handler.file_opened))) {
+        send_response(udev, STATUS_BUSY, NULL, 0); return;
     }
-
-    if(!staged_algorithm[0]) {
-        quota_import_program[0] = quota_write_program[0] = 0;
-        quota_import_consumed = 0;
+    if(!app_selection_invalidate() || file_cleanup_pending) goto invalid;
+    mask = __get_PRIMASK(); __disable_irq();
+    if(!file_cleanup_pending) {
+        if(!staged_algorithm[0] || numbered != image_staged || (numbered && buf[1] != staged_image.id)) {
+            quota_import_program[0] = quota_write_program[0] = 0;
+            quota_import_consumed = 0;
+        }
+        memcpy(staged_algorithm, name, name_len);
+        staged_algorithm[name_len] = 0;
+        if(numbered) {
+            memset(&staged_image, 0, sizeof(staged_image));
+            staged_image.id = buf[1];
+            memcpy(staged_image.algo, name, name_len);
+            memcpy(staged_image.chip, chip, chip_len);
+            memcpy(staged_image.desc, desc, desc_len);
+        }
+        image_staged = numbered;
+        files_changed_pending = 1;
+        send_response(udev, STATUS_OK, NULL, 0);
     }
-    memcpy(staged_algorithm, &buf[1], name_len);
-    staged_algorithm[name_len] = '\0';
-    files_changed_pending = 1; /* 新导入使旧LCD值失效，成功准备后才重新显示。 */
-    send_response(udev, STATUS_OK, NULL, 0);
+    __set_PRIMASK(mask);
+    return;
+invalid:
+    send_response(udev, STATUS_ERR, NULL, 0);
 }
 
 /* PREPARE_DOWNLOAD: flags bit0=OPT，bit1=携带期望SUM32。
@@ -683,12 +733,14 @@ static void cmd_stage_algorithm(usb_dev *udev, uint8_t *buf, uint16_t len)
 static void cmd_prepare_download(usb_dev *udev, uint8_t *buf, uint16_t len)
 {
     uint16_t name_offset, name_len;
-    if (len < 3 || (buf[1] & (uint8_t)~7U) != 0) {
+    if (len < 3 || (buf[1] & (uint8_t)~15U) != 0 ||
+        ((buf[1] & 8U) != 0) != image_staged) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
     name_offset = (buf[1] & 2U) ? 6U : 2U;
     if (len <= name_offset || !valid_file_name(&buf[name_offset], len - name_offset) ||
+        (image_staged && (!(buf[1] & 2U) || !image_program_name(buf + name_offset, len - name_offset))) ||
         staged_algorithm[0] == '\0' || prepare_request_pending ||
         prepare_response_pending || prepare_complete_pending) {
         send_response(udev, STATUS_ERR, NULL, 0);
@@ -757,23 +809,33 @@ void custombulk_prepare_service(usb_dev *udev)
         status = STATUS_BUSY;
         goto prepare_error;
     }
-    strcpy((char *)path, "0:/download/firmware/");
-    strcat((char *)path, (char *)algorithm);
-    if (file_cleanup_pending || !file_available(path))
-        goto prepare_error;
-    strcpy((char *)path, "0:/download/bin/");
-    strcat((char *)path, (char *)program);
-    if (!file_sum32(path, &checksum))
-        goto prepare_error;
-    if (prepare_has_checksum && checksum != prepare_expected_checksum)
-        goto prepare_error;
-    if (prepare_opt_required) {
-        if (!make_opt_name(program, opt_name))
-            goto prepare_error;
-        strcpy((char *)path, "0:/download/bin/");
-        strcat((char *)path, (char *)opt_name);
+    if(image_staged) {
+        staged_image.flags = IMAGE_REC_FLAG_VALID | IMAGE_REC_FLAG_SUM | IMAGE_REC_FLAG_CHANNEL_SET |
+                             (prepare_opt_required ? IMAGE_REC_FLAG_OPT : 0U) |
+                             (prepare_channel_b ? IMAGE_REC_FLAG_CHANNEL_B : 0U);
+        strcpy(staged_image.bin, (const char *)program);
+        staged_image.checksum = prepare_expected_checksum;
+        if(image_validate_record(&staged_image, &checksum) != IMG_OK || file_cleanup_pending ||
+           !image_staged || !image_store_upsert(&staged_image)) goto prepare_error;
+    } else {
+        strcpy((char *)path, "0:/download/firmware/");
+        strcat((char *)path, (char *)algorithm);
         if (file_cleanup_pending || !file_available(path))
             goto prepare_error;
+        strcpy((char *)path, "0:/download/bin/");
+        strcat((char *)path, (char *)program);
+        if (!file_sum32(path, &checksum))
+            goto prepare_error;
+        if (prepare_has_checksum && checksum != prepare_expected_checksum)
+            goto prepare_error;
+        if (prepare_opt_required) {
+            if (!make_opt_name(program, opt_name))
+                goto prepare_error;
+            strcpy((char *)path, "0:/download/bin/");
+            strcat((char *)path, (char *)opt_name);
+            if (file_cleanup_pending || !file_available(path))
+                goto prepare_error;
+        }
     }
     response[0] = (uint8_t)checksum; response[1] = (uint8_t)(checksum >> 8);
     response[2] = (uint8_t)(checksum >> 16); response[3] = (uint8_t)(checksum >> 24);
@@ -789,6 +851,7 @@ void custombulk_prepare_service(usb_dev *udev)
 prepare_error:
     irq_mask = __get_PRIMASK(); __disable_irq();
     if (!file_cleanup_pending) {
+        image_staged = 0;
         staged_algorithm[0] = '\0'; prepare_algorithm[0] = '\0'; prepare_program[0] = '\0';
         prepare_response_pending = 0; prepare_complete_pending = 0;
         prepare_has_checksum = 0; prepare_expected_checksum = 0;
@@ -802,7 +865,7 @@ prepare_error:
 uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
                                          uint8_t *program_name,
                                          uint8_t *opt_required,
-                                         uint8_t *channel_b)
+                                         uint8_t *channel_b, uint8_t *image_id)
 {
     if (!prepare_complete_pending)
         return 0;
@@ -811,6 +874,8 @@ uint8_t custombulk_take_prepare_complete(uint8_t *algorithm_name,
     memcpy(algorithm_name, prepare_algorithm, sizeof(prepare_algorithm));
     memcpy(program_name, prepare_program, sizeof(prepare_program));
     *opt_required = prepare_opt_required;
+    *image_id = image_staged ? staged_image.id : IMAGE_ID_NONE;
+    image_staged = 0;
     *channel_b = prepare_channel_b;
     prepare_channel_b = 0;
     staged_algorithm[0] = '\0';
@@ -888,7 +953,8 @@ static void cmd_burn_quota(usb_dev *udev, uint8_t *buf, uint16_t len)
         while(name_len < sizeof(app_data.bin_name) && program[name_len]) name_len++;
     }
     if((name_len && !valid_quota_name(program, name_len)) ||
-       (!name_len && buf[0] == CMD_SET_BURN_QUOTA)) {
+       (!name_len && buf[0] == CMD_SET_BURN_QUOTA) ||
+       (image_staged && buf[0] == CMD_SET_BURN_QUOTA && !image_program_name(program, name_len))) {
         send_response(udev, STATUS_ERR, NULL, 0);
         return;
     }
@@ -969,6 +1035,7 @@ void custombulk_quota_service(usb_dev *udev)
  * SPI flash access are allowed. Responses fit the 63-byte data limit. */
 static void image_clear_import_session(void)
 {
+    image_staged = 0;
     staged_algorithm[0] = 0;
     prepare_algorithm[0] = 0;
     prepare_program[0] = 0;
@@ -1153,6 +1220,7 @@ static void process_command(usb_dev *udev, uint8_t *buf, uint16_t len)
     case CMD_RENAME:
         cmd_rename(udev, buf, len);
         break;
+    case CMD_STAGE_IMAGE:
     case CMD_STAGE_ALGORITHM:
         cmd_stage_algorithm(udev, buf, len);
         break;

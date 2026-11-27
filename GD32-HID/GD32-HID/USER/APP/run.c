@@ -303,9 +303,9 @@ static const char *selected_chip_name(void)
     if(!app_data.firmware_name[0])
         return "\xCE\xB4\xD1\xA1\xD4\xF1"; /* 显示文字：未选择 */
     if(!strcmp((const char *)app_data.firmware_name, "MM32G001-OPT_ext.bin"))
-        return "MM32G0001A";
+        return "NX32F001T";
     if(!strcmp((const char *)app_data.firmware_name, "MM32SPIN0230-OPT_ext.bin"))
-        return "MM32SPIN0230";
+        return "NX32F002TS";
     return "\xCE\xB4\xD6\xAA"; /* 显示文字：未知 */
 }
 
@@ -504,7 +504,7 @@ invalid_file:
 static void apply_prepare_download(const uint8_t *algorithm_name,
                                    const uint8_t *program_name,
                                    uint8_t opt_required,
-                                   uint8_t channel_b)
+                                   uint8_t channel_b, uint8_t image_id)
 {
     app_data.opt_enable = opt_required ? 1 : 0;
     g_channel_b_enable = channel_b ? 1U : 0U;
@@ -519,7 +519,7 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
     /* 仅在设备回读校验并确认导入后提交校验值；算法/OPT不计入SUM32。 */
     g_program_checksum = custombulk_prepared_checksum();
     g_program_checksum_valid = 1;
-    image_store_clear_current_ram(); /* USB 导入不是镜像任务，显示 ---。 */
+    if(image_id == IMAGE_ID_NONE) image_store_clear_current_ram();
     mark_selection_dirty();
     g_ui_ready = 0; g_file_list_ready = 0; /* 导入可从列表页返回，主界面必须重画。 */
     app_data.mode = 2;
@@ -534,10 +534,10 @@ static void apply_prepare_download(const uint8_t *algorithm_name,
 
 /* 校验镜像记录对应的算法/固件/OPT/SUM，返回 IMG_*。
  * sum_out - 返回实际主固件 SUM32；无 SUM 位的旧迁移记录也会计算并接受。 */
-static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_out)
+uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_out)
 {
     char path[80];
-    uint32_t size, done, got, sum, request, i, hdr_size, max_algo;
+    uint32_t size, done, got, sum, request, i, hdr_size;
     uint8_t ret;
     program_target_ext_t ext;
     const char *dot;
@@ -549,8 +549,6 @@ static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_ou
        !memchr(rec->bin, 0, sizeof(rec->bin))) return IMG_ERR_FMT;
 
     has_opt = (rec->flags & IMAGE_REC_FLAG_OPT) ? 1 : 0;
-    hdr_size = has_opt ? PROG_TARGET_EXT_HDR_SIZE : (PROG_TARGET_EXT_HDR_SIZE - 12U);
-    max_algo = has_opt ? 1980U : 1992U;
 
     sprintf(path, "0:/download/firmware/%s", rec->algo);
     if(f_open(&fd, path, FA_READ) != FR_OK) return IMG_ERR_FILE;
@@ -560,7 +558,10 @@ static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_ou
     got = 0;
     ret = f_read(&fd, &ext, sizeof(ext), &got);
     if(f_close(&fd) != FR_OK || ret != FR_OK || got != sizeof(ext)) return IMG_ERR_FILE;
-    if(ext.algo_size > max_algo || size != ext.algo_size + hdr_size) return IMG_ERR_FILE;
+    if(ext.algo_size >= size || size > 2048U) return IMG_ERR_FILE;
+    hdr_size = size - ext.algo_size;
+    if(hdr_size != PROG_TARGET_EXT_HDR_SIZE && hdr_size != PROG_TARGET_EXT_HDR_SIZE - 12U) return IMG_ERR_FILE;
+    if(has_opt && hdr_size != PROG_TARGET_EXT_HDR_SIZE) return IMG_ERR_OPT;
     if(has_opt)
     {
         if(!ext.opt_program || !ext.opt_addr || !ext.opt_size || ext.opt_size > 128U)
@@ -572,7 +573,7 @@ static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_ou
             strcpy(path, "0:/download/bin/default_opt.bin");
         if(f_open(&fd, path, FA_READ) != FR_OK) return IMG_ERR_OPT;
         size = f_size(&fd);
-        if(!size || f_close(&fd) != FR_OK) return IMG_ERR_OPT;
+        if(f_close(&fd) != FR_OK || !size || size > ext.opt_size) return IMG_ERR_OPT;
     }
 
     sprintf(path, "0:/download/bin/%s", rec->bin);
@@ -598,6 +599,12 @@ static uint8_t image_validate_record(const image_record_t *rec, uint32_t *sum_ou
     return IMG_OK;
 }
 
+static void use_image_channel(const image_record_t *rec)
+{
+    if(rec->flags & IMAGE_REC_FLAG_CHANNEL_SET)
+        g_channel_b_enable = (rec->flags & IMAGE_REC_FLAG_CHANNEL_B) ? 1U : 0U;
+}
+
 /* 让主界面镜像号与当前 app_data 选择一致；有效但无匹配显示 ---。 */
 static void sync_image_display_to_selection(void)
 {
@@ -610,7 +617,10 @@ static void sync_image_display_to_selection(void)
                               g_program_checksum_valid, &id) &&
        image_store_read_record(id, &rec) &&
        image_validate_record(&rec, &sum) == IMG_OK)
+    {
         image_store_select_ram(id);
+        use_image_channel(&rec);
+    }
     else
         image_store_clear_current_ram();
 }
@@ -694,6 +704,7 @@ uint8_t image_apply(uint8_t id)
         restore_selection_object(&old_sel);
         return IMG_ERR_TABLE;
     }
+    use_image_channel(&rec);
     reset_feedback(); g_ui_ready = 0; oled.Refresh_flag = 1;
     return IMG_OK;
 }
@@ -824,6 +835,7 @@ void start_page(void)
                     app_data.firmware_name[sizeof(app_data.firmware_name) - 1] = 0;
                     app_data.bin_name[sizeof(app_data.bin_name) - 1] = 0;
                     app_data.opt_enable = (rec.flags & IMAGE_REC_FLAG_OPT) ? 1 : 0;
+                    use_image_channel(&rec);
                     g_program_checksum = sum;
                     g_program_checksum_valid = 1;
                     mark_selection_dirty();
@@ -2518,7 +2530,7 @@ void run_task(void *pvParameters)
 		uint8_t prepare_algorithm[CB_MAX_NAME + 1];
 		uint8_t prepare_program[CB_MAX_NAME + 1];
 		uint8_t prepare_opt;
-		uint8_t prepare_channel_b;
+		uint8_t prepare_channel_b, prepare_image_id;
         uint32_t prepare_irq_mask; /* 短临界区保护导入确认与界面提交，禁止复位插入二者之间。 */
 
 		pwr_init();
@@ -2606,11 +2618,11 @@ void run_task(void *pvParameters)
             if(custombulk_take_files_changed()) invalidate_program_checksum();
 			if(custombulk_take_prepare_complete(prepare_algorithm,
 			                                    prepare_program,
-			                                    &prepare_opt, &prepare_channel_b))
+			                                    &prepare_opt, &prepare_channel_b, &prepare_image_id))
 			{
 				apply_prepare_download(prepare_algorithm,
 				                       prepare_program,
-				                       prepare_opt, prepare_channel_b);
+				                       prepare_opt, prepare_channel_b, prepare_image_id);
 			}
             __set_PRIMASK(prepare_irq_mask);
             save_program_selection(); /* 已恢复中断且USB空闲时才持久化，先于自动烧录。 */

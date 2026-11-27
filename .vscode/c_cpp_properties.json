@@ -1,0 +1,46 @@
+{
+    "version": 4,
+    "env": {
+        "firmware": "${workspaceFolder}/GD32-HID/GD32-HID",
+        "keilLocal": "D:/Users/${env:USERNAME}/AppData/Local"
+    },
+    "configurations": [
+        {
+            "name": "GD32F103RC (Keil)",
+            "compilerPath": "${keilLocal}/Keil_v5/ARM/ARMCLANG/bin/armclang.exe",
+            "compilerArgs": ["--target=arm-arm-none-eabi", "-mcpu=cortex-m3", "-mthumb", "-U_WIN32", "-fms-extensions", "-fasm-blocks", "-fshort-enums", "-fshort-wchar"],
+            "intelliSenseMode": "linux-clang-arm",
+            "cStandard": "c99",
+            "defines": [
+                "USE_STDPERIPH_DRIVER",
+                "GD32F10X_HD",
+                "USBD_BOS_ENABLE",
+                "_RTE_",
+                "__MICROLIB",
+                "__align(n)=__attribute__((aligned(n)))"
+            ],
+            "includePath": [
+                "${firmware}/DAPlink/inc",
+                "${firmware}/GD32F10x_Firmware_Library/CMSIS/GD/GD32F10x/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_standard_peripheral/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/hid/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/custombulk/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/cdc/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/class/device/hidmsccdc",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/device/Include",
+                "${firmware}/GD32F10x_Firmware_Library/GD32F10x_usbd_library/usbd/Include",
+                "${firmware}/GD32F10x_Firmware_Library/CMSIS",
+                "${firmware}/USER/FREERTOS/portable/RVDS/ARM_CM3",
+                "${firmware}/USER/FREERTOS/include",
+                "${firmware}/USER/BSP",
+                "${firmware}/USER/APP",
+                "${firmware}/USER/FATFS",
+                "${firmware}/USER/DAPlink",
+                "${firmware}/USER/ALGO",
+                "${firmware}/LCD",
+                "${firmware}/DAPlink/MDK-ARM/RTE/_DAPlink",
+                "${keilLocal}/Arm/Packs/ARM/CMSIS/5.9.0/CMSIS/Core/Include"
+            ]
+        }
+    ]
+}
