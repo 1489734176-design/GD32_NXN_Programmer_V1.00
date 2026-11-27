@@ -889,7 +889,28 @@ class DAPLinkManager(QMainWindow):
         chip_bar.addLayout(image_row, 3, 1, 1, 3)
         chip_opt_layout.addLayout(chip_bar)
 
-        # OPT config panel (scrollable, expanded by default so RDP 选择一目了然)
+        self.opt_preview_row = QWidget()
+        self.opt_preview_row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        preview_layout = QHBoxLayout(self.opt_preview_row)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(10)
+        preview_label = QLabel("OPT 数据预览：")
+        preview_layout.addWidget(preview_label)
+        self.lbl_opt_preview = QLineEdit()
+        self.lbl_opt_preview.setReadOnly(True)
+        self.lbl_opt_preview.setFixedHeight(self.control_height)
+        self.lbl_opt_preview.setStyleSheet(
+            "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
+        preview_label.setBuddy(self.lbl_opt_preview)
+        preview_layout.addWidget(self.lbl_opt_preview, 1)
+        self.lbl_rdp_state = QLabel()
+        self.lbl_rdp_state.setMinimumWidth(self.fontMetrics().horizontalAdvance("读保护已开启") + 16)
+        self.lbl_rdp_state.setToolTip("当前 OPT 配置预览，不是芯片回读结果。")
+        self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
+        self.lbl_rdp_state.setFixedHeight(self.control_height)
+        preview_layout.addWidget(self.lbl_rdp_state)
+        chip_opt_layout.addWidget(self.opt_preview_row)
+
         self.opt_scroll = QScrollArea()
         self.opt_scroll.setObjectName("optScroll")
         self.opt_scroll.setWidgetResizable(True)
@@ -1436,6 +1457,7 @@ class DAPLinkManager(QMainWindow):
         visible = self.btn_opt_toggle.isChecked()
         if not visible and self.workspace.isVisible() and not self.opt_scroll.isHidden():
             self._expanded_sizes = self.workspace.sizes()
+        self.opt_preview_row.setVisible(visible)
         self.opt_scroll.setVisible(visible)
         if visible:
             self.chip_opt_frame.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
@@ -1477,6 +1499,8 @@ class DAPLinkManager(QMainWindow):
 
     def _clear_opt_ui(self):
         self._opt_widgets.clear()
+        self.lbl_opt_preview.clear()
+        self.lbl_rdp_state.clear()
         if self.opt_content:
             self.opt_content.deleteLater()
         self.opt_content = QWidget()
@@ -1491,26 +1515,6 @@ class DAPLinkManager(QMainWindow):
         layout.setContentsMargins(4, 4, 8, 4)
         layout.setSpacing(12)
         layout.setSizeConstraint(QLayout.SetMinimumSize)
-
-        # Let the scroll area scroll rather than squeeze the field rows.
-        preview_grp = QGroupBox("OPT 数据预览", self.opt_content)
-        preview_grp.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        preview_layout = QHBoxLayout(preview_grp)
-        preview_layout.setContentsMargins(12, 12, 12, 12)
-        self.lbl_opt_preview = QLineEdit(preview_grp)
-        self.lbl_opt_preview.setReadOnly(True)
-        self.lbl_opt_preview.setFixedHeight(self.control_height)
-        self.lbl_opt_preview.setFont(QFont("Consolas", 10))
-        self.lbl_opt_preview.setStyleSheet(
-            "font-family: Consolas; font-size: 10pt; background: #f3f6fa; color: #24364b;")
-        preview_layout.addWidget(self.lbl_opt_preview)
-        self.lbl_rdp_state = QLabel("", preview_grp)
-        self.lbl_rdp_state.setMinimumWidth(self.fontMetrics().horizontalAdvance("读保护已开启") + 16)
-        self.lbl_rdp_state.setToolTip("当前 OPT 配置预览，不是芯片回读结果。")
-        self.lbl_rdp_state.setAlignment(Qt.AlignCenter)
-        self.lbl_rdp_state.setMinimumHeight(self.control_height)
-        preview_layout.addWidget(self.lbl_rdp_state)
-        layout.addWidget(preview_grp)
 
         words = self.current_chip.get('opt_words', [])
         label_width = max([120] + [
@@ -1682,7 +1686,7 @@ class DAPLinkManager(QMainWindow):
         slot = self.cmb_image.currentData()
         image_target = None
         if slot is not None:
-            image_target = ImageTarget(slot, self.current_model, self.edit_image_desc.text().strip())
+            image_target = ImageTarget(slot, self.current_model, self.edit_image_desc.text())
             try:
                 image_target.stage_request(algorithm_name)
             except ValueError as exc:

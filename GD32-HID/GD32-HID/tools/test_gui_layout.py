@@ -94,11 +94,25 @@ def check_layout(window):
 
     bar = window.opt_scroll.verticalScrollBar()
     assert bar.maximum() > 0
+    preview = window.lbl_opt_preview
+    position = preview.mapTo(window, QPoint())
     bar.setValue(bar.maximum())
     settle()
+    assert preview.mapTo(window, QPoint()) == position, 'OPT 预览不能随配置列表滚走'
+    assert preview.visibleRegion().contains(preview.rect().center())
+    assert window.lbl_rdp_state.visibleRegion().contains(window.lbl_rdp_state.rect().center())
     last = groups[-1]
     bottom = last.mapTo(window.opt_scroll.viewport(), last.rect().bottomLeft())
     assert bottom.y() < window.opt_scroll.viewport().height()
+    field = window._opt_widgets['WRP0_bit0']
+    before = bytes.fromhex(preview.text())
+    assert field.visibleRegion().contains(field.rect().center())
+    field.click()
+    after = bytes.fromhex(preview.text())
+    assert after == before[:-2] + bytes(value ^ 1 for value in before[-2:])
+    assert bar.value() == bar.maximum() and preview.mapTo(window, QPoint()) == position
+    field.click()
+    assert bytes.fromhex(preview.text()) == before
     bar.setValue(0)
 
 
@@ -285,20 +299,21 @@ def run_checks(app, screenshots):
                     check_popup(combo, screenshots, f'{model}-opt-popup')
                 window.btn_opt_toggle.click()
                 settle()
-                assert not window.opt_scroll.isVisible()
+                assert not window.opt_scroll.isVisible() and not window.lbl_opt_preview.isVisible()
                 window.btn_opt_toggle.click()
                 settle()
-                assert window.opt_scroll.isVisible()
+                assert window.opt_scroll.isVisible() and window.lbl_opt_preview.isVisible()
         window.cmb_chip.setCurrentIndex(1)
         settle()
         check_popup(window.cmb_chip, screenshots, 'chip-popup')
         window.cmb_chip.setCurrentIndex(0)
         settle()
         assert not window._opt_widgets
+        assert not window.lbl_opt_preview.isVisible() and not window.lbl_opt_preview.text()
         assert not window.btn_opt_toggle.isEnabled()
         assert not window.device.is_connected()
         print(f'PASS {len(models)} chips x 3 window sizes; aligned controls, titles, rows and scrolling')
-        print('PASS OPT defaults, field changes, inverse bytes, expand/collapse and chip switching')
+        print('PASS pinned, live OPT bytes at the last register, defaults, expand/collapse and chip switching')
         print('PASS chip/OPT popup colors, mouse selection and keyboard navigation')
         print('PASS RPO wheel safety, both splitter drags, radio columns, channel row, offline quota and branding')
         print(f'Qt platform: {app.platformName()}, device pixel ratio: {window.devicePixelRatioF()}')

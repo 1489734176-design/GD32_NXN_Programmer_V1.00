@@ -269,6 +269,25 @@ SWD_TransferFunction(Fast)
 #define PIN_DELAY() PIN_DELAY_SLOW(DAP_Data.clock_delay)
 SWD_TransferFunction(Slow)
 
+/* Each channel has one SWDIO pin. For block data only, address its four CTL
+ * bits directly; scalar transfers (including count-based halt polls) keep
+ * the vendor direction switch and its timing. */
+__STATIC_FORCEINLINE void SWDIO_SetMode(uint32_t mode) {
+  uint32_t pin = 31U - __CLZ(JTAG_TMS_Pin);
+  uint32_t shift = (pin & 7U) * 4U;
+  volatile uint32_t *ctl = pin < 8U ? &GPIO_CTL0(JTAG_TMS_GPIO_Port) : &GPIO_CTL1(JTAG_TMS_GPIO_Port);
+  *ctl = (*ctl & ~(0x0FU << shift)) | (mode << shift);
+}
+#define PIN_SWDIO_OUT_ENABLE()  SWDIO_SetMode((GPIO_MODE_OUT_PP & 0x0FU) | GPIO_OSPEED_2MHZ)
+#define PIN_SWDIO_OUT_DISABLE() SWDIO_SetMode(GPIO_MODE_IN_FLOATING & 0x0FU)
+SWD_TransferFunction(BlockSlow)
+#undef PIN_SWDIO_OUT_ENABLE
+#undef PIN_SWDIO_OUT_DISABLE
+
+uint8_t SWD_TransferBlockData(uint32_t request, uint32_t *data) {
+  return DAP_Data.fast_clock ? SWD_TransferFast(request, data) : SWD_TransferBlockSlow(request, data);
+}
+
 
 // SWD Transfer I/O
 //   request: A[3:2] RnW APnDP

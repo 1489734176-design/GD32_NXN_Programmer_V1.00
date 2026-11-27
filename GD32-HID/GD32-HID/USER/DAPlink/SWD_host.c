@@ -102,6 +102,17 @@ static uint8_t swd_transfer_retry(uint32_t req, uint32_t *data)
 	return ack;
 }
 
+/* Save the bus setup overhead on a block's data words, not while polling a
+ * control register or retrying after WAIT. The first attempt counts as one. */
+static uint8_t swd_block_data_retry(uint32_t req, uint32_t *data)
+{
+    uint8_t i, ack = SWD_TransferBlockData(req, data);
+    for(i = 1; ack == DAP_TRANSFER_WAIT && i < MAX_SWD_RETRY; i++)
+        ack = SWD_Transfer(req, data);
+    last_ack[dap_channel] = ack;
+    return ack;
+}
+
 /* 初始化SWD主机：复位DAP内部状态并把SWDIO/SWCLK引脚切到调试功能。
  * 返回 - 固定返回1 */
 uint8_t swd_init(void)
@@ -301,7 +312,7 @@ static uint8_t swd_write_block(uint32_t address, uint8_t *data, uint32_t size)
 
 	for (i = 0; i < size_in_words; i++)
 	{
-		if (swd_transfer_retry(req, (uint32_t *)data) != 0x01)
+		if (swd_block_data_retry(req, (uint32_t *)data) != 0x01)
 		{
 			return 0;
 		}
@@ -358,7 +369,7 @@ static uint8_t swd_read_block(uint32_t address, uint8_t *data, uint32_t size)
 
 	for (i = 0; i < (size_in_words - 1); i++)
 	{
-		if (swd_transfer_retry(req, (uint32_t *)data) != DAP_TRANSFER_OK)
+		if (swd_block_data_retry(req, (uint32_t *)data) != DAP_TRANSFER_OK)
 		{
 			return 0;
 		}

@@ -353,21 +353,27 @@ static void show_counts(void)
 }
 
 /* 主界面镜像号：有效时显示 000-099，加密镜像追加 *；无表/无当前显示 ---。 */
-static void show_image_no(void)
+static void show_image_fields(void)
 {
     char text[8];
     uint8_t id = image_store_current();
     const image_record_t *rec = image_store_current_record();
+    /* Older records may use all 24 bytes without a terminator. */
+    char desc[sizeof(rec->desc) + 1] = {0};
+    uint16_t width;
     if(id < IMAGE_SLOTS && rec)
     {
+        memcpy(desc, rec->desc, sizeof(rec->desc));
         if(rec->flags & IMAGE_REC_FLAG_OPT) sprintf(text, "%03u*", (unsigned)id);
         else sprintf(text, "%03u", (unsigned)id);
     }
     else strcpy(text, "---");
+    width = UI_TextWidth(desc, 16);
+    UI_FieldColor(11, (LCD_WIDTH - width) / 2U, 28, width, 16, desc, 16, 1, LCD_YELLOW);
     UI_FieldColor(9, 64, 48, 168, 16, text, 16, 1, LCD_YELLOW);
 }
 
-/* 静态标题只画一次；状态栏下方与开始烧录上方各留一空行。 */
+/* 静态标题只画一次；状态栏和镜像号之间显示当前镜像的说明。 */
 static void draw_main(void)
 {
     if(!g_ui_ready)
@@ -389,7 +395,7 @@ static void draw_main(void)
         g_ui_ready = 1;
         show_top(1);
     }
-    show_image_no();
+    show_image_fields();
     show_chip_name(88);
     show_firmware_name(148);
     UI_FieldColor(2, 80, 108, 152, 16, g_auto_en ? "\xD7\xD4\xB6\xAF" : "\xCA\xD6\xB6\xAF", 16, 1, LCD_YELLOW);

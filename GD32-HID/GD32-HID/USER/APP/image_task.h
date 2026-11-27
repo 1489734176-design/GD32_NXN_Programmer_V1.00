@@ -51,7 +51,7 @@ typedef struct __attribute__((packed))
     char     algo[32];        /* 算法 basename，ASCII，NUL 结尾 */
     char     bin[32];         /* 主固件 basename，ASCII，NUL 结尾 */
     char     chip[16];        /* 设备显示芯片名，ASCII */
-    char     desc[24];        /* 短说明，ASCII；设备最多显示 14 字符 */
+    char     desc[24];        /* 短说明，ASCII；上位机填写最多 23 个字符并以 NUL 结尾 */
     uint8_t  reserved[2];
 } image_record_t;
 

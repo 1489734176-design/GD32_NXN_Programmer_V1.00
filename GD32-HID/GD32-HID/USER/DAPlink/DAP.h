@@ -280,6 +280,7 @@ extern uint8_t  JTAG_Transfer   (uint32_t request, uint32_t *data);
  * data    - 输入输出，写入时为待写数据，读取时为读回数据
  * 返回    - DAP_TRANSFER_OK / WAIT / FAULT / ERROR / MISMATCH */
 extern uint8_t  SWD_Transfer    (uint32_t request, uint32_t *data);
+extern uint8_t  SWD_TransferBlockData(uint32_t request, uint32_t *data);
 
 /* 毫秒级延时。
  * delay - 延时长度，单位毫秒

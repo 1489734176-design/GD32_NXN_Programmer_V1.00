@@ -201,7 +201,8 @@ class HostReconnectTests(unittest.TestCase):
             self.until(lambda: window.btn_import.isEnabled() and window.remote_tree.topLevelItemCount())
             window.cmb_chip.setCurrentText('NX32F002TS')
             window.cmb_image.setCurrentText('006')
-            window.edit_image_desc.setText('Board rev B')
+            note = ' Board/rev.B (003) #19 '  # 23 printable bytes, including surrounding spaces.
+            window.edit_image_desc.setText(note)
             window.chk_channel_b.setChecked(True)
             window.chk_quota.setChecked(True)
             window.spin_quota.setValue(39)
@@ -220,7 +221,7 @@ class HostReconnectTests(unittest.TestCase):
                 self.until(lambda: not window._usb_busy)
                 self.assertFalse(warning.called, warning.call_args)
                 self.assertIn('006', done.call_args.args[2])
-            expected_stage = bytes([CMD_STAGE_IMAGE, 6]) + b'MM32SPIN0230-OPT_ext.bin\0MM32SPIN0230\0Board rev B'
+            expected_stage = bytes([CMD_STAGE_IMAGE, 6]) + b'MM32SPIN0230-OPT_ext.bin\0MM32SPIN0230\0' + note.encode('ascii')
             self.assertEqual(self.usb.requests(CMD_STAGE_IMAGE), [expected_stage] * 2)
             self.assertEqual(self.usb.requests(host.CMD_WRITE_DATA), [b'\x03\x12\xff\x34', b'\x03' + opt])
             self.assertIn('00000145', window.lbl_checksum.text())
