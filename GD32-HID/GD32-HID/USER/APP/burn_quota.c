@@ -185,7 +185,7 @@ static uint8_t append(const uint8_t *name, uint8_t enabled, uint32_t remaining,
     r[13] = catalog->length; memcpy(&r[14], catalog->tag, 16);
     quota_auth_tag(1, r, 18U * 4U, (uint8_t *)&r[18]);
     r[22] = ~r[1]; r[23] = QUOTA_COMMIT;
-    if(!burn_quota_mirror_write(r)) goto storage_error;
+    if(!burn_quota_mirror_write(r, repair)) goto storage_error;
     if(repair || legacy_pending || slot >= QUOTA_SLOTS) {
         page = preserved ^ 1U; slot = 0;
         if(!erase_page(page)) goto storage_error;

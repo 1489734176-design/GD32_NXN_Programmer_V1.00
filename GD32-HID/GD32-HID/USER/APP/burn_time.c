@@ -3,7 +3,7 @@
 #include <string.h>
 
 static burn_time_result_t current[2], last[2];
-static uint64_t changed[2], clock_cycles, probe_started;
+static uint64_t changed[2], clock_cycles, probe_started, commit_started;
 static burn_stage_t stage[2];
 static uint8_t active[2];
 static volatile uint32_t revision;
@@ -38,6 +38,28 @@ void burn_time_probe_end(uint8_t ch, uint8_t found)
         /* The waiter cannot acquire SWD until this probe releases the mutex. */
         uint64_t start = changed[peer] > probe_started ? changed[peer] : probe_started;
         current[peer].miss_wait += now_locked() - start;
+    }
+    taskEXIT_CRITICAL();
+}
+
+void burn_time_commit_begin(void)
+{
+    taskENTER_CRITICAL();
+    commit_started = now_locked();
+    taskEXIT_CRITICAL();
+}
+
+void burn_time_commit_end(uint8_t ch)
+{
+    uint8_t peer = ch ^ 1U;
+    uint64_t end;
+    taskENTER_CRITICAL();
+    end = now_locked();
+    current[ch].commit_hold += end - commit_started;
+    if(active[peer] && stage[peer] == BT_FS_LOCK) {
+        /* The peer's acquire cannot finish before the committing socket gives back FS. */
+        uint64_t start = changed[peer] > commit_started ? changed[peer] : commit_started;
+        current[peer].commit_wait += end - start;
     }
     taskEXIT_CRITICAL();
 }

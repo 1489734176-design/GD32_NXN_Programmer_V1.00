@@ -891,15 +891,17 @@ static uint32_t time_page_version;
 
 static void draw_burn_times(void)
 {
-    enum { TOTAL = BT_COUNT, LOCK_SUM, MISS_WAIT, REARM };
+    enum { TOTAL = BT_COUNT, LOCK_SUM, MISS_WAIT, COMMIT_HOLD, COMMIT_WAIT, REARM };
     static const struct { const char *label; uint8_t value; } rows[] = {
         {"Total", TOTAL}, {"Connect", BT_CONNECT}, {"Erase", BT_ERASE}, {"File", BT_IO},
         {"SWD load", BT_LOAD}, {"Page", BT_PAGE}, {"Verify", BT_VERIFY}, {"OPT", BT_OPT},
-        {"Quota", BT_QUOTA}, {"Lock", LOCK_SUM}, {"SWD wait", BT_SWD_LOCK}, {"  NoReply", MISS_WAIT},
-        {"FS wait", BT_FS_LOCK}, {"Q wait", BT_QUOTA_LOCK}, {"Other", BT_OTHER}, {"Re-arm", REARM}
+        {"Quota", BT_QUOTA}, {"CommitFS", COMMIT_HOLD}, {"Lock", LOCK_SUM}, {"SWD wait", BT_SWD_LOCK},
+        {"  NoReply", MISS_WAIT}, {"FS wait", BT_FS_LOCK}, {" ByCommit", COMMIT_WAIT},
+        {"Q wait", BT_QUOTA_LOCK}, {"Other", BT_OTHER}, {"Re-arm", REARM}
     };
     static burn_time_result_t results[2];
     char line[48], cells[2][12];
+    uint8_t field = 0;
     uint32_t row, ch, pair_ms;
     time_page_version = burn_time_snapshot(results);
     UI_EnterPage(13);
@@ -912,6 +914,7 @@ static void draw_burn_times(void)
     UI_TextColor(8, 0, line, 16, 1, LCD_YELLOW);
     for(row = 0; row < sizeof(rows)/sizeof(rows[0]); ++row) {
         uint8_t value = rows[row].value;
+        uint16_t y = (uint16_t)((row + 1U) * 16U);
         for(ch = 0; ch < 2; ++ch) {
             const burn_time_result_t *r = &results[ch];
             uint64_t cycles;
@@ -920,20 +923,28 @@ static void draw_burn_times(void)
             case TOTAL: cycles = r->ended - r->started; break;
             case LOCK_SUM: cycles = r->cycles[BT_SWD_LOCK] + r->cycles[BT_FS_LOCK] + r->cycles[BT_QUOTA_LOCK]; break;
             case MISS_WAIT: cycles = r->miss_wait; break;
+            case COMMIT_HOLD: cycles = r->commit_hold; break;
+            case COMMIT_WAIT: cycles = r->commit_wait; break;
             case REARM: cycles = r->ready - r->ended; break;
             default: cycles = r->cycles[value]; break;
             }
             sprintf(cells[ch], "%lu", (unsigned long)burn_time_ms(cycles));
         }
         sprintf(line, "%-9s%8s %8s", rows[row].label, cells[0], cells[1]);
-        UI_FieldColor((uint8_t)row, 8, (uint16_t)(17+17*row), 224, 16, line, 16, 1, LCD_WHITE);
+        if(value == COMMIT_HOLD || value == COMMIT_WAIT) {
+            /* Only sixteen fields can be cached on a page. */
+            strcat(line, "   ");
+            UI_TextColor(8, y, line, 16, 1, LCD_YELLOW);
+        } else {
+            UI_FieldColor(field++, 8, y, 224, 16, line, 16, 1, LCD_WHITE);
+        }
     }
     pair_ms = burn_time_pair_ms(results);
     if(pair_ms) sprintf(cells[0], "%lu", (unsigned long)pair_ms);
     else strcpy(cells[0], "--");
-    sprintf(line, "A+B total: %-10s ms", cells[0]);
-    UI_TextColor(8, 288, line, 16, 1, LCD_YELLOW);
-    UI_TextColor(8, 304, "MID: back      S=1ch D=2ch", 16, 1, LCD_BLUE);
+    sprintf(line, "A+B total:%10s ms", cells[0]);
+    UI_TextColor(8, 304, line, 16, 1, LCD_YELLOW);
+    UI_TextColor(200, 304, "MID:<", 16, 1, LCD_BLUE);
 }
 
 void mode2(void)
@@ -2318,10 +2329,11 @@ static FRESULT wf_close(uint8_t ch, burn_stage_t stage, FIL *fp)
     return r;
 }
 
-static void w_quota_lock(uint8_t ch)
+static void w_quota_lock(uint8_t ch, uint8_t committing)
 {
     burn_time_stage(ch, BT_FS_LOCK);
     fs_lock();
+    if(committing && g_fs_mutex) burn_time_commit_begin();
     if(g_quota_mutex) {
         burn_time_stage(ch, BT_QUOTA_LOCK);
         xSemaphoreTake(g_quota_mutex, portMAX_DELAY);
@@ -2467,7 +2479,7 @@ static void channel_burn(uint8_t ch)
     burn_active(1);
 
     /* Quota pre-check under the ledger lock. */
-    w_quota_lock(ch);
+    w_quota_lock(ch, 0);
     {
         uint8_t quota_ok = (burn_quota_select(app_data.bin_name) == BURN_QUOTA_OK) &&
                            !burn_quota_fault();
@@ -2699,10 +2711,11 @@ static void channel_burn(uint8_t ch)
 
     if(ok)
     {
-        w_quota_lock(ch);
+        w_quota_lock(ch, 1);
         if(burn_quota_begin() != BURN_QUOTA_OK || burn_quota_finish(1U) != BURN_QUOTA_OK) ok = 0U;
         burn_time_stage(ch, BT_OTHER);
         if(g_quota_mutex) xSemaphoreGive(g_quota_mutex);
+        if(g_fs_mutex) burn_time_commit_end(ch);
         fs_unlock();
     }
 

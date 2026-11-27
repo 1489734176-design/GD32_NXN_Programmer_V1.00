@@ -27,15 +27,27 @@ uint8_t burn_quota_mirror_read(void *record)
     return valid;
 }
 
-uint8_t burn_quota_mirror_write(const void *record)
+uint8_t burn_quota_mirror_write(const void *record, uint8_t rebuild)
 {
     uint32_t check[BURN_QUOTA_RECORD_SIZE / 4U];
     UINT written = 0;
-    uint8_t valid;
-    FRESULT result = f_mkdir("0:/system");
-    if(result != FR_OK && result != FR_EXIST) return 0;
+    uint8_t valid, reuse = 0;
+    FRESULT result = FR_OK;
+    if(!rebuild) {
+        result = f_open(&mirror_file, MIRROR_PATH, FA_WRITE);
+        if(result == FR_OK) {
+            reuse = f_size(&mirror_file) == BURN_QUOTA_RECORD_SIZE;
+            if(!reuse && f_close(&mirror_file) != FR_OK) return 0;
+        } else if(result != FR_NO_PATH && result != FR_NO_FILE) return 0;
+    }
+    if(!reuse) {
+        if(rebuild || result == FR_NO_PATH) {
+            result = f_mkdir("0:/system");
+            if(result != FR_OK && result != FR_EXIST) return 0;
+        }
+        if(f_open(&mirror_file, MIRROR_PATH, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) return 0;
+    }
     /* 先更新外部副本；此时掉电会与旧内部记录不一致，重启后必须禁烧。 */
-    if(f_open(&mirror_file, MIRROR_PATH, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) return 0;
     valid = f_write(&mirror_file, record, BURN_QUOTA_RECORD_SIZE, &written) == FR_OK &&
             written == BURN_QUOTA_RECORD_SIZE && f_sync(&mirror_file) == FR_OK;
     if(f_close(&mirror_file) != FR_OK) valid = 0;

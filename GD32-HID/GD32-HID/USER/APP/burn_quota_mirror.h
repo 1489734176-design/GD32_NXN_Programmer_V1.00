@@ -3,7 +3,7 @@
 #include <stdint.h>
 #define BURN_QUOTA_RECORD_SIZE 96U
 uint8_t burn_quota_mirror_read(void *record);
-uint8_t burn_quota_mirror_write(const void *record);
+uint8_t burn_quota_mirror_write(const void *record, uint8_t rebuild);
 /* 0 = missing, 1 = present, 2 = I/O error. Used only for legacy migration. */
 uint8_t burn_quota_mirror_probe(void);
 #endif

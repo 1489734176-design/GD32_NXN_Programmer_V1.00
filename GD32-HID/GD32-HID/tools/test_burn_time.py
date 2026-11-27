@@ -2,6 +2,7 @@
 """Run linked Keil AXF burn timing and dual-channel probe regressions in Unicorn.
 
 Usage: python -B test_burn_time.py DAPlink.axf [--unicorn-path PATH]
+Use --page-cadence control for a page-profile AXF with fixed one-tick polls.
 """
 
 import argparse
@@ -16,7 +17,12 @@ CYCLES_PER_MS = 72_000
 U32_MASK = (1 << 32) - 1
 OTHER, CONNECT, ERASE, IO, LOAD, PAGE, VERIFY, OPT, QUOTA, SWD_LOCK, FS_LOCK, QUOTA_LOCK = range(12)
 STAGE_COUNT = QUOTA_LOCK + 1
-RESULT = struct.Struct("<16QBBB5x")  # AAPCS: 12 stage counters, 3 timestamps, miss_wait, 3 flags
+BASE_RESULT = struct.Struct("<16QBBB5x")
+COMMIT_RESULT = struct.Struct("<16QBBB5x2Q")
+PAGE_RESULT = struct.Struct("<16QBBB5x4Q3I4x")
+PAGE_MARK, PAGE_RECORD = "burn_time_page_mark", "burn_time_page_record"
+BP_LAUNCH, BP_POLL, BP_RUNNING = range(3)
+PAGE_RUNNING, PAGE_LINK_ERROR, PAGE_HALTED, PAGE_SWD_WAIT = range(4)
 
 
 class Result(NamedTuple):
@@ -28,6 +34,17 @@ class Result(NamedTuple):
     valid: int
     ok: int
     dual: int
+    commit_hold: int = 0
+    commit_wait: int = 0
+    page_launch: int = 0
+    page_poll: int = 0
+    launches: int = 0
+    polls: int = 0
+    running: int = 0
+
+    @property
+    def page_gap(self):
+        return self.cycles[PAGE] - self.page_launch - self.page_poll
 
 
 def read_axf(path):
@@ -67,6 +84,8 @@ class Firmware:
         from unicorn import arm_const
 
         self.regs = arm_const
+        self.arg_regs = (arm_const.UC_ARM_REG_R0, arm_const.UC_ARM_REG_R1,
+                         arm_const.UC_ARM_REG_R2, arm_const.UC_ARM_REG_R3)
         self.uc = unicorn.Uc(unicorn.UC_ARCH_ARM, unicorn.UC_MODE_THUMB | unicorn.UC_MODE_MCLASS)
         self.uc.mem_map(self.STOP, 0x1000)
         self.uc.mem_map(0x08000000, 0x40000)
@@ -82,7 +101,7 @@ class Firmware:
         r = self.regs
         self.uc.reg_write(r.UC_ARM_REG_SP, self.STACK_TOP)
         self.uc.reg_write(r.UC_ARM_REG_LR, self.STOP | 1)
-        for register, value in zip((r.UC_ARM_REG_R0, r.UC_ARM_REG_R1), args):
+        for register, value in zip(self.arg_regs, args):
             self.uc.reg_write(register, value)
         self.uc.emu_start(self.symbols[name] | 1, self.STOP, count=budget)
         pc = self.uc.reg_read(r.UC_ARM_REG_PC)
@@ -92,8 +111,11 @@ class Firmware:
     def call(self, name, *args):
         return self.call_symbol(f"burn_time_{name}", *args)
 
-    def at_cycles(self, cycles, name, *args):
+    def set_cycles(self, cycles):
         self.uc.mem_write(DWT_CYCCNT, struct.pack("<I", cycles & U32_MASK))
+
+    def at_cycles(self, cycles, name, *args):
+        self.set_cycles(cycles)
         return self.call(name, *args)
 
     def at(self, ms, name, *args):
@@ -101,9 +123,15 @@ class Firmware:
 
     def snapshot(self):
         revision = self.call("snapshot", self.SNAPSHOT)
-        data = self.uc.mem_read(self.SNAPSHOT, 2 * RESULT.size)
+        if PAGE_RECORD in self.symbols:
+            layout = PAGE_RESULT
+        elif "burn_time_commit_end" in self.symbols:
+            layout = COMMIT_RESULT
+        else:
+            layout = BASE_RESULT
+        data = self.uc.mem_read(self.SNAPSHOT, 2 * layout.size)
         return revision, tuple(
-            Result(row[:STAGE_COUNT], *row[STAGE_COUNT:]) for row in RESULT.iter_unpack(data)
+            Result(row[:STAGE_COUNT], *row[STAGE_COUNT:]) for row in layout.iter_unpack(data)
         )
 
     def pair_ms(self):
@@ -237,6 +265,103 @@ def test_probe_wait_overlap(f, waiter):
     assert f.snapshot() == (version, rows)
 
 
+def test_commit_overlap(image, owner):
+    peer = owner ^ 1
+    for wait_at, stage, overlap in ((4, FS_LOCK, 20), (17, FS_LOCK, 13), (30, FS_LOCK, 0),
+                                    (33, FS_LOCK, 0), (15, SWD_LOCK, 0), (15, QUOTA_LOCK, 0)):
+        f = Firmware(image)
+        clock = (1 << 32) - 16
+        events = [(0, "begin", owner, 1), (1, "begin", peer, 1), (2, "stage", owner, FS_LOCK),
+                  (10, "commit_begin"), (10, "stage", owner, QUOTA_LOCK), (12, "stage", owner, QUOTA),
+                  (wait_at, "stage", peer, stage), (30, "stage", owner, OTHER), (30, "commit_end", owner),
+                  (31, "end", owner, 1), (40, "end", peer, 1)]
+        for tick, name, *args in sorted(events, key=lambda event: event[0]):
+            f.at_cycles(clock + tick, name, *args)
+        _, rows = f.snapshot()
+        a, b = rows[owner], rows[peer]
+        assert (a.commit_hold, a.commit_wait, b.commit_hold, b.commit_wait) == (20, 0, 0, overlap)
+        assert b.commit_wait <= b.cycles[FS_LOCK] and b.commit_wait <= a.commit_hold
+        assert all(sum(r.cycles) == r.ended - r.started for r in rows)
+
+        f.at_cycles(clock + 45, "begin", owner, 1)
+        f.at_cycles(clock + 47, "commit_begin")
+        f.at_cycles(clock + 50, "commit_end", owner)
+        f.at_cycles(clock + 51, "end", owner, 0)
+        _, after = f.snapshot()
+        assert after[owner].commit_hold == 3 and after[peer] == b
+        f.at_cycles(clock + 55, "begin", peer, 1)
+        f.at_cycles(clock + 60, "end", peer, 0)
+        _, after = f.snapshot()
+        assert after[peer].commit_wait == after[peer].commit_hold == 0
+
+
+def test_page_accounting(f):
+    start = (1 << 32) - 30
+
+    def at(offset, name, *args):
+        return f.at_cycles(start + offset, name, *args)
+
+    def op(ch, kind, mark, record):
+        at(mark, "page_mark")
+        at(record, "page_record", ch, kind)
+
+    at(0, "begin", 0, 1)
+    at(2, "stage", 0, PAGE)
+    at(3, "begin", 1, 1)
+    at(4, "stage", 1, PAGE)
+    at(6, "stage", 0, SWD_LOCK)
+    op(1, BP_LAUNCH, 8, 13)  # A is still waiting for B's mutex.
+    at(15, "stage", 0, PAGE)
+    at(17, "page_mark")
+    at(25, "stage", 1, SWD_LOCK)  # B blocks while A owns the shared mark.
+    at(33, "page_record", 0, BP_LAUNCH)  # This launch crosses the DWT wrap.
+    at(35, "stage", 1, PAGE)
+    op(1, BP_RUNNING, 36, 41)
+    op(0, BP_RUNNING, 45, 52)
+    op(1, BP_POLL, 54, 58)
+    at(61, "end", 1, 0)
+
+    version, (unpublished, b) = f.snapshot()
+    assert version == 1 and unpublished == Result((0,) * STAGE_COUNT, 0, 0, 0, 0, 0, 0, 0)
+    assert (b.cycles[PAGE], b.cycles[SWD_LOCK], b.page_gap) == (47, 10, 33), b
+    assert (b.page_launch, b.page_poll, b.launches, b.polls, b.running) == (5, 9, 1, 2, 1), b
+    assert b.valid and not b.ok and b.dual, b
+
+    op(0, BP_LAUNCH, 62, 65)
+    op(0, BP_RUNNING, 66, 69)
+    op(0, BP_POLL, 71, 82)
+    assert f.snapshot() == (1, (unpublished, b))
+    at(85, "end", 0, 1)
+    version, (a, first_b) = f.snapshot()
+    assert version == 2 and first_b == b
+    assert (a.cycles[PAGE], a.cycles[SWD_LOCK], a.page_gap) == (74, 9, 34), a
+    assert (a.page_launch, a.page_poll, a.launches, a.polls, a.running) == (19, 21, 2, 3, 2), a
+    assert all(sum(r.cycles) == r.ended - r.started for r in (a, b))
+
+    at(87, "rearmed", 1)
+    b = b._replace(ready=start + 87)
+    at(90, "begin", 0, 0)
+    at(91, "stage", 0, PAGE)
+    op(0, BP_LAUNCH, 92, 95)
+    op(0, BP_RUNNING, 97, 101)
+    op(0, BP_POLL, 102, 108)
+    assert f.snapshot() == (3, (a, b))  # Starting a new burn must not clear a published row.
+    at(111, "end", 0, 1)
+    version, (single, saved_b) = f.snapshot()
+    assert version == 4 and saved_b == b
+    assert single.valid and single.ok and not single.dual, single
+    assert (single.cycles[PAGE], single.cycles[SWD_LOCK], single.page_gap) == (20, 0, 7), single
+    assert (single.page_launch, single.page_poll, single.launches, single.polls, single.running) == (3, 10, 1, 2, 1), single
+    assert sum(single.cycles) == single.ended - single.started
+
+    at(120, "begin", 1, 1)
+    at(121, "end", 1, 0)  # Failed before any page operation: all attribution must reset.
+    version, (saved_a, reset_b) = f.snapshot()
+    assert version == 5 and saved_a == single
+    assert (reset_b.cycles[PAGE], reset_b.page_launch, reset_b.page_poll,
+            reset_b.launches, reset_b.polls, reset_b.running, reset_b.page_gap) == (0,) * 7, reset_b
+
+
 def test_mode_per_burn(f):
     for revision, dual in enumerate((1, 0, 1), 1):
         start = revision * 10
@@ -249,35 +374,25 @@ def test_mode_per_burn(f):
 PROBE_NO_REPLY, PROBE_PRESENT, PROBE_DEFERRED = range(3)
 
 
-class ProbeScript(Firmware):
-    """Drive the real worker/probe and verify the ordered boundary calls."""
-
-    TIMING_OBSERVERS = ("burn_time_probe_begin", "burn_time_probe_end", "burn_time_rearmed")
-    BOUNDARIES = TIMING_OBSERVERS + (
-        "vTaskDelay", "custombulk_is_busy", "xQueueGenericReceive", "xQueueGenericSend",
-        "DAP_SelectChannel", "swd_off", "target_power", "swd_init_debug", "delaymS", "channel_burn",
-    )
+class BoundaryScript(Firmware):
     MUTEX = Firmware.SNAPSHOT  # Opaque handle used only by the mock FreeRTOS calls.
     STOP_WORKER = object()
 
     def __init__(self, image, ch):
-        import unicorn
-
         super().__init__(image)
         self.ch = ch
         self.steps = deque()
         self.position = 0
-        r = self.regs
-        self.arg_regs = (r.UC_ARM_REG_R0, r.UC_ARM_REG_R1, r.UC_ARM_REG_R2, r.UC_ARM_REG_R3)
         self.write("g_swd_mutex", struct.pack("<I", self.MUTEX))
         self.write("g_channel_b_enable", b"\x01")
-        # app_TypeDef: mode, head, bin_name[32], firmware_name[32].
-        self.write("app_data", b"\x02\0" + b"firmware.bin".ljust(32, b"\0") + b"algo.bin\0")
-        for name in self.BOUNDARIES:
-            addr = self.symbols[name] & ~1
-            if name not in self.TIMING_OBSERVERS:
-                self.uc.mem_write(addr, b"\x70\x47")  # Thumb BX LR, only in emulator memory.
-            self.uc.hook_add(unicorn.UC_HOOK_CODE, self.dispatch, name, begin=addr, end=addr)
+
+    def hook(self, name, *, observe=False, callback=None):
+        import unicorn
+
+        addr = self.symbols[name] & ~1
+        if not observe:
+            self.uc.mem_write(addr, b"\x70\x47")  # Thumb BX LR, only in emulator memory.
+        self.uc.hook_add(unicorn.UC_HOOK_CODE, callback or self.dispatch, name, begin=addr, end=addr)
 
     def write(self, symbol, data):
         self.uc.mem_write(self.symbols[symbol], data)
@@ -300,6 +415,23 @@ class ProbeScript(Firmware):
             action()
         if reply is not None:
             uc.reg_write(self.regs.UC_ARM_REG_R0, reply)
+
+
+class ProbeScript(BoundaryScript):
+    """Drive the real worker/probe and verify the ordered boundary calls."""
+
+    TIMING_OBSERVERS = ("burn_time_probe_begin", "burn_time_probe_end", "burn_time_rearmed")
+    BOUNDARIES = TIMING_OBSERVERS + (
+        "vTaskDelay", "custombulk_is_busy", "xQueueGenericReceive", "xQueueGenericSend",
+        "DAP_SelectChannel", "swd_off", "target_power", "swd_init_debug", "delaymS", "channel_burn",
+    )
+
+    def __init__(self, image, ch):
+        super().__init__(image, ch)
+        # app_TypeDef: mode, head, bin_name[32], firmware_name[32].
+        self.write("app_data", b"\x02\0" + b"firmware.bin".ljust(32, b"\0") + b"algo.bin\0")
+        for name in self.BOUNDARIES:
+            self.hook(name, observe=name in self.TIMING_OBSERVERS)
 
     def scan(self, tries, *, reply_at=None, waiter=None, request_at=1):
         def check_waiting_clear():
@@ -413,11 +545,143 @@ def test_worker_insert_and_remove(image, ch):
     f.run_worker()
 
 
+class PollStep(NamedTuple):
+    delay: int
+    state: int
+    lock_ticks: int = 0
+    r0: int = 0
+    ack: int = 7
+    active: int | None = None
+
+
+class PageWaitScript(BoundaryScript):
+    """Execute channel_wait_page and its timing hooks; mock the SWD/RTOS boundary."""
+
+    ADDRESS = 0x0800ABCD
+    FAILURE = Firmware.SNAPSHOT + 0x200
+    LOCK_CYCLES, SELECT_CYCLES, UNLOCK_CYCLES = 53, 7, 11
+
+    def __init__(self, image, ch, active, tick):
+        super().__init__(image, ch)
+        self.tick = tick
+        self.cycles = 100
+        self.ack = 0
+        self.write("g_active_burns", bytes([active]))  # Dual enabled does not mean both are burning.
+        self.write("g_programming_active", b"\x01")
+        self.uc.mem_write(self.FAILURE, b"unchanged\0".ljust(64, b"\0"))
+        for name in ("vTaskDelay", "xQueueGenericReceive", "DAP_SelectChannel", PAGE_MARK,
+                     "swd_page_poll", PAGE_RECORD, "xQueueGenericSend"):
+            self.hook(name, observe=name in (PAGE_MARK, PAGE_RECORD))
+        self.hook("xTaskGetTickCount", callback=self.get_tick)
+        self.hook("swd_last_ack", callback=self.get_ack)
+        self.at_cycles(self.cycles, "begin", ch, 1)
+        self.call("stage", ch, PAGE)
+
+    def get_tick(self, uc, address, size, name):
+        uc.reg_write(self.arg_regs[0], self.tick & U32_MASK)
+
+    def get_ack(self, uc, address, size, name):
+        uc.reg_write(self.arg_regs[0], self.ack)
+
+    def advance(self, *, ticks=0, cycles=0):
+        self.tick += ticks
+        self.cycles += ticks * CYCLES_PER_MS + cycles
+        self.set_cycles(self.cycles)
+
+    def expect_poll(self, step):
+        def poll():
+            result_ptr = self.uc.reg_read(self.arg_regs[0])
+            self.uc.mem_write(result_ptr, struct.pack("<I", step.r0))
+            self.ack = step.ack
+            self.advance(cycles=self.poll_cycles(step))
+
+        def unlock():
+            self.advance(cycles=self.UNLOCK_CYCLES)
+            if step.active is not None:
+                self.write("g_active_burns", bytes([step.active]))
+
+        self.expect("vTaskDelay", step.delay, action=lambda: self.advance(ticks=step.delay))
+        self.expect("xQueueGenericReceive", self.MUTEX, 0, U32_MASK, 0, reply=1,
+                    action=lambda: self.advance(ticks=step.lock_ticks, cycles=self.LOCK_CYCLES))
+        self.expect("DAP_SelectChannel", self.ch, action=lambda: self.advance(cycles=self.SELECT_CYCLES))
+        self.expect(PAGE_MARK)
+        self.expect("swd_page_poll", reply=step.state, action=poll)
+        self.expect(PAGE_RECORD, self.ch, BP_RUNNING if step.state == PAGE_RUNNING else BP_POLL)
+        self.expect("xQueueGenericSend", self.MUTEX, 0, 0, 0, reply=1, action=unlock)
+
+    @staticmethod
+    def poll_cycles(step):
+        return 23 + step.state  # Give every outcome a distinct measured cost.
+
+    def run_wait(self, steps, failure):
+        for step in steps:
+            self.expect_poll(step)
+        ok = self.call_symbol("channel_wait_page", self.ch, self.ADDRESS, self.FAILURE, budget=100_000)
+        assert not self.steps, f"page wait returned before {self.steps[0][0]}"
+        assert ok == int(failure is None), ok
+        text = self.uc.mem_read(self.FAILURE, 64).partition(b"\0")[0].decode("ascii")
+        assert text == (failure if failure is not None else "unchanged"), text
+        self.call("end", self.ch, ok)
+        version, rows = self.snapshot()
+        assert version == 1 and not rows[self.ch ^ 1].valid
+        result = rows[self.ch]
+        assert (result.page_launch, result.launches) == (0, 0), result
+        assert (result.polls, result.running) == (len(steps), sum(s.state == PAGE_RUNNING for s in steps)), result
+        assert result.page_poll == sum(map(self.poll_cycles, steps)), result
+        assert result.cycles[SWD_LOCK] == sum(s.lock_ticks * CYCLES_PER_MS + self.LOCK_CYCLES for s in steps), result
+        assert result.page_gap == sum(s.delay * CYCLES_PER_MS + self.SELECT_CYCLES + self.UNLOCK_CYCLES
+                                      for s in steps), result
+        assert result.cycles[PAGE] + result.cycles[SWD_LOCK] == sum(result.cycles) == result.ended - result.started
+
+
+def test_page_cadence(image, ch, cadence):
+    def run(label, steps, *, active=2, tick=0, failure=None):
+        if cadence == "control":
+            steps = [step._replace(delay=1) for step in steps]
+        try:
+            PageWaitScript(image, ch, active, tick).run_wait(steps, failure)
+        except AssertionError as exc:
+            raise AssertionError(f"{cadence} page wait ch {ch}, {label}: {exc}") from exc
+
+    running = PollStep(1, PAGE_RUNNING)
+    wait = PollStep(1, PAGE_SWD_WAIT)
+    link = PollStep(1, PAGE_LINK_ERROR)
+    halted = PollStep(1, PAGE_HALTED)
+    run("one active burn, even in dual mode", [running] * 4 + [halted], active=1)
+    run("backoff, saturation, and independent WAIT/LINK resets", [
+        running, running._replace(delay=2), running._replace(delay=4), wait._replace(delay=4),
+        running, running._replace(delay=2), link._replace(delay=4), running, halted._replace(delay=2),
+    ])
+    run("peer burn ends during page wait", [running, running._replace(delay=2, active=1), running, halted])
+    run("nonzero R0 fails even when low 16 bits are zero", [halted._replace(r0=0x10000)],
+        failure="PAGE 0000 @0800ABCD")
+    run("only four consecutive link errors fail; WAIT and RUNNING each clear the streak",
+        [link] * 3 + [wait] + [link] * 3 + [running, link._replace(delay=2), link, link, link._replace(ack=4)],
+        failure="LINK 04 @0800ABCD")
+
+    # Block on the first mutex take to reach the deadline quickly, crossing the RTOS tick wrap.
+    # Candidate: 2990 + 1 + 2 + 4 = 2997, leaving 3 ticks (not the usual 4) before the final poll.
+    first = running._replace(lock_ticks=2990)
+    if cadence == "candidate":
+        before_deadline = [first, running._replace(delay=2), running._replace(delay=4)]
+    else:
+        before_deadline = [first] + [running] * 8  # Control reaches the same deadline at one-tick cadence.
+    for final, failure in ((running, "PAGE TIME @0800ABCD"), (wait, "WAIT TIME @0800ABCD"),
+                           (halted, None), (halted._replace(r0=0xABCD0123), "PAGE 0123 @0800ABCD")):
+        run("last delay and result checks at 3 s", before_deadline + [final._replace(delay=3)],
+            tick=U32_MASK - 2, failure=failure)
+    run("the fourth link error takes precedence at 3 s",
+        [link._replace(lock_ticks=2996), link, link, link._replace(ack=4)],
+        tick=U32_MASK - 2, failure="LINK 04 @0800ABCD")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("axf", type=Path, help="linked firmware AXF with symbols")
     parser.add_argument("--unicorn-path", type=Path, help="directory containing the Unicorn package")
-    parser.add_argument("--timing-only", action="store_true", help="skip probe regressions on older AXFs")
+    parser.add_argument("--timing-only", action="store_true", help="skip compiled probe, worker, and page-wait tests")
+    parser.add_argument("--page-cadence", choices=("candidate", "control"), default="candidate",
+                        help="expected poll cadence for page-profile AXFs (default: candidate)")
     args = parser.parse_args()
     if args.unicorn_path:
         sys.path.insert(0, str(args.unicorn_path.resolve()))
@@ -433,6 +697,17 @@ def main():
     print("PASS probe/SWD wait overlap, exclusions, and exclusive lock totals on both channels")
     test_mode_per_burn(Firmware(image))
     print("PASS mode flag overwritten on each burn")
+    if "burn_time_commit_end" in image[1]:
+        for owner in (0, 1):
+            test_commit_overlap(image, owner)
+        print("PASS final commit FS hold and peer wait overlap, both sockets, DWT wrap, reset and exclusions")
+    if PAGE_RECORD in image[1]:
+        test_page_accounting(Firmware(image))
+        print("PASS independent page launch, poll, running and gap attribution, DWT wrap and reset")
+        if not args.timing_only:
+            for ch in (0, 1):
+                test_page_cadence(image, ch, args.page_cadence)
+            print(f"PASS compiled {args.page_cadence} page cadence, lock exclusions and deadline checks on both channels")
     if not args.timing_only:
         for ch in (0, 1):
             test_probe_policy(image, ch)
