@@ -7,6 +7,7 @@
 #include "DAP_config.h"
 #include "DAP.h"
 #include "debug_cm.h"
+#include "burn_time.h"
 
 extern uint32_t Flash_Page_Size;
 
@@ -836,6 +837,8 @@ static uint8_t swd_wait_until_halted(void)
 
 	for (i = 0; i < timeout; i++)
 	{
+		/* A long poll can outlast a DWT wrap with the scheduler masked. */
+		if ((i & 255U) == 255U) burn_time_sample();
 		#if 1
 		if (!swd_read_word(DBG_HCSR, &val))
 		{

@@ -7,6 +7,7 @@
 #include "DAP_config.h"
 #include "usbd_custombulk.h"
 #include "burn_quota.h"
+#include "burn_time.h"
 #include "selection_store.h"
 #include "image_task.h"
 #include "bsp_lcd.h"
@@ -69,8 +70,8 @@ uint8_t D[64] = {0};
 #define AUTO_PRESENT_CNT    2       /* 连续检测到几次才判定芯片在位 */
 #define AUTO_ABSENT_CNT     2       /* 连续丢失几次才判定芯片已取出 */
 #define AUTO_HOLD_MIN_MS    600     /* HOLD状态至少停留这么久 */
-#define AUTO_OK_MS          1500    /* 成功时结果停留时间 */
-#define AUTO_FAIL_MS        3000    /* 失败时结果停留时间 */
+#define AUTO_OK_MS          500     /* 成功时结果停留时间 */
+#define AUTO_FAIL_MS        1000    /* 失败时结果停留时间 */
 
 enum { AUTO_ST_WAIT = 0, AUTO_ST_BURN, AUTO_ST_RESULT, AUTO_ST_HOLD };
 
@@ -425,6 +426,7 @@ static void reset_feedback(void)
 /* 成功色只在整体烧录和次数提交都成功后显示，结果保留在主界面底部进度行。 */
 static void finish_burn_ui(void)
 {
+    burn_time_end(0, g_burn_ok);
     if(g_burn_ok)
     {
         g_ui_state = UI_PROGRESS_SUCCESS; g_ui_percent = 100;
@@ -884,8 +886,68 @@ static void power_down(void)
 
 /* 离线选择页：芯片型号只读；手动模式仅固件选择和开始烧录参与按键导航。
  * 返回 - 无 */
+static uint8_t time_page;
+static uint32_t time_page_version;
+
+static void draw_burn_times(void)
+{
+    enum { TOTAL = BT_COUNT, LOCK_SUM, MISS_WAIT, REARM };
+    static const struct { const char *label; uint8_t value; } rows[] = {
+        {"Total", TOTAL}, {"Connect", BT_CONNECT}, {"Erase", BT_ERASE}, {"File", BT_IO},
+        {"SWD load", BT_LOAD}, {"Page", BT_PAGE}, {"Verify", BT_VERIFY}, {"OPT", BT_OPT},
+        {"Quota", BT_QUOTA}, {"Lock", LOCK_SUM}, {"SWD wait", BT_SWD_LOCK}, {"  NoReply", MISS_WAIT},
+        {"FS wait", BT_FS_LOCK}, {"Q wait", BT_QUOTA_LOCK}, {"Other", BT_OTHER}, {"Re-arm", REARM}
+    };
+    static burn_time_result_t results[2];
+    char line[48], cells[2][12];
+    uint32_t row, ch, pair_ms;
+    time_page_version = burn_time_snapshot(results);
+    UI_EnterPage(13);
+    for(ch = 0; ch < 2; ++ch) {
+        const burn_time_result_t *r = &results[ch];
+        if(r->valid) sprintf(cells[ch], "%c:%c/%s", ch ? 'B' : 'A', r->dual ? 'D' : 'S', r->ok ? "OK" : "NG");
+        else strcpy(cells[ch], ch ? "B:--" : "A:--");
+    }
+    sprintf(line, "%-9s%8s %8s", "TIME (ms)", cells[0], cells[1]);
+    UI_TextColor(8, 0, line, 16, 1, LCD_YELLOW);
+    for(row = 0; row < sizeof(rows)/sizeof(rows[0]); ++row) {
+        uint8_t value = rows[row].value;
+        for(ch = 0; ch < 2; ++ch) {
+            const burn_time_result_t *r = &results[ch];
+            uint64_t cycles;
+            if(!r->valid || (value == REARM && !r->ready)) { strcpy(cells[ch], "--"); continue; }
+            switch(value) {
+            case TOTAL: cycles = r->ended - r->started; break;
+            case LOCK_SUM: cycles = r->cycles[BT_SWD_LOCK] + r->cycles[BT_FS_LOCK] + r->cycles[BT_QUOTA_LOCK]; break;
+            case MISS_WAIT: cycles = r->miss_wait; break;
+            case REARM: cycles = r->ready - r->ended; break;
+            default: cycles = r->cycles[value]; break;
+            }
+            sprintf(cells[ch], "%lu", (unsigned long)burn_time_ms(cycles));
+        }
+        sprintf(line, "%-9s%8s %8s", rows[row].label, cells[0], cells[1]);
+        UI_FieldColor((uint8_t)row, 8, (uint16_t)(17+17*row), 224, 16, line, 16, 1, LCD_WHITE);
+    }
+    pair_ms = burn_time_pair_ms(results);
+    if(pair_ms) sprintf(cells[0], "%lu", (unsigned long)pair_ms);
+    else strcpy(cells[0], "--");
+    sprintf(line, "A+B total: %-10s ms", cells[0]);
+    UI_TextColor(8, 288, line, 16, 1, LCD_YELLOW);
+    UI_TextColor(8, 304, "MID: back      S=1ch D=2ch", 16, 1, LCD_BLUE);
+}
+
 void mode2(void)
 {
+    if(time_page && g_programming_active) time_page = 0;
+    if(key_val.mesg && key_val.key == key_l_left && !g_programming_active) {
+        time_page = !time_page;
+        g_ui_ready = 0;
+        if(time_page) draw_burn_times();
+        key_val.mesg = 0;
+    } else if(time_page && key_val.mesg && key_val.key != key_l_mid) {
+        if(key_val.key == key_mid) time_page = 0;
+        key_val.mesg = 0;
+    }
     if(g_auto_en) app_data.head = 2;
     else if(app_data.head != 1 && app_data.head != 2 && app_data.head != 3) app_data.head = 1;
     if(key_val.mesg)
@@ -942,7 +1004,11 @@ void mode2(void)
         key_val.mesg = 0; oled.Refresh_flag = 1;
     }
     if(g_auto_en && !g_channel_b_enable && !custombulk_is_busy())
-    { auto_standby_tick(); if(app_data.mode != 2) return; }
+    { auto_standby_tick(); if(app_data.mode != 2) { time_page = 0; return; } }
+    if(time_page) {
+        if(time_page_version != burn_time_revision()) draw_burn_times();
+        return;
+    }
     if(g_auto_en || g_channel_b_enable) auto_draw();
     else { if(!g_last_status[0]) reset_feedback(); draw_main(); }
     oled.Refresh_flag = 0;
@@ -1136,6 +1202,7 @@ static void auto_standby_tick(void)
 					g_absent_seen = 0;
 					g_present_seen = 0;
 					g_auto_st = AUTO_ST_WAIT;
+                    burn_time_rearmed(0);
                     reset_feedback();
 					oled.Refresh_flag = 1;
 				}
@@ -1169,6 +1236,8 @@ void mode4(void)
 	uint32_t init_step = 0xFFFF;
 
     if(g_burn_done) { app_data.mode = 2; draw_main(); return; }
+    burn_time_begin(0, 0);
+    burn_time_stage(0, BT_OTHER);
     g_burn_done = 1; g_burn_ok = 0;
     g_ui_state = UI_PROGRESS_RUNNING; g_ui_percent = 0;
     strcpy(g_last_status, "\xD7\xBC\xB1\xB8\xC9\xD5\xC2\xBC"); draw_main();
@@ -1177,19 +1246,25 @@ void mode4(void)
     {
         show_download_status("\xD1\xA1\xD4\xF1\xB1\xA3\xB4\xE6\xCA\xA7\xB0\xDC"); finish_burn_ui(); return;
     }
+    burn_time_stage(0, BT_QUOTA);
     if(burn_quota_select(app_data.bin_name) != BURN_QUOTA_OK ||
        burn_quota_fault() || (burn_quota_enabled() && !burn_quota_remaining()))
     {
 quota_rejected:
+        burn_time_stage(0, BT_OTHER);
         show_download_status(burn_quota_fault() ? "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3" : "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3");
         finish_burn_ui(); return;
     }
 
+	burn_time_stage(0, BT_OTHER);
 	if(app_data.bin_name[0] != '\0' && app_data.firmware_name[0] != '\0')
 	{
+        burn_time_stage(0, BT_QUOTA);
         if(burn_quota_begin() != BURN_QUOTA_OK) goto quota_rejected;
+        burn_time_stage(0, BT_OTHER);
 		show_download_status("\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC"); /* 显示文字：正在连接芯片 */
 		/* 烧录前先给目标重新上电并抢占SWD */
+		burn_time_stage(0, BT_CONNECT);
 		swd_off();
 		TARGET_PWR_OFF;
 		delaymS(200);
@@ -1197,6 +1272,7 @@ quota_rejected:
 		/* 重试SWD：赶在固件关闭SWD之前抓住CPU */
 		{
 			uint8_t c = target_connect_halt();
+			burn_time_stage(0, BT_OTHER);
 			if (c != 1) {
 				show_download_status(c == 2 ? "\xD0\xBE\xC6\xAC\xCE\xDE\xB7\xA8\xD4\xDD\xCD\xA3" : "\x53\x57\x44\xC1\xAC\xBD\xD3\xCA\xA7\xB0\xDC"); /* 显示文字：芯片无法暂停；或 SWD连接失败 */
 				swd_off();
@@ -1207,11 +1283,13 @@ quota_rejected:
 
 		err_flag = 0;
 		sprintf((char *)D, "0:/download/firmware/%s\0", app_data.firmware_name);
+		burn_time_stage(0, BT_IO);
 		ret = f_open(&fd, (TCHAR *)D, FA_READ);
 		if(ret == FR_OK)								// 算法文件读取成功
 		{
 			uint32_t fw_size = f_size(&fd);
 			ret = f_read(&fd, DATA_BUFFER, 2048, &ulReadNum);
+			burn_time_stage(0, BT_OTHER);
 			if(ret == FR_OK && ulReadNum != 0)
 			{
 				uint32_t algo_size = ((program_target_t *)DATA_BUFFER)->algo_size;
@@ -1229,14 +1307,18 @@ quota_rejected:
 				}
 				else
 				{
+					burn_time_stage(0, BT_IO);
 					f_close(&fd);
+					burn_time_stage(0, BT_OTHER);
 					show_download_status("ALGO FORMAT ERR");
 					goto download_return;
 				}
 				/* 只读取了2048字节，算法块必须放得下，否则目标端会执行未初始化数据 */
 				if(algo_size > 2048U - hdr_size)
 				{
+					burn_time_stage(0, BT_IO);
 					f_close(&fd);
+					burn_time_stage(0, BT_OTHER);
 					show_download_status("ALGO SIZE ERR");
 					goto download_return;
 				}
@@ -1251,10 +1333,13 @@ quota_rejected:
 					memmove(DATA_BUFFER + 56, DATA_BUFFER + 68, algo_size);
 				}
 			}
+			burn_time_stage(0, BT_IO);
 			f_close(&fd);
+			burn_time_stage(0, BT_OTHER);
 		}
 		else 
 		{
+			burn_time_stage(0, BT_OTHER);
 			show_download_status("\x45\x52\x30\x3A\xCB\xE3\xB7\xA8\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC"); /* 显示文字：ER0:算法打开失败 */
 			goto download_return;
 		}
@@ -1267,8 +1352,10 @@ quota_rejected:
 			g_diag_ctrl_stat = 0xFFFFFFFF;
 			g_diag_hcsr = 0xFFFFFFFF;
 			g_diag_step = 0xFFFF;
+			burn_time_stage(0, BT_CONNECT);
 			init_err = target_flash_init((program_target_t *)DATA_BUFFER,
 			                             ((program_target_t *)DATA_BUFFER)->flash_addr);
+			burn_time_stage(0, BT_OTHER);
 			if(init_err == ERROR_SUCCESS)
 				err_flag = 2;
 			else
@@ -1288,14 +1375,17 @@ quota_rejected:
 		{
 			show_download_status("\xD5\xFD\xD4\xDA\xB2\xC1\xB3\xFD\xD0\xBE\xC6\xAC"); /* 显示文字：正在擦除芯片 */
 			OLED_Refresh();
+			burn_time_stage(0, BT_ERASE);
 			if(target_flash_erase_chip((program_target_t *)DATA_BUFFER) == ERROR_SUCCESS)
 			{
+				burn_time_stage(0, BT_OTHER);
 				err_flag = 3;
 				/* 全片擦除同时会解除读保护，但该动作要等目标重新上电才生效。
 				   未重新上电就编程会被拒绝（ER6），因此写之前先断电重上电
 				   并重新初始化算法。 */
 				show_download_status("\xD5\xFD\xD4\xDA\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF"); /* 显示文字：正在重新初始化 */
 				OLED_Refresh();
+				burn_time_stage(0, BT_CONNECT);
 				swd_off();
 				TARGET_PWR_OFF;
 				delaymS(100);
@@ -1305,12 +1395,15 @@ quota_rejected:
 				   target_flash_init((program_target_t *)DATA_BUFFER,
 				                     ((program_target_t *)DATA_BUFFER)->flash_addr) != ERROR_SUCCESS)
 				{
+					burn_time_stage(0, BT_OTHER);
 					show_download_error("\x45\x52\x37\x3A\xD6\xD8\xD0\xC2\xB3\xF5\xCA\xBC\xBB\xAF\xCA\xA7\xB0\xDC", g_last_syscall_r0, g_diag_step, 0); /* 显示文字：ER7:重新初始化失败 */
 					goto download_return;
 				}
+				burn_time_stage(0, BT_OTHER);
 			}
 			else
 			{
+				burn_time_stage(0, BT_OTHER);
 				target_flash_uninit((program_target_t *)DATA_BUFFER);
 				sprintf((char *)D, "\xB2\xC1\xB3\xFD\xCA\xA7\xB0\xDC\x3A\x25\x30\x34\x58", (unsigned int)(g_erase_diag & 0xFFFF)); /* 显示文字：擦除失败:%04X */
 				show_download_status((char *)D);
@@ -1347,7 +1440,9 @@ quota_rejected:
 		if(err_flag == 3)
 		{
 			sprintf((char *)D, "0:/download/bin/%s\0", app_data.bin_name);
+			burn_time_stage(0, BT_IO);
 			ret = f_open(&fd, (TCHAR *)D, FA_READ);
+			burn_time_stage(0, BT_OTHER);
 			if(ret == FR_OK)
 				err_flag = 4;
 		}
@@ -1366,7 +1461,9 @@ quota_rejected:
 			taskENTER_CRITICAL();
 			for(i = 0; i < bin_size;)
 			{
+				burn_time_stage(0, BT_IO);
 				ret = f_read(&fd, (DATA_BUFFER + 2048), 2048, &ulReadNum);
+				burn_time_stage(0, BT_OTHER);
 				if(ret == FR_OK && ulReadNum != 0)
 				{
 					if(target_flash_program_page((program_target_t *)DATA_BUFFER, 							
@@ -1397,22 +1494,28 @@ quota_rejected:
 			{
 				show_download_status("\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE"); /* 显示文字：正在校验固件 */
 				OLED_Refresh();
+				burn_time_stage(0, BT_IO);
 				f_close(&fd);
 				sprintf((char *)D, "0:/download/bin/%s", app_data.bin_name);
 				if(f_open(&fd, (TCHAR *)D, FA_READ) == FR_OK)
 				{
+					burn_time_stage(0, BT_OTHER);
 					for(j = 0; j < bin_size; )
 					{
+						burn_time_stage(0, BT_IO);
 						ret = f_read(&fd, (DATA_BUFFER + 2048), 2048, &ulReadNum);
+						burn_time_stage(0, BT_OTHER);
 						if(ret != FR_OK || ulReadNum == 0) { i = 0; break; }
+						burn_time_stage(0, BT_VERIFY);
 						if(target_flash_verify((program_target_t *)DATA_BUFFER,
 						                        ((program_target_t *)DATA_BUFFER)->flash_addr + j,
 						                        (const uint8_t *)(DATA_BUFFER + 2048),
-						                        ulReadNum) != ERROR_SUCCESS) { i = 0; break; }
+						                        ulReadNum) != ERROR_SUCCESS) { burn_time_stage(0, BT_OTHER); i = 0; break; }
+						burn_time_stage(0, BT_OTHER);
 						j += ulReadNum;
 					}
 				}
-				else { i = 0; }
+				else { burn_time_stage(0, BT_OTHER); i = 0; }
 				if(i == bin_size)
 				{
 					show_download_status("\xB9\xCC\xBC\xFE\xD0\xA3\xD1\xE9\xCD\xA8\xB9\xFD"); /* 显示文字：固件校验通过 */
@@ -1422,7 +1525,9 @@ quota_rejected:
 					show_download_status("\xB9\xCC\xBC\xFE\xD0\xA3\xD1\xE9\xCA\xA7\xB0\xDC"); /* 显示文字：固件校验失败 */
 				}
 				OLED_Refresh();
+				burn_time_stage(0, BT_IO);
 				f_close(&fd);
+				burn_time_stage(0, BT_OTHER);
 			}
 
 /* 扩展算法的OPT编程 */
@@ -1450,6 +1555,7 @@ quota_rejected:
 				}
 
 				sprintf((char *)D, "0:/download/bin/%s", opt_name);
+				burn_time_stage(0, BT_OPT);
 				if(f_open(&fd_opt, (TCHAR *)D, FA_READ) == FR_OK)
 				{
 					/* 缓冲区先填 0xFF: 算法按 opt_size(16B) 写, 文件可能不足,
@@ -1484,10 +1590,12 @@ quota_rejected:
 								}
 								else opt_state = 1;
 							}
+							burn_time_stage(0, BT_OTHER);
 							show_download_status("\x4F\x50\x54\xD0\xB4\xC8\xEB\xCD\xEA\xB3\xC9"); /* 显示文字：OPT写入完成 */
 							}
 							else
 							{
+								burn_time_stage(0, BT_OTHER);
 								show_download_status("\x4F\x50\x54\xD0\xB4\xC8\xEB\xCA\xA7\xB0\xDC"); /* 显示文字：OPT写入失败 */
 								opt_failed = 1;
 							}
@@ -1495,12 +1603,14 @@ quota_rejected:
 					}
 					else
 					{
+						burn_time_stage(0, BT_OTHER);
 						show_download_status("\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); /* 显示文字：OPT读取失败 */
 						opt_failed = 1;
 					}
 				}
 				else
 				{
+					burn_time_stage(0, BT_OTHER);
 					show_download_status("\xC8\xB1\xC9\xD9\x4F\x50\x54\xCE\xC4\xBC\xFE"); /* 显示文字：缺少OPT文件 */
 					opt_failed = 1;
 				}
@@ -1527,6 +1637,7 @@ quota_rejected:
 				}
 				show_download_status("\xD5\xFD\xD4\xDA\xB6\xC1\xC8\xA1\x4F\x50\x54\xCE\xC4\xBC\xFE"); /* 显示文字：正在读取OPT文件 */
 				OLED_Refresh();
+				burn_time_stage(0, BT_OPT);
 				if(f_open(&fd_opt2, (TCHAR *)D, FA_READ) == FR_OK)
 				{
 					memset(DATA_BUFFER + 2048, 0xFF, 128);
@@ -1538,10 +1649,12 @@ quota_rejected:
 						{
 							/* RDP 写成加密值后调试口立即被锁, 紧接着读 OPT 必然失败。
 							   这不是烧录错误: 读不回来本身就证明加密已经生效。 */
+							burn_time_stage(0, BT_OTHER);
 							show_download_status("\x4F\x50\x54\xCD\xEA\xB3\xC9\xB2\xA2\xD2\xD1\xCB\xF8\xB6\xA8"); /* 显示文字：OPT完成并已锁定 */
 						}
 						else
 						{
+							burn_time_stage(0, BT_OTHER);
 							show_download_status("\xD5\xFD\xD4\xDA\xBC\xEC\xB2\xE9\x4F\x50\x54"); /* 显示文字：正在检查OPT */
 							OLED_Refresh();
 							{
@@ -1556,11 +1669,13 @@ quota_rejected:
 								algo_ext.opt_program = opt_prog_addr;
 								algo_ext.opt_addr = opt_base_addr;
 								algo_ext.opt_size = opt_byte_size;
+								burn_time_stage(0, BT_OPT);
 								if(target_flash_verify_ext(&algo_ext,
 								                              opt_base_addr,
 								                              (const uint8_t *)(DATA_BUFFER + 2048),
 								                              vlen) != ERROR_SUCCESS)
 								{
+									burn_time_stage(0, BT_OTHER);
 									/* 显示第一个不一致的字节: 偏移 / 期望 / 读回 */
 									if(g_vfy_off == 0xFFFFFFFF)
 										sprintf((char *)D, "\x4F\x50\x54\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); /* 显示文字：OPT读取失败 */
@@ -1574,6 +1689,7 @@ quota_rejected:
 								}
 								else
 								{
+									burn_time_stage(0, BT_OTHER);
 									show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xCD\xA8\xB9\xFD"); /* 显示文字：OPT校验通过 */
 								}
 							}
@@ -1581,13 +1697,17 @@ quota_rejected:
 					}
 					else
 					{
+						burn_time_stage(0, BT_OTHER);
 						show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC"); /* 显示文字：OPT校验读取失败 */
 						opt_failed = 1;
 					}
+					burn_time_stage(0, BT_OPT);
 					f_close(&fd_opt2);
+					burn_time_stage(0, BT_OTHER);
 				}
 				else
 				{
+					burn_time_stage(0, BT_OTHER);
 					show_download_status("\x4F\x50\x54\xD0\xA3\xD1\xE9\xCE\xC4\xBC\xFE\xD2\xEC\xB3\xA3"); /* 显示文字：OPT校验文件异常 */
 					opt_failed = 1;
 				}
@@ -1618,18 +1738,25 @@ quota_rejected:
 				swd_set_target_reset(0);
 			}
 			taskEXIT_CRITICAL();
+			burn_time_stage(0, BT_IO);
 			f_close(&fd);
+			burn_time_stage(0, BT_OTHER);
 		}
 		else show_download_status("\x45\x52\x34\x3A\xB9\xCC\xBC\xFE\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC"); /* 显示文字：ER4:固件打开失败 */
 		
 download_return:
+        burn_time_stage(0, BT_QUOTA);
         if(burn_quota_finish(g_burn_ok) != BURN_QUOTA_OK)
         {
+            burn_time_stage(0, BT_OTHER);
             g_burn_ok = 0;
             show_download_status("\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3"); /* 显示文字：次数记录异常 */
         }
         else
+        {
+            burn_time_stage(0, BT_OTHER);
             show_counts();
+        }
         swd_off();
         TARGET_PWR_OFF;
         finish_burn_ui();
@@ -2156,16 +2283,72 @@ static SemaphoreHandle_t g_quota_mutex;
 static SemaphoreHandle_t g_fs_mutex;
 static void fs_lock(void) { if(g_fs_mutex) xSemaphoreTake(g_fs_mutex, portMAX_DELAY); }
 static void fs_unlock(void) { if(g_fs_mutex) xSemaphoreGive(g_fs_mutex); }
-static FRESULT wf_open(FIL *fp, const TCHAR *path, BYTE mode) { FRESULT r; fs_lock(); r=f_open(fp,path,mode); fs_unlock(); return r; }
-static FRESULT wf_read(FIL *fp, void *buf, UINT len, UINT *br) { FRESULT r; fs_lock(); r=f_read(fp,buf,len,br); fs_unlock(); return r; }
-static FRESULT wf_close(FIL *fp) { FRESULT r; fs_lock(); r=f_close(fp); fs_unlock(); return r; }
+static burn_stage_t wf_lock(uint8_t ch, burn_stage_t stage)
+{
+    burn_stage_t prev = burn_time_stage(ch, BT_FS_LOCK);
+    fs_lock();
+    burn_time_stage(ch, stage);
+    return prev;
+}
+
+static FRESULT wf_open(uint8_t ch, burn_stage_t stage, FIL *fp, const TCHAR *path, BYTE mode)
+{
+    burn_stage_t prev = wf_lock(ch, stage);
+    FRESULT r = f_open(fp, path, mode);
+    burn_time_stage(ch, prev);
+    fs_unlock();
+    return r;
+}
+
+static FRESULT wf_read(uint8_t ch, burn_stage_t stage, FIL *fp, void *buf, UINT len, UINT *br)
+{
+    burn_stage_t prev = wf_lock(ch, stage);
+    FRESULT r = f_read(fp, buf, len, br);
+    burn_time_stage(ch, prev);
+    fs_unlock();
+    return r;
+}
+
+static FRESULT wf_close(uint8_t ch, burn_stage_t stage, FIL *fp)
+{
+    burn_stage_t prev = wf_lock(ch, stage);
+    FRESULT r = f_close(fp);
+    burn_time_stage(ch, prev);
+    fs_unlock();
+    return r;
+}
+
+static void w_quota_lock(uint8_t ch)
+{
+    burn_time_stage(ch, BT_FS_LOCK);
+    fs_lock();
+    if(g_quota_mutex) {
+        burn_time_stage(ch, BT_QUOTA_LOCK);
+        xSemaphoreTake(g_quota_mutex, portMAX_DELAY);
+    }
+    burn_time_stage(ch, BT_QUOTA);
+}
+
 __align(4) static uint8_t g_ch_buf[2][4096];
 static volatile uint8_t g_active_burns;
+static volatile uint8_t g_swd_burn_waiting[2];
+
+static void swd_acquire(uint8_t ch)
+{
+    if(g_swd_mutex)
+    {
+        burn_stage_t prev = burn_time_stage(ch, BT_SWD_LOCK);
+        xSemaphoreTake(g_swd_mutex, portMAX_DELAY);
+        burn_time_stage(ch, prev);
+    }
+    DAP_SelectChannel(ch);
+}
 
 static void swd_lock(uint8_t ch)
 {
-    if(g_swd_mutex) xSemaphoreTake(g_swd_mutex, portMAX_DELAY);
-    DAP_SelectChannel(ch);
+    g_swd_burn_waiting[ch] = 1U;
+    swd_acquire(ch);
+    g_swd_burn_waiting[ch] = 0U;
 }
 
 static void swd_unlock(void)
@@ -2238,22 +2421,32 @@ static void burn_active(uint8_t on)
     taskEXIT_CRITICAL();
 }
 
-static uint8_t channel_probe(uint8_t ch)
+enum { PROBE_TRIES = 50, PROBE_MAX_DEFERRALS = 3 };
+typedef enum { PROBE_NO_REPLY, PROBE_PRESENT, PROBE_DEFERRED } probe_result_t;
+
+static probe_result_t channel_probe(uint8_t ch, uint8_t may_yield)
 {
-    uint8_t ok = 0;
+    probe_result_t result = PROBE_NO_REPLY;
     int i;
-    swd_lock(ch);
+    swd_acquire(ch);
+    burn_time_probe_begin();
     swd_off();
     target_power(ch, 1);
-    for(i = 0; i < 50; i++)
+    for(i = 0; i < PROBE_TRIES; i++)
     {
-        if(swd_init_debug()) { ok = 1; break; }
+        if(swd_init_debug()) { result = PROBE_PRESENT; break; }
+        if(may_yield && g_swd_burn_waiting[ch ^ 1U] && i + 1 < PROBE_TRIES)
+        {
+            result = PROBE_DEFERRED;
+            break;
+        }
         delaymS(1);
     }
     swd_off();
     target_power(ch, 0);
+    burn_time_probe_end(ch, result == PROBE_PRESENT);
     swd_unlock();
-    return ok;
+    return result;
 }
 
 static void channel_burn(uint8_t ch)
@@ -2270,24 +2463,27 @@ static void channel_burn(uint8_t ch)
     char path[80], opt_path[80];
     const char *dot;
 
+    burn_time_begin(ch, 1);
     burn_active(1);
 
     /* Quota pre-check under the ledger lock. */
-    fs_lock();
-    if(g_quota_mutex) xSemaphoreTake(g_quota_mutex, portMAX_DELAY);
+    w_quota_lock(ch);
     {
         uint8_t quota_ok = (burn_quota_select(app_data.bin_name) == BURN_QUOTA_OK) &&
                            !burn_quota_fault();
         uint8_t enough = !burn_quota_enabled() || burn_quota_remaining() > 0U;
+        burn_time_stage(ch, BT_OTHER);
         if(g_quota_mutex) xSemaphoreGive(g_quota_mutex);
         fs_unlock();
         if(!quota_ok)
         {
+            burn_time_end(ch, 0U);
             w_status(ch, UI_PROGRESS_FAILED, 100, "\xB4\xCE\xCA\xFD\xBC\xC7\xC2\xBC\xD2\xEC\xB3\xA3");
             burn_active(0); return;
         }
         if(!enough)
         {
+            burn_time_end(ch, 0U);
             w_status(ch, UI_PROGRESS_FAILED, 100, "\xCA\xA3\xD3\xE0\xB4\xCE\xCA\xFD\xB2\xBB\xD7\xE3");
             burn_active(0); return;
         }
@@ -2296,15 +2492,17 @@ static void channel_burn(uint8_t ch)
     /* Load and validate the algorithm into this channel's private buffer. */
     w_status(ch, UI_PROGRESS_RUNNING, 0, "\xD5\xFD\xD4\xDA\xC1\xAC\xBD\xD3\xD0\xBE\xC6\xAC");
     sprintf(path, "0:/download/firmware/%s", (const char *)app_data.firmware_name);
-    if(wf_open(&fd, (const TCHAR *)path, FA_READ) != FR_OK)
+    if(wf_open(ch, BT_IO, &fd, (const TCHAR *)path, FA_READ) != FR_OK)
     {
+        burn_time_end(ch, 0U);
         w_status(ch, UI_PROGRESS_FAILED, 100, "\xCB\xE3\xB7\xA8\xB4\xF2\xBF\xAA\xCA\xA7\xB0\xDC");
         burn_active(0); return;
     }
     fw_size = f_size(&fd);
-    if(wf_read(&fd, buf, 2048, &n) != FR_OK || n == 0U)
+    if(wf_read(ch, BT_IO, &fd, buf, 2048, &n) != FR_OK || n == 0U)
     {
-        wf_close(&fd);
+        wf_close(ch, BT_IO, &fd);
+        burn_time_end(ch, 0U);
         w_status(ch, UI_PROGRESS_FAILED, 100, "\xCB\xE3\xB7\xA8\xB6\xC1\xC8\xA1\xCA\xA7\xB0\xDC");
         burn_active(0); return;
     }
@@ -2312,14 +2510,16 @@ static void channel_burn(uint8_t ch)
     else if(fw_size == algo->algo_size + (PROG_TARGET_EXT_HDR_SIZE - 12U)) is_ext = 0U;
     else
     {
-        wf_close(&fd);
+        wf_close(ch, BT_IO, &fd);
+        burn_time_end(ch, 0U);
         w_status(ch, UI_PROGRESS_FAILED, 100, "\xCB\xE3\xB7\xA8\xD2\xEC\xB3\xA3");
         burn_active(0); return;
     }
     if(n != fw_size || !algo->program_buffer_size ||
        algo->algo_size > 2048U - (is_ext ? PROG_TARGET_EXT_HDR_SIZE : (PROG_TARGET_EXT_HDR_SIZE - 12U)))
     {
-        wf_close(&fd);
+        wf_close(ch, BT_IO, &fd);
+        burn_time_end(ch, 0U);
         w_status(ch, UI_PROGRESS_FAILED, 100, "\xCB\xE3\xB7\xA8\xD2\xEC\xB3\xA3");
         burn_active(0); return;
     }
@@ -2330,9 +2530,10 @@ static void channel_burn(uint8_t ch)
         opt_size = ((program_target_ext_t *)buf)->opt_size;
         memmove(buf + 56, buf + 68, algo->algo_size);
     }
-    wf_close(&fd);
+    wf_close(ch, BT_IO, &fd);
 
     /* Do not monopolize the other socket's SWD during power-off dwell. */
+    burn_time_stage(ch, BT_CONNECT);
     swd_lock(ch);
     swd_off();
     target_power(ch, 0);
@@ -2344,12 +2545,18 @@ static void channel_burn(uint8_t ch)
     else if(target_flash_init(algo, algo->flash_addr) != ERROR_SUCCESS) { strcpy(failure, "INIT"); ok = 0U; }
     else
     {
+        error_t err;
+        burn_time_stage(ch, BT_OTHER);
         w_status(ch, UI_PROGRESS_RUNNING, 10, "\xD5\xFD\xD4\xDA\xB2\xC1\xB3\xFD\xD0\xBE\xC6\xAC");
-        if(target_flash_erase_chip(algo) != ERROR_SUCCESS) { strcpy(failure, "ERASE"); ok = 0U; }
+        burn_time_stage(ch, BT_ERASE);
+        err = target_flash_erase_chip(algo);
+        burn_time_stage(ch, BT_OTHER);
+        if(err != ERROR_SUCCESS) { strcpy(failure, "ERASE"); ok = 0U; }
     }
     if(ok)
     {
         /* RDP unlock takes effect after a power cycle. */
+        burn_time_stage(ch, BT_CONNECT);
         swd_off(); target_power(ch, 0);
         swd_unlock();
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -2367,11 +2574,12 @@ static void channel_burn(uint8_t ch)
         }
     }
     swd_unlock();
+    burn_time_stage(ch, BT_OTHER);
 
     if(ok)
     {
         sprintf(path, "0:/download/bin/%s", (const char *)app_data.bin_name);
-        fr = wf_open(&fd, (const TCHAR *)path, FA_READ);
+        fr = wf_open(ch, BT_IO, &fd, (const TCHAR *)path, FA_READ);
         if(fr != FR_OK) { sprintf(failure, "OPEN %u", (unsigned)fr); ok = 0U; }
         else
         {
@@ -2384,24 +2592,30 @@ static void channel_burn(uint8_t ch)
             {
                 uint32_t addr = algo->flash_addr + i;
                 UINT want = (UINT)(bin_size - i > page ? page : bin_size - i);
-                fr = wf_read(&fd, buf + 2048, want, &n);
+                fr = wf_read(ch, BT_IO, &fd, buf + 2048, want, &n);
                 if(fr != FR_OK || n != want) { sprintf(failure, "READ %u @%08lX", (unsigned)fr, (unsigned long)i); ok = 0U; break; }
                 swd_lock(ch);
+                burn_time_stage(ch, BT_LOAD);
                 if(target_flash_program_prepare(algo, addr, buf + 2048, n) != n)
                 {
                     uint8_t ack = swd_last_ack();
                     if(!swd_can_retry_ram_write(ack) || target_flash_program_prepare(algo, addr, buf + 2048, n) != n)
                     { sprintf(failure, "SRAM %02X @%08lX", (unsigned)ack, (unsigned long)addr); ok = 0U; }
                 }
+                burn_time_stage(ch, ok ? BT_PAGE : BT_OTHER);
                 if(ok && !target_flash_program_start(algo, addr, n))
-                { sprintf(failure, "START %02lX @%08lX", (unsigned long)g_diag_step, (unsigned long)addr); ok = 0U; }
+                {
+                    burn_time_stage(ch, BT_OTHER);
+                    sprintf(failure, "START %02lX @%08lX", (unsigned long)g_diag_step, (unsigned long)addr); ok = 0U;
+                }
                 swd_unlock();
+                if(ok && !channel_wait_page(ch, addr, failure)) ok = 0U;
+                burn_time_stage(ch, BT_OTHER);
                 if(!ok) break;
-                if(!channel_wait_page(ch, addr, failure)) { ok = 0U; break; }
                 i += n;
                 w_progress(ch, (uint8_t)(i * 100U / bin_size));
             }
-            wf_close(&fd);
+            wf_close(ch, BT_IO, &fd);
         }
     }
 
@@ -2409,24 +2623,28 @@ static void channel_burn(uint8_t ch)
     {
         uint32_t addr;
         w_status(ch, UI_PROGRESS_RUNNING, 85, "\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE");
-        if(wf_open(&fd, (const TCHAR *)path, FA_READ) != FR_OK) { strcpy(failure, "VERIFY OPEN"); ok = 0U; }
+        if(wf_open(ch, BT_IO, &fd, (const TCHAR *)path, FA_READ) != FR_OK) { strcpy(failure, "VERIFY OPEN"); ok = 0U; }
         else
         {
             for(j = 0; j < bin_size && ok; )
             {
                 UINT want = (UINT)(bin_size - j > 2048U ? 2048U : bin_size - j);
-                fr = wf_read(&fd, buf + 2048, want, &n);
+                error_t err;
+                fr = wf_read(ch, BT_IO, &fd, buf + 2048, want, &n);
                 if(fr != FR_OK || n != want) { sprintf(failure, "VREAD %u @%08lX", (unsigned)fr, (unsigned long)j); ok = 0U; break; }
                 addr = algo->flash_addr + j;
                 swd_lock(ch);
-                if(target_flash_verify(algo, addr, buf + 2048, n) != ERROR_SUCCESS)
+                burn_time_stage(ch, BT_VERIFY);
+                err = target_flash_verify(algo, addr, buf + 2048, n);
+                burn_time_stage(ch, BT_OTHER);
+                if(err != ERROR_SUCCESS)
                 { sprintf(failure, "VERIFY @%08lX", (unsigned long)addr); ok = 0U; }
                 swd_unlock();
                 if(!ok) break;
                 j += n;
                 w_status(ch, UI_PROGRESS_RUNNING, (uint8_t)(85U + 10U * j / bin_size), "\xD5\xFD\xD4\xDA\xD0\xA3\xD1\xE9\xB9\xCC\xBC\xFE");
             }
-            wf_close(&fd);
+            wf_close(ch, BT_IO, &fd);
         }
     }
 
@@ -2445,22 +2663,26 @@ static void channel_burn(uint8_t ch)
         {
             char full[96];
             sprintf(full, "0:/download/bin/%s", opt_path);
-            if(wf_open(&fd, (const TCHAR *)full, FA_READ) != FR_OK) ok = 0U;
+            if(wf_open(ch, BT_OPT, &fd, (const TCHAR *)full, FA_READ) != FR_OK) ok = 0U;
             else
             {
                 memset(buf + 2048, 0xFF, 128);
-                if(wf_read(&fd, buf + 2048, 128, &n) != FR_OK) ok = 0U;
-                wf_close(&fd);
+                if(wf_read(ch, BT_OPT, &fd, buf + 2048, 128, &n) != FR_OK) ok = 0U;
+                wf_close(ch, BT_OPT, &fd);
                 if(ok)
                 {
                     program_target_ext_t ext;
+                    error_t err;
                     ext.sys_call_s = algo->sys_call_s;
                     ext.program_buffer = algo->program_buffer;
                     ext.opt_program = opt_prog;
                     ext.opt_addr = opt_addr;
                     ext.opt_size = opt_size;
                     swd_lock(ch);
-                    if(target_opt_program_ext(&ext, (const uint8_t *)(buf + 2048)) != ERROR_SUCCESS) ok = 0U;
+                    burn_time_stage(ch, BT_OPT);
+                    err = target_opt_program_ext(&ext, (const uint8_t *)(buf + 2048));
+                    burn_time_stage(ch, BT_OTHER);
+                    if(err != ERROR_SUCCESS) ok = 0U;
                     swd_unlock();
                 }
             }
@@ -2477,13 +2699,14 @@ static void channel_burn(uint8_t ch)
 
     if(ok)
     {
-        fs_lock();
-        if(g_quota_mutex) xSemaphoreTake(g_quota_mutex, portMAX_DELAY);
+        w_quota_lock(ch);
         if(burn_quota_begin() != BURN_QUOTA_OK || burn_quota_finish(1U) != BURN_QUOTA_OK) ok = 0U;
+        burn_time_stage(ch, BT_OTHER);
         if(g_quota_mutex) xSemaphoreGive(g_quota_mutex);
         fs_unlock();
     }
 
+    burn_time_end(ch, ok);
     w_status(ch, ok ? UI_PROGRESS_SUCCESS : UI_PROGRESS_FAILED, 100,
              ok ? "\xC9\xD5\xC2\xBC\xB3\xC9\xB9\xA6" : failure);
     burn_active(0);
@@ -2492,11 +2715,13 @@ static void channel_burn(uint8_t ch)
 static void channel_worker(void *arg)
 {
     uint8_t ch = (uint8_t)(uintptr_t)arg;
+    uint8_t yields_left = 0;
     for(;;)
     {
         uint8_t absent = 0;
+        probe_result_t first;
         vTaskDelay(pdMS_TO_TICKS(200));
-        if(!g_channel_b_enable || app_data.mode != 2) continue;
+        if(!g_channel_b_enable || app_data.mode != 2) { yields_left = 0; continue; }
         if(g_selection_dirty || g_selection_save_failed ||
            !app_data.bin_name[0] || !app_data.firmware_name[0])
         {
@@ -2505,13 +2730,17 @@ static void channel_worker(void *arg)
             continue;
         }
         if(custombulk_is_busy()) continue;
-        if(!channel_probe(ch))
+        first = channel_probe(ch, yields_left != 0U);
+        if(first != PROBE_PRESENT)
         {
+            /* A full miss allows brief deferrals, but slow targets still get a full power-on window. */
+            yields_left = first == PROBE_DEFERRED ? (uint8_t)(yields_left - 1U) : PROBE_MAX_DEFERRALS;
             w_status(ch, UI_PROGRESS_IDLE, 0,
                      "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC");
             continue;
         }
-        if(!channel_probe(ch))
+        yields_left = 0;
+        if(channel_probe(ch, 0) != PROBE_PRESENT)
         {
             w_status(ch, UI_PROGRESS_IDLE, 0,
                      "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC");
@@ -2522,10 +2751,11 @@ static void channel_worker(void *arg)
         vTaskDelay(pdMS_TO_TICKS((ch ? g_ui_state_b : g_ui_state) == UI_PROGRESS_SUCCESS ? AUTO_OK_MS : AUTO_FAIL_MS));
         while(g_channel_b_enable && absent < AUTO_ABSENT_CNT)
         {
-            absent = channel_probe(ch) ? 0U : (uint8_t)(absent + 1U);
+            absent = channel_probe(ch, 0) == PROBE_NO_REPLY ? (uint8_t)(absent + 1U) : 0U;
             vTaskDelay(pdMS_TO_TICKS(200));
         }
         if(!g_channel_b_enable) continue;
+        burn_time_rearmed(ch);
         w_status(ch, UI_PROGRESS_IDLE, 0,
                  "\xB5\xC8\xB4\xFD\xD0\xBE\xC6\xAC");
     }
@@ -2693,6 +2923,7 @@ void led_task(void *pvParameters)
 		if(app_data.hid_led_blink)
 			app_data.hid_led_blink = 0, HID_LED_ON;
 #endif
+		burn_time_sample();
 		if(app_data.cb_led_blink)
 			app_data.cb_led_blink = 0, MSC_LED_ON;
 		if(app_data.cdc_led_blink)

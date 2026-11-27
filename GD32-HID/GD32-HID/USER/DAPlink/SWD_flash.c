@@ -15,6 +15,7 @@
 #include "SWD_flash.h"
 #include <string.h>
 #include "debug_cm.h"
+#include "burn_time.h"
 
 #define VFY_CSW_VAL  (CSW_RESERVED | CSW_MSTRDBG | CSW_HPROT | CSW_DBGSTAT | CSW_SADDRINC)
 
@@ -93,12 +94,15 @@ error_t target_flash_program_page(program_target_t *algo, uint32_t addr, const u
         uint32_t write_size = size > algo->program_buffer_size ? algo->program_buffer_size : size;
 
         // 先把本页数据写入目标SRAM缓冲区
+        burn_time_stage(0, BT_LOAD);
         if (!swd_write_memory(algo->program_buffer, (uint8_t *)buf, write_size))
         {
+            burn_time_stage(0, BT_OTHER);
             return ERROR_ALGO_DATA_SEQ;
         }
 
         // 执行Flash编程
+        burn_time_stage(0, BT_PAGE);
         if (!swd_flash_syscall_exec(&algo->sys_call_s,
                                     algo->program_page,
                                     addr,
@@ -106,9 +110,11 @@ error_t target_flash_program_page(program_target_t *algo, uint32_t addr, const u
                                     algo->program_buffer,
                                     0))
         {
+            burn_time_stage(0, BT_OTHER);
             return ERROR_WRITE;
         }
 
+        burn_time_stage(0, BT_OTHER);
         addr += write_size;
         buf += write_size;
         size -= write_size;
